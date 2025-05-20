@@ -3,7 +3,7 @@
 import os
 import typer
 from pathlib import Path
-from typing import List, Optional, Dict, Tuple
+from typing import List, Optional, Dict, Tuple, Any
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -15,6 +15,7 @@ import time
 import sys
 import logging
 from functools import lru_cache
+import json
 
 # Set up logging
 logging.basicConfig(
@@ -286,7 +287,11 @@ def calculate_score(df: pd.DataFrame, ticker: str) -> float:
         elif upside_pct >= 10:
             score += 1
     
-    return score
+    # Normalize score to 0-10 range
+    # Maximum possible score is 12 (2+2+2+2+1+2+1)
+    normalized_score = (score / 12) * 10
+    
+    return normalized_score
 
 def parse_brokerage_csv(file_path: Path) -> Dict[str, Dict]:
     """Parse the brokerage CSV file and return a dictionary of positions."""
@@ -321,7 +326,7 @@ def load_positions(positions_file: Optional[Path]) -> Dict[str, Dict]:
     
     return parse_brokerage_csv(positions_file)
 
-def generate_technical_summary(ticker: str, df: pd.DataFrame) -> str:
+def generate_technical_summary(ticker: str, df: pd.DataFrame, score: float) -> str:
     """Generate a technical analysis summary for a stock using markdown formatting."""
     latest = df.iloc[-1]
     prev = df.iloc[-2] if len(df) > 1 else latest
@@ -331,7 +336,7 @@ def generate_technical_summary(ticker: str, df: pd.DataFrame) -> str:
     price_trend = "up" if price_change > 0 else "down"
     
     # Build the summary with markdown formatting
-    summary = f"**${ticker}**\n"
+    summary = f"**${ticker}** (Score: {score:.1f}/10)\n"
     
     # Add analyst targets if available
     targets = get_analyst_targets(ticker)
@@ -418,9 +423,9 @@ def generate_position_summary(position_info: Dict) -> str:
     summary += f"{position_info['account_pct']:.1f}% of account"
     return summary
 
-def generate_summary(ticker: str, df: pd.DataFrame, position_info: Optional[Dict] = None) -> str:
+def generate_summary(ticker: str, df: pd.DataFrame, score: float, position_info: Optional[Dict] = None) -> str:
     """Generate a complete summary for a stock, including technical analysis and position info if available."""
-    summary = generate_technical_summary(ticker, df)
+    summary = generate_technical_summary(ticker, df, score)
     if position_info:
         summary += generate_position_summary(position_info)
     return summary
@@ -457,13 +462,83 @@ def process_ticker(ticker: str, current_positions: Dict[str, Dict], history_days
         score = calculate_score(df, ticker)
         
         if ticker in current_positions:
-            return ticker, score, generate_summary(ticker, df, current_positions[ticker])
+            return ticker, score, generate_summary(ticker, df, score, current_positions[ticker])
         else:
-            return ticker, score, generate_summary(ticker, df)
+            return ticker, score, generate_summary(ticker, df, score)
             
     except Exception as e:
         logger.error(f"Error processing {ticker}: {e}")
         return None, None, None
+
+def generate_structured_data(ticker: str, df: pd.DataFrame, score: float, position_info: Optional[Dict] = None) -> Dict[str, Any]:
+    """Generate structured data for a stock, including technical analysis and position info if available."""
+    latest = df.iloc[-1]
+    prev = df.iloc[-2] if len(df) > 1 else latest
+    
+    # Get recent price movement
+    price_change = ((latest['Close'] - prev['Close']) / prev['Close']) * 100
+    
+    # Get analyst targets
+    targets = get_analyst_targets(ticker)
+    analyst_data = None
+    if targets and all(k in targets and targets[k] is not None for k in ['median', 'low', 'high', 'current_price']):
+        analyst_data = {
+            'current_price': targets['current_price'],
+            'median_target': targets['median'],
+            'low_target': targets['low'],
+            'high_target': targets['high'],
+            'implied_upside': ((targets['median'] - targets['current_price']) / targets['current_price']) * 100
+        }
+    
+    # Build structured data
+    data = {
+        'ticker': ticker,
+        'timestamp': datetime.now().isoformat(),
+        'score': score,
+        'price_data': {
+            'current': latest['Close'],
+            'change_5d': price_change,
+            'volume': latest['Volume'],
+            'volume_ratio': latest['Volume_Ratio']
+        },
+        'technical_indicators': {
+            'rsi': {
+                'value': latest['RSI'],
+                'status': "oversold" if latest['RSI'] < 30 else "overbought" if latest['RSI'] > 70 else "neutral"
+            },
+            'macd': {
+                'value': latest['MACD'],
+                'signal': latest['MACD_signal'],
+                'diff': latest['MACD'] - latest['MACD_signal']
+            },
+            'bollinger_bands': {
+                'upper': latest['BB_upper'],
+                'lower': latest['BB_lower'],
+                'position': "above" if latest['Close'] > latest['BB_upper'] else "below" if latest['Close'] < latest['BB_lower'] else "within"
+            },
+            'moving_averages': {
+                'ma20': latest['MA20'],
+                'ma50': latest['MA50'],
+                'trend': "bullish" if latest['MA20'] > latest['MA50'] else "bearish"
+            }
+        }
+    }
+    
+    # Add analyst data if available
+    if analyst_data:
+        data['analyst_targets'] = analyst_data
+    
+    # Add position data if available
+    if position_info:
+        data['position'] = {
+            'quantity': position_info['quantity'],
+            'cost_basis': position_info['cost_basis'],
+            'market_value': position_info['market_value'],
+            'gain_pct': position_info['gain_pct'],
+            'account_pct': position_info['account_pct']
+        }
+    
+    return data
 
 @app.command()
 def main(
@@ -473,8 +548,9 @@ def main(
     tickers: Optional[str] = typer.Option(None, help="Path to tickers.txt file (one ticker per line), or 'all' for all S&P 500 tickers"),
     history_days: int = typer.Option(100, help="Days of historical data to fetch"),
     include_charts: bool = typer.Option(False, help="Include plots in the summary output"),
-    positions_only: bool = typer.Option(False, help="Only analyze current positions, ignore other tickers"),
-    no_positions: bool = typer.Option(False, help="Exclude current positions from analysis")
+    positions_only: bool = typer.Option(False, help="Only analyze current positions"),
+    no_positions: bool = typer.Option(False, help="Exclude current positions from analysis"),
+    save_json: Optional[Path] = typer.Option(None, help="Path to save structured JSON data")
 ):
     """Generate a weekly trading advisor report."""
     ensure_data_dir()
@@ -502,15 +578,29 @@ def main(
     # Process all stocks
     stock_scores = []
     position_summaries = []
+    structured_data = {
+        'timestamp': datetime.now().isoformat(),
+        'positions': [],
+        'new_picks': []
+    }
     
     with typer.progressbar(tickers_list, label="Processing tickers") as progress:
         for ticker in progress:
             ticker, score, summary = process_ticker(ticker, current_positions, history_days)
             if ticker and score is not None and summary:
-                if ticker in current_positions:
-                    position_summaries.append(summary)
-                else:
-                    stock_scores.append((ticker, score, summary))
+                df = download_stock_data(ticker, history_days)
+                if not df.empty:
+                    df = calculate_indicators(df)
+                    if ticker in current_positions:
+                        position_summaries.append(summary)
+                        structured_data['positions'].append(
+                            generate_structured_data(ticker, df, score, current_positions[ticker])
+                        )
+                    else:
+                        stock_scores.append((ticker, score, summary))
+                        structured_data['new_picks'].append(
+                            generate_structured_data(ticker, df, score)
+                        )
     
     # Sort and select top N stocks
     stock_scores.sort(key=lambda x: x[1], reverse=True)
@@ -534,7 +624,7 @@ def main(
         report += "---\n\n"
         report += "### 📊 Current Positions (Hold/Sell Guidance)\n\n"
         report += "---\n\n"
-        report += "\n\n".join(position_summaries) + "\n\n"
+        report += "\n".join(position_summaries) + "\n\n"
     
     if not positions_only and top_stocks:
         report += "---\n\n"
@@ -552,6 +642,15 @@ def main(
         output.write_text(report)
     else:
         print(report)
+    
+    # Save structured data if requested
+    if save_json:
+        try:
+            with open(save_json, 'w') as f:
+                json.dump(structured_data, f, indent=2)
+            logger.info(f"Structured data saved to {save_json}")
+        except Exception as e:
+            logger.error(f"Error saving structured data: {e}")
 
 if __name__ == "__main__":
     app() 
