@@ -11,17 +11,17 @@ REQUIRED_COLUMNS = ["Close", "High", "Low", "Open", "Volume"]
 
 # Scoring parameters
 SCORE_WEIGHTS = {
-    'rsi_oversold': 2,
-    'rsi_overbought': 1,
-    'bb_upper': 2,
-    'bb_lower': 2,
-    'macd_crossover': 2,
-    'macd_strong_divergence': 2,
-    'macd_moderate_divergence': 1,
-    'macd_acceleration': 1,
-    'volume_spike': 1,
-    'analyst_high_upside': 2,
-    'analyst_moderate_upside': 1
+    'rsi_oversold': 2,      # RSI below 30
+    'rsi_overbought': 1,    # RSI above 70
+    'bb_upper': 2,          # Price above upper band
+    'bb_lower': 2,          # Price below lower band
+    'macd_crossover': 2,    # Strong bearish MACD
+    'macd_strong_divergence': 2,  # Strong bullish MACD
+    'macd_moderate_divergence': 1,  # Weak bullish MACD
+    'macd_acceleration': 1,  # Price above 20-day MA
+    'volume_spike': 1,      # Volume spike > 20%
+    'analyst_high_upside': 2,  # >20% upside to target
+    'analyst_moderate_upside': 1  # 10-20% upside to target
 }
 
 # Maximum possible raw score before normalization

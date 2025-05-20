@@ -60,92 +60,80 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     score = 0.0
     score_details = {}
     
-    # RSI Score (0-2)
+    # RSI Score
     rsi = latest['RSI']
     if rsi < 30:
-        score += 2  # Oversold
-        score_details['rsi'] = 2
-    elif rsi < 40:
-        score += 1  # Approaching oversold
-        score_details['rsi'] = 1
+        score += SCORE_WEIGHTS['rsi_oversold']  # Oversold
+        score_details['rsi'] = SCORE_WEIGHTS['rsi_oversold']
     elif rsi > 70:
-        score += 0  # Overbought
-        score_details['rsi'] = 0
+        score += SCORE_WEIGHTS['rsi_overbought']  # Overbought
+        score_details['rsi'] = SCORE_WEIGHTS['rsi_overbought']
     else:
-        score += 0.5  # Neutral
-        score_details['rsi'] = 0.5
+        score_details['rsi'] = 0
     
-    # Bollinger Bands Score (0-2)
+    # Bollinger Bands Score
     price = latest['Close']
     bb_lower = latest['BB_Lower']
     bb_upper = latest['BB_Upper']
     bb_middle = latest['BB_Middle']
     
     if price < bb_lower:
-        score += 2  # Price below lower band
-        score_details['bollinger'] = 2
-    elif price < bb_middle:
-        score += 1  # Price below middle band
-        score_details['bollinger'] = 1
+        score += SCORE_WEIGHTS['bb_lower']  # Price below lower band
+        score_details['bollinger'] = SCORE_WEIGHTS['bb_lower']
     elif price > bb_upper:
-        score += 0  # Price above upper band
-        score_details['bollinger'] = 0
+        score += SCORE_WEIGHTS['bb_upper']  # Price above upper band
+        score_details['bollinger'] = SCORE_WEIGHTS['bb_upper']
     else:
-        score += 0.5  # Price between middle and upper band
-        score_details['bollinger'] = 0.5
+        score_details['bollinger'] = 0
     
-    # MACD Score (0-2)
+    # MACD Score
     macd = latest['MACD']
     macd_signal = latest['MACD_Signal']
     macd_hist = latest['MACD_Hist']
     
     if macd_hist > 0 and macd > macd_signal:
-        score += 2  # Strong bullish signal
-        score_details['macd'] = 2
+        score += SCORE_WEIGHTS['macd_strong_divergence']  # Strong bullish signal
+        score_details['macd'] = SCORE_WEIGHTS['macd_strong_divergence']
     elif macd_hist > 0:
-        score += 1  # Weak bullish signal
-        score_details['macd'] = 1
+        score += SCORE_WEIGHTS['macd_moderate_divergence']  # Weak bullish signal
+        score_details['macd'] = SCORE_WEIGHTS['macd_moderate_divergence']
     elif macd_hist < 0 and macd < macd_signal:
-        score += 0  # Strong bearish signal
+        score += SCORE_WEIGHTS['macd_crossover']  # Strong bearish signal
+        score_details['macd'] = SCORE_WEIGHTS['macd_crossover']
+    else:
         score_details['macd'] = 0
-    else:
-        score += 0.5  # Weak bearish signal
-        score_details['macd'] = 0.5
     
-    # Moving Averages Score (0-2) - only using 20-day MA
+    # Moving Averages Score
     sma_20 = latest['SMA_20']
-    
     if price > sma_20:
-        score += 2  # Price above 20-day MA (bullish)
-        score_details['moving_averages'] = 2
-    elif price < sma_20:
-        score += 0  # Price below 20-day MA (bearish)
-        score_details['moving_averages'] = 0
+        score += SCORE_WEIGHTS['macd_acceleration']  # Price above 20-day MA (bullish)
+        score_details['moving_averages'] = SCORE_WEIGHTS['macd_acceleration']
     else:
-        score += 1  # Price at 20-day MA (neutral)
-        score_details['moving_averages'] = 1
+        score_details['moving_averages'] = 0
     
-    # Analyst Targets Score (0-4)
+    # Volume Spike Score
+    volume_change = (latest['Volume'] - df.iloc[-2]['Volume']) / df.iloc[-2]['Volume'] * 100
+    if abs(volume_change) > 20:
+        score += SCORE_WEIGHTS['volume_spike']
+        score_details['volume'] = SCORE_WEIGHTS['volume_spike']
+    else:
+        score_details['volume'] = 0
+    
+    # Analyst Targets Score
     if analyst_targets:
         current_price = analyst_targets['current_price']
         median_target = analyst_targets['median_target']
-        low_target = analyst_targets.get('low_target')
-        high_target = analyst_targets.get('high_target')
         
         if median_target:
             upside = ((median_target - current_price) / current_price) * 100
             
             if upside > 20:
-                score += 4  # Strong upside potential
-                score_details['analyst_targets'] = 4
+                score += SCORE_WEIGHTS['analyst_high_upside']
+                score_details['analyst_targets'] = SCORE_WEIGHTS['analyst_high_upside']
             elif upside > 10:
-                score += 3  # Moderate upside potential
-                score_details['analyst_targets'] = 3
-            elif upside > 0:
-                score += 2  # Slight upside potential
-                score_details['analyst_targets'] = 2
+                score += SCORE_WEIGHTS['analyst_moderate_upside']
+                score_details['analyst_targets'] = SCORE_WEIGHTS['analyst_moderate_upside']
             else:
-                score += 0  # No upside potential
                 score_details['analyst_targets'] = 0
     
     # Normalize score to 0-10 range
