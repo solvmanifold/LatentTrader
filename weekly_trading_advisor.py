@@ -534,7 +534,7 @@ def main(
         report += "---\n\n"
         report += "### 📊 Current Positions (Hold/Sell Guidance)\n\n"
         report += "---\n\n"
-        report += "\n".join(position_summaries) + "\n\n"
+        report += "\n\n".join(position_summaries) + "\n\n"
     
     if not positions_only and top_stocks:
         report += "---\n\n"
