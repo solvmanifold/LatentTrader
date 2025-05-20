@@ -70,9 +70,18 @@ def handle_multiindex_columns(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
         df.columns = [col.replace(f'_{ticker}', '') for col in df.columns]
     return df
 
+def normalize_ticker(ticker: str) -> str:
+    """Normalize ticker format for Yahoo Finance."""
+    # Replace dots with hyphens for class B shares
+    if ticker.endswith('.B'):
+        return ticker.replace('.B', '-B')
+    return ticker
+
 def download_stock_data(ticker: str, history_days: int = LOOKBACK_DAYS, max_retries: int = 3) -> pd.DataFrame:
     """Download stock data for a ticker, only getting new data if available."""
-    file_path = DATA_DIR / f"{ticker}.csv"
+    # Normalize ticker format
+    normalized_ticker = normalize_ticker(ticker)
+    file_path = DATA_DIR / f"{ticker}.csv"  # Keep original ticker for filename
     end_date = get_current_date()
     
     # If we have existing data, read it first
@@ -110,7 +119,7 @@ def download_stock_data(ticker: str, history_days: int = LOOKBACK_DAYS, max_retr
     for attempt in range(max_retries):
         try:
             # Download new data using cached Ticker object
-            ticker_obj = get_yf_ticker(ticker)
+            ticker_obj = get_yf_ticker(normalized_ticker)
             df = ticker_obj.history(
                 start=start_date,
                 end=end_date,
@@ -146,11 +155,11 @@ def download_stock_data(ticker: str, history_days: int = LOOKBACK_DAYS, max_retr
                     logger.error(f"Error saving data for {ticker}: {e}")
                     return df  # Return the DataFrame even if saving fails
                 
-            time.sleep(1)  # Add a small delay between attempts
+            time.sleep(2)  # Increased delay between attempts
         except Exception as e:
             if attempt == max_retries - 1:
                 logger.error(f"Failed to download {ticker} after {max_retries} attempts: {e}")
-            time.sleep(2 ** attempt)  # Exponential backoff
+            time.sleep(2 ** (attempt + 1))  # Exponential backoff with longer initial delay
     
     # If all attempts failed, try to return existing data
     return read_csv_with_dates(file_path, end_date) if file_path.exists() else pd.DataFrame()
