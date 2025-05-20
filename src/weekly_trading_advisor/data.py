@@ -199,8 +199,41 @@ def load_tickers(tickers_input: Optional[str]) -> list[str]:
     if tickers_input is None:
         return ["AAPL"]  # Default to AAPL if no tickers provided
     elif tickers_input == "all":
-        # Load all S&P 500 tickers from a predefined list or CSV
-        return ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "BRK-B", "JPM", "V", "JNJ"]  # Example list
+        # Fetch all S&P 500 tickers from Wikipedia
+        try:
+            import requests
+            from bs4 import BeautifulSoup
+            
+            # Fetch the S&P 500 components from Wikipedia
+            url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+            response = requests.get(url)
+            response.raise_for_status()
+            
+            # Parse the HTML
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Find the first table (which contains the S&P 500 components)
+            table = soup.find('table', {'class': 'wikitable'})
+            if not table:
+                logger.error("Could not find S&P 500 components table on Wikipedia")
+                sys.exit(1)
+            
+            # Extract tickers from the table
+            tickers = []
+            for row in table.find_all('tr')[1:]:  # Skip header row
+                cells = row.find_all('td')
+                if cells:
+                    ticker = cells[0].text.strip()
+                    tickers.append(ticker)
+            
+            if not tickers:
+                logger.error("No tickers found in S&P 500 components table")
+                sys.exit(1)
+            
+            return tickers
+        except Exception as e:
+            logger.error(f"Error fetching S&P 500 tickers: {e}")
+            sys.exit(1)
     else:
         # Load tickers from the provided text file
         try:

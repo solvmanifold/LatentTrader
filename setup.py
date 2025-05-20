@@ -27,7 +27,7 @@ setup(
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.9",
     install_requires=[
         "pandas>=2.0.0",
         "numpy>=1.24.0",
@@ -35,10 +35,12 @@ setup(
         "ta>=0.10.0",
         "typer>=0.9.0",
         "rich>=13.0.0",
+        "requests",
+        "beautifulsoup4",
     ],
     entry_points={
         "console_scripts": [
-            "weekly-trading-advisor=weekly_trading_advisor.cli:run",
+            "weekly-trading-advisor=weekly_trading_advisor.cli:app",
         ],
     },
 ) 
