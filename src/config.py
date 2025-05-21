@@ -24,7 +24,7 @@ SCORE_WEIGHTS = {
     'sma_strong_above': 2,  # Price > 2% above 20-day MA
     'sma_strong_below': 2,  # Price < 2% below 20-day MA
     'sma_above': 1,         # Price above 20-day MA
-    'volume_spike': 1,      # Volume spike > 20%
+    'volume_spike': 1,      # Volume spike > 20% (consider increasing to 1.5 or 2 if backtesting confirms its importance in breakouts/reversals)
     'analyst_high_upside': 2,  # >20% upside to target
     'analyst_moderate_upside': 1  # 10-20% upside to target
 }
