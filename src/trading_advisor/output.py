@@ -234,6 +234,15 @@ def generate_report(
 
 You are a tactical swing trader managing a technical scan and open positions.
 Your task is to return an actionable 1–2 week trading playbook for each stock listed below.
+
+Return all responses in this exact bullet format for each stock:
+
+✅ Action (e.g. Buy Now, Hold, Adjust)
+🎯 Entry strategy (limit or breakout entry, price conditions, timing)
+🛑 Stop-loss level (specific price or %)
+💰 Profit-taking strategy (target price, resistance level, or trailing stop)
+🔍 Confidence level (High / Medium / Low)
+🧠 Rationale (1–2 lines)
 """)
     
     if positions:
@@ -241,7 +250,7 @@ Your task is to return an actionable 1–2 week trading playbook for each stock 
 For each Current Position:
 - Recommend Hold, Sell, or Adjust
 - If "Adjust", provide a tactical move: e.g., raise stop, set trailing stop, scale out
-- Include a recommended stop-loss level and optional profit-taking level
+- Include a specific stop-loss level (price or %), and a profit-taking strategy: target price, resistance level, or trailing stop
 - Keep risk in mind—prioritize capital preservation if signals are weakening
 """)
     
@@ -249,10 +258,12 @@ For each Current Position:
 For each New Technical Pick:
 - Decide if it's a viable trade this week
 - If yes, provide:
-  - Entry strategy: buy now, wait for pullback, wait for breakout, etc.
-  - Stop-loss: price level or % below
+  - Entry strategy: specify limit or breakout entry, and any price conditions or timing
+  - Stop-loss: specific price level or % below
   - Profit target: based on analyst target, momentum, or resistance
   - Confidence level: High / Medium / Low
+
+If a setup is weak or ambiguous, say 'No trade this week' and explain why.
 
 Assume:
 - A 1–2 week swing trade horizon
@@ -261,7 +272,7 @@ Assume:
 
 Be concise, tactical, and make clear, justified recommendations.
 
-Focus most attention on the 💡 summary line. Use the structured data only to support or refine the thesis.
+Use the structured data only as supporting evidence—focus primarily on the 💡 summary to form your trading thesis.
 
 ---
 """)
