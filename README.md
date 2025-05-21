@@ -210,6 +210,7 @@ The CLI is now fully tested. See `tests/test_analyze_command.py` and `tests/test
 - ta >= 0.10.0
 - typer >= 0.9.0
 - rich >= 13.0.0
+- plotly >= 5.13.0
 
 ## License
 
