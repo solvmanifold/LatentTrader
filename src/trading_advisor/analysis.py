@@ -13,6 +13,9 @@ logger = logging.getLogger(__name__)
 
 def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """Calculate technical indicators for the given DataFrame."""
+    if len(df) < 50:
+        raise ValueError("Insufficient data points for calculating technical indicators. Need at least 50 days of data.")
+
     # RSI
     df['RSI'] = ta.momentum.RSIIndicator(df['Close']).rsi()
     
@@ -29,8 +32,9 @@ def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df['BB_Middle'] = bollinger.bollinger_mavg()
     df['BB_Pband'] = (df['Close'] - df['BB_Lower']) / (df['BB_Upper'] - df['BB_Lower'])
     
-    # Moving Averages (only 20-day for short-term trading)
+    # Moving Averages
     df['SMA_20'] = ta.trend.sma_indicator(df['Close'], window=20)
+    df['SMA_50'] = ta.trend.sma_indicator(df['Close'], window=50)
     
     return df
 
@@ -70,7 +74,7 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
         score += min(SCORE_WEIGHTS['rsi_overbought'], 2.0)
         score_details['rsi'] = min(SCORE_WEIGHTS['rsi_overbought'], 2.0)
     else:
-        score_details['rsi'] = 0
+        score_details['rsi'] = 0.0
     
     # Bollinger Bands Score
     bb_lower = df['BB_Lower'].iloc[-1]
@@ -102,10 +106,11 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
         score += min(SCORE_WEIGHTS['macd_crossover'], 2.0)
         score_details['macd'] = min(SCORE_WEIGHTS['macd_crossover'], 2.0)
     else:
-        score_details['macd'] = 0
+        score_details['macd'] = 0.0
     
     # Moving Averages Score
     sma_20 = latest['SMA_20']
+    sma_50 = latest['SMA_50']
     price = latest['Close']
     if price > sma_20 * 1.02:
         weight = SCORE_WEIGHTS.get('sma_strong_above', 2.0)
@@ -119,20 +124,24 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
         weight = SCORE_WEIGHTS.get('sma_above', 1.0)
         score += weight
         score_details['moving_averages'] = weight
+    elif price > sma_50:
+        weight = SCORE_WEIGHTS.get('sma_above_50', 1.0)
+        score += weight
+        score_details['moving_averages'] = weight
     else:
-        score_details['moving_averages'] = 0
+        score_details['moving_averages'] = 0.0
     
     # Volume Spike Score
     prev_volume = df.iloc[-2]['Volume']
     if prev_volume == 0:
-        volume_change = 0
+        volume_change = 0.0
     else:
         volume_change = (latest['Volume'] - prev_volume) / prev_volume * 100
     if abs(volume_change) > 20:
         score += min(SCORE_WEIGHTS['volume_spike'], 2.0)
         score_details['volume'] = min(SCORE_WEIGHTS['volume_spike'], 2.0)
     else:
-        score_details['volume'] = 0
+        score_details['volume'] = 0.0
     
     # Analyst Targets Score
     if analyst_targets:
@@ -144,14 +153,16 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
             weight = min(max(upside / 10, 0), 2.0)
             score += weight
             score_details['analyst_targets'] = weight
+    else:
+        score_details['analyst_targets'] = 0.0
     
     # Normalize score to 0-10 range
-    normalized_score = min(max((score / MAX_RAW_SCORE) * 10, 0), 10)
+    normalized_score = float(min(max((score / MAX_RAW_SCORE) * 10, 0), 10))
     
     # Ensure all tracked keys are present in score_details
     for key in ['macd', 'rsi', 'bollinger', 'moving_averages', 'volume', 'analyst_targets']:
         if key not in score_details:
-            score_details[key] = 0
+            score_details[key] = 0.0
     
     return normalized_score, score_details
 

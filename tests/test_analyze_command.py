@@ -38,23 +38,22 @@ AAPL,Equity,100,$150.00,$15000.00,$14000.00,7.14%,25.0%"""
 @patch('trading_advisor.cli.analyze_stock')
 def test_analyze_command_json_output(mock_analyze_stock, mock_download_stock_data, mock_tickers_file, mock_positions_file, tmp_path):
     # Setup mocks
-    dates = pd.date_range(start='2023-01-01', end='2023-01-10', freq='D')
+    dates = pd.date_range(start='2023-01-01', periods=60, freq='D')
     data = {
-        'Open': [100, 101, 102, 103, 104, 105, 106, 107, 108, 109],
-        'High': [102, 103, 104, 105, 106, 107, 108, 109, 110, 111],
-        'Low': [98, 99, 100, 101, 102, 103, 104, 105, 106, 107],
-        'Close': [101, 102, 103, 104, 105, 106, 107, 108, 109, 110],
-        'Volume': [1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900],
-        'RSI': [50, 51, 52, 53, 54, 55, 56, 57, 58, 59],
-        'MACD': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        'MACD_Signal': [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
-        'MACD_Hist': [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
-        'BB_Upper': [110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
-        'BB_Middle': [105, 106, 107, 108, 109, 110, 111, 112, 113, 114],
-        'BB_Lower': [100, 101, 102, 103, 104, 105, 106, 107, 108, 109],
-        'SMA_20': [104, 105, 106, 107, 108, 109, 110, 111, 112, 113],
-        'SMA_50': [103, 104, 105, 106, 107, 108, 109, 110, 111, 112],
-        'SMA_200': [102, 103, 104, 105, 106, 107, 108, 109, 110, 111],
+        'Open': [100] * 60,
+        'High': [102] * 60,
+        'Low': [98] * 60,
+        'Close': [101] * 60,
+        'Volume': [1000] * 60,
+        'RSI': [50] * 60,
+        'MACD': [1] * 60,
+        'MACD_Signal': [0.5] * 60,
+        'MACD_Hist': [0.5] * 60,
+        'BB_Upper': [110] * 60,
+        'BB_Middle': [105] * 60,
+        'BB_Lower': [100] * 60,
+        'SMA_20': [104] * 60,
+        'SMA_50': [103] * 60
     }
     mock_download_stock_data.return_value = pd.DataFrame(data, index=dates)
     mock_analyze_stock.return_value = (7.0, {
@@ -115,23 +114,22 @@ def test_analyze_command_json_output(mock_analyze_stock, mock_download_stock_dat
 @patch('trading_advisor.cli.analyze_stock')
 def test_analyze_command_no_positions(mock_analyze_stock, mock_download_stock_data, mock_tickers_file, tmp_path):
     # Setup mocks
-    dates = pd.date_range(start='2023-01-01', end='2023-01-10', freq='D')
+    dates = pd.date_range(start='2023-01-01', periods=60, freq='D')
     data = {
-        'Open': [100, 101, 102, 103, 104, 105, 106, 107, 108, 109],
-        'High': [102, 103, 104, 105, 106, 107, 108, 109, 110, 111],
-        'Low': [98, 99, 100, 101, 102, 103, 104, 105, 106, 107],
-        'Close': [101, 102, 103, 104, 105, 106, 107, 108, 109, 110],
-        'Volume': [1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900],
-        'RSI': [50, 51, 52, 53, 54, 55, 56, 57, 58, 59],
-        'MACD': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        'MACD_Signal': [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
-        'MACD_Hist': [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
-        'BB_Upper': [110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
-        'BB_Middle': [105, 106, 107, 108, 109, 110, 111, 112, 113, 114],
-        'BB_Lower': [100, 101, 102, 103, 104, 105, 106, 107, 108, 109],
-        'SMA_20': [104, 105, 106, 107, 108, 109, 110, 111, 112, 113],
-        'SMA_50': [103, 104, 105, 106, 107, 108, 109, 110, 111, 112],
-        'SMA_200': [102, 103, 104, 105, 106, 107, 108, 109, 110, 111],
+        'Open': [100] * 60,
+        'High': [102] * 60,
+        'Low': [98] * 60,
+        'Close': [101] * 60,
+        'Volume': [1000] * 60,
+        'RSI': [50] * 60,
+        'MACD': [1] * 60,
+        'MACD_Signal': [0.5] * 60,
+        'MACD_Hist': [0.5] * 60,
+        'BB_Upper': [110] * 60,
+        'BB_Middle': [105] * 60,
+        'BB_Lower': [100] * 60,
+        'SMA_20': [104] * 60,
+        'SMA_50': [103] * 60
     }
     mock_download_stock_data.return_value = pd.DataFrame(data, index=dates)
     mock_analyze_stock.return_value = (7.0, {
@@ -167,23 +165,22 @@ def test_analyze_command_no_positions(mock_analyze_stock, mock_download_stock_da
 @patch('trading_advisor.cli.analyze_stock')
 def test_analyze_command_positions_only(mock_analyze_stock, mock_download_stock_data, mock_tickers_file, mock_positions_file, tmp_path):
     # Setup mocks
-    dates = pd.date_range(start='2023-01-01', end='2023-01-10', freq='D')
+    dates = pd.date_range(start='2023-01-01', periods=60, freq='D')
     data = {
-        'Open': [100, 101, 102, 103, 104, 105, 106, 107, 108, 109],
-        'High': [102, 103, 104, 105, 106, 107, 108, 109, 110, 111],
-        'Low': [98, 99, 100, 101, 102, 103, 104, 105, 106, 107],
-        'Close': [101, 102, 103, 104, 105, 106, 107, 108, 109, 110],
-        'Volume': [1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900],
-        'RSI': [50, 51, 52, 53, 54, 55, 56, 57, 58, 59],
-        'MACD': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        'MACD_Signal': [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
-        'MACD_Hist': [0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5],
-        'BB_Upper': [110, 111, 112, 113, 114, 115, 116, 117, 118, 119],
-        'BB_Middle': [105, 106, 107, 108, 109, 110, 111, 112, 113, 114],
-        'BB_Lower': [100, 101, 102, 103, 104, 105, 106, 107, 108, 109],
-        'SMA_20': [104, 105, 106, 107, 108, 109, 110, 111, 112, 113],
-        'SMA_50': [103, 104, 105, 106, 107, 108, 109, 110, 111, 112],
-        'SMA_200': [102, 103, 104, 105, 106, 107, 108, 109, 110, 111],
+        'Open': [100] * 60,
+        'High': [102] * 60,
+        'Low': [98] * 60,
+        'Close': [101] * 60,
+        'Volume': [1000] * 60,
+        'RSI': [50] * 60,
+        'MACD': [1] * 60,
+        'MACD_Signal': [0.5] * 60,
+        'MACD_Hist': [0.5] * 60,
+        'BB_Upper': [110] * 60,
+        'BB_Middle': [105] * 60,
+        'BB_Lower': [100] * 60,
+        'SMA_20': [104] * 60,
+        'SMA_50': [103] * 60
     }
     mock_download_stock_data.return_value = pd.DataFrame(data, index=dates)
     mock_analyze_stock.return_value = (7.0, {

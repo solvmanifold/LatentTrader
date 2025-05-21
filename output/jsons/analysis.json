@@ -1,0 +1,338 @@
+{
+  "timestamp": "2025-05-21T10:55:59.111248",
+  "positions": [
+    {
+      "ticker": "TSLA",
+      "timestamp": "2025-05-21T10:56:00.265860",
+      "price_data": {
+        "current_price": 343.82000732421875,
+        "price_change": 1.730010986328125,
+        "price_change_pct": 0.5057180873010244,
+        "volume": 130932100.0,
+        "volume_change": 42062200.0,
+        "volume_change_pct": 47.330085889598166
+      },
+      "technical_indicators": {
+        "rsi": 68.39128773298049,
+        "macd": {
+          "value": 21.725238963354286,
+          "signal": 15.853728839784244,
+          "histogram": 5.871510123570042
+        },
+        "bollinger_bands": {
+          "upper": 362.47223523069306,
+          "middle": 300.83750381469724,
+          "lower": 239.2027723987014
+        },
+        "moving_averages": {
+          "sma_20": 300.83750381469724
+        }
+      },
+      "score": {
+        "total": 4.545454545454545,
+        "details": {
+          "rsi": 0.0,
+          "bollinger": 0.0,
+          "macd": 2,
+          "moving_averages": 2,
+          "volume": 1,
+          "analyst_targets": 0
+        }
+      },
+      "analyst_targets": {
+        "current_price": 346.09,
+        "median_target": 295.8081,
+        "low_target": 115.0,
+        "high_target": 465.0
+      },
+      "position": {
+        "quantity": 7.0,
+        "price": 343.82,
+        "market_value": 2406.74,
+        "cost_basis": 1983.8,
+        "gain_pct": 21.32,
+        "account_pct": 6.82
+      }
+    },
+    {
+      "ticker": "TSM",
+      "timestamp": "2025-05-21T10:56:00.914880",
+      "price_data": {
+        "current_price": 193.4499969482422,
+        "price_change": -0.0500030517578125,
+        "price_change_pct": -0.025841370417474162,
+        "volume": 7044300.0,
+        "volume_change": -3100100.0,
+        "volume_change_pct": -30.55971767674776
+      },
+      "technical_indicators": {
+        "rsi": 69.44177470385556,
+        "macd": {
+          "value": 8.031722020695867,
+          "signal": 5.890426486868922,
+          "histogram": 2.141295533826945
+        },
+        "bollinger_bands": {
+          "upper": 202.47346417620918,
+          "middle": 177.98699874877929,
+          "lower": 153.5005333213494
+        },
+        "moving_averages": {
+          "sma_20": 177.98699874877929
+        }
+      },
+      "score": {
+        "total": 5.854138378035588,
+        "details": {
+          "rsi": 0.0,
+          "bollinger": 0.0,
+          "macd": 2,
+          "moving_averages": 2,
+          "volume": 1,
+          "analyst_targets": 1.4395522158391458
+        }
+      },
+      "analyst_targets": {
+        "current_price": 194.96,
+        "median_target": 223.02551,
+        "low_target": 165.66264,
+        "high_target": 265.34
+      },
+      "position": {
+        "quantity": 20.0,
+        "price": 193.45,
+        "market_value": 3869.0,
+        "cost_basis": 3501.4,
+        "gain_pct": 10.5,
+        "account_pct": 10.97
+      }
+    }
+  ],
+  "new_picks": [
+    {
+      "ticker": "CRM",
+      "timestamp": "2025-05-21T10:56:01.590753",
+      "price_data": {
+        "current_price": 288.05999755859375,
+        "price_change": 0.42999267578125,
+        "price_change_pct": 0.14949506952740885,
+        "volume": 4028200.0,
+        "volume_change": -1753000.0,
+        "volume_change_pct": -30.322424410157062
+      },
+      "technical_indicators": {
+        "rsi": 62.297625573388224,
+        "macd": {
+          "value": 6.607539535313094,
+          "signal": 4.836554692566432,
+          "histogram": 1.7709848427466621
+        },
+        "bollinger_bands": {
+          "upper": 298.8003291514472,
+          "middle": 276.7630012512207,
+          "lower": 254.7256733509942
+        },
+        "moving_averages": {
+          "sma_20": 276.7630012512207
+        }
+      },
+      "score": {
+        "total": 6.363636363636363,
+        "details": {
+          "rsi": 0.0,
+          "bollinger": 0.0,
+          "macd": 2,
+          "moving_averages": 2,
+          "volume": 1,
+          "analyst_targets": 2.0
+        }
+      },
+      "analyst_targets": {
+        "current_price": 287.13,
+        "median_target": 364.97733,
+        "low_target": 243.0,
+        "high_target": 442.0
+      }
+    },
+    {
+      "ticker": "REGN",
+      "timestamp": "2025-05-21T10:56:02.392408",
+      "price_data": {
+        "current_price": 614.7899780273438,
+        "price_change": 19.1300048828125,
+        "price_change_pct": 3.21156460821496,
+        "volume": 1102100.0,
+        "volume_change": 435800.0,
+        "volume_change_pct": 65.40597328530691
+      },
+      "technical_indicators": {
+        "rsi": 57.339672808308386,
+        "macd": {
+          "value": -2.0869363282309905,
+          "signal": -8.415979873591473,
+          "histogram": 6.3290435453604825
+        },
+        "bollinger_bands": {
+          "upper": 628.0561751140064,
+          "middle": 583.6889953613281,
+          "lower": 539.3218156086499
+        },
+        "moving_averages": {
+          "sma_20": 583.6889953613281
+        }
+      },
+      "score": {
+        "total": 6.363636363636363,
+        "details": {
+          "rsi": 0.0,
+          "bollinger": 0.0,
+          "macd": 2,
+          "moving_averages": 2,
+          "volume": 1,
+          "analyst_targets": 2.0
+        }
+      },
+      "analyst_targets": {
+        "current_price": 608.995,
+        "median_target": 797.21375,
+        "low_target": 535.0,
+        "high_target": 958.0
+      }
+    },
+    {
+      "ticker": "FSLR",
+      "timestamp": "2025-05-21T10:56:03.005286",
+      "price_data": {
+        "current_price": 167.22000122070312,
+        "price_change": 2.3000030517578125,
+        "price_change_pct": 1.3946174371174025,
+        "volume": 6087600.0,
+        "volume_change": -4785400.0,
+        "volume_change_pct": -44.01177227995953
+      },
+      "technical_indicators": {
+        "rsi": 59.48290662600636,
+        "macd": {
+          "value": 11.75916444313836,
+          "signal": 8.447846159505918,
+          "histogram": 3.311318283632442
+        },
+        "bollinger_bands": {
+          "upper": 193.87762504033986,
+          "middle": 148.3005001068115,
+          "lower": 102.72337517328316
+        },
+        "moving_averages": {
+          "sma_20": 148.3005001068115
+        }
+      },
+      "score": {
+        "total": 6.363636363636363,
+        "details": {
+          "rsi": 0.0,
+          "bollinger": 0.0,
+          "macd": 2,
+          "moving_averages": 2,
+          "volume": 1,
+          "analyst_targets": 2.0
+        }
+      },
+      "analyst_targets": {
+        "current_price": 164.11,
+        "median_target": 199.18913,
+        "low_target": 100.0,
+        "high_target": 304.0
+      }
+    },
+    {
+      "ticker": "CPAY",
+      "timestamp": "2025-05-21T10:56:03.820900",
+      "price_data": {
+        "current_price": 340.8299865722656,
+        "price_change": -7.930023193359375,
+        "price_change_pct": -2.2737765143109554,
+        "volume": 420800.0,
+        "volume_change": 105900.0,
+        "volume_change_pct": 33.629723721816454
+      },
+      "technical_indicators": {
+        "rsi": 54.732579227543226,
+        "macd": {
+          "value": 6.294711609697401,
+          "signal": 4.085635077332132,
+          "histogram": 2.2090765323652697
+        },
+        "bollinger_bands": {
+          "upper": 358.0078761187404,
+          "middle": 332.7675018310547,
+          "lower": 307.527127543369
+        },
+        "moving_averages": {
+          "sma_20": 332.7675018310547
+        }
+      },
+      "score": {
+        "total": 6.17063473158222,
+        "details": {
+          "rsi": 0.0,
+          "bollinger": 0.0,
+          "macd": 2,
+          "moving_averages": 2,
+          "volume": 1,
+          "analyst_targets": 1.7876982047404433
+        }
+      },
+      "analyst_targets": {
+        "current_price": 333.935,
+        "median_target": 393.6325,
+        "low_target": 330.0,
+        "high_target": 445.0
+      }
+    },
+    {
+      "ticker": "TDY",
+      "timestamp": "2025-05-21T10:56:04.348782",
+      "price_data": {
+        "current_price": 495.44000244140625,
+        "price_change": -1.600006103515625,
+        "price_change_pct": -0.3219069040739038,
+        "volume": 385000.0,
+        "volume_change": 131300.0,
+        "volume_change_pct": 51.7540402049665
+      },
+      "technical_indicators": {
+        "rsi": 61.56173132311069,
+        "macd": {
+          "value": 6.653446035416607,
+          "signal": 3.9278349030558894,
+          "histogram": 2.7256111323607177
+        },
+        "bollinger_bands": {
+          "upper": 508.6907565696862,
+          "middle": 478.62950439453124,
+          "lower": 448.5682522193763
+        },
+        "moving_averages": {
+          "sma_20": 478.62950439453124
+        }
+      },
+      "score": {
+        "total": 5.722674571511192,
+        "details": {
+          "rsi": 0.0,
+          "bollinger": 0.0,
+          "macd": 2,
+          "moving_averages": 2,
+          "volume": 1,
+          "analyst_targets": 1.2949420286623103
+        }
+      },
+      "analyst_targets": {
+        "current_price": 493.261,
+        "median_target": 557.13544,
+        "low_target": 535.0,
+        "high_target": 600.0
+      }
+    }
+  ]
+}

@@ -73,3 +73,53 @@ $DIS: RSI = 28, touching lower BB, MACD bearish crossover, but diverging volume.
 - Output must be modular, readable, and suitable for pasting into ChatGPT manually
 
 This tool should not query any LLM itself—it prepares structured prompts and summaries for the user to paste into ChatGPT with Deep Research enabled.
+
+## Future Ideas
+
+### 1. Create Graphics & Summary for Top Picks
+- **Goal:** Automatically generate visual summaries for the top trading picks.
+- **Formats:** PDF, PNG/JPG, or interactive HTML.
+- **Content:** Charts (price, indicators), score breakdown, summary text, and a "playbook" section.
+- **Tools:** Consider using matplotlib, Plotly, ReportLab, or browser-based rendering (e.g., HTML to PDF/image).
+- **Questions:**
+  - Should this be CLI-triggered, or also available via API?
+  - Do you want a single summary for all picks, or one per pick?
+
+### 2. API Integrations
+#### a. Integrate with OpenAI to Run Automatically
+- **Goal:** Use OpenAI (or other LLMs) to generate playbooks, summaries, or even automate analysis.
+- **Options:** Scheduled runs, or on-demand via API.
+- **Questions:**
+  - Should this be a background service, or user-triggered?
+  - What's the desired workflow (e.g., daily summary emailed, or Slack/Discord integration)?
+
+#### b. Integrate with Pushover for Push Notifications
+- **Goal:** Send push notifications for new picks, alerts, or trade signals.
+- **Questions:**
+  - What events should trigger a push? (e.g., new top pick, stop-loss hit, etc.)
+
+#### c. Integrate with Charles Schwab to Auto-Pull Positions
+- **Goal:** Automatically fetch current positions from Schwab.
+- **Notes:** Schwab has an API, but may require OAuth and developer access.
+- **Questions:**
+  - Should this run on a schedule, or on-demand?
+
+#### d. Integrate with thinkorswim to Paper Trade
+- **Goal:** Automatically place paper trades for top picks.
+- **Notes:** TDAmeritrade/thinkorswim has an API for paper trading.
+- **Questions:**
+  - Should this be fully automated, or require user confirmation?
+
+### 3. Backtest Using Historical Data
+- **Goal:** Simulate the strategy on past data to evaluate performance.
+- **Features:** Customizable parameters, performance metrics, visualizations.
+- **Questions:**
+  - What metrics are most important (e.g., Sharpe, max drawdown, win rate)?
+  - Should this be CLI-only, or also have a web interface?
+
+### 4. Learn Scores (ML)
+- **Goal:** Use machine learning to optimize or learn the scoring system based on historical outcomes.
+- **Approach:** Supervised learning (e.g., regression, classification), reinforcement learning, or even meta-learning.
+- **Questions:**
+  - What data will be used for training (e.g., price action after signal, actual trades)?
+  - Should the model be interpretable, or is black-box OK?

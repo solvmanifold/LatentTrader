@@ -1,0 +1,26 @@
+{
+  "timestamp": "2025-05-21T11:49:18.283557",
+  "positions": [
+    {
+      "ticker": "AAPL",
+      "score": 7.5,
+      "price_data": {
+        "current_price": 102.0,
+        "price_change": 2.0,
+        "volume_change": 0.0
+      },
+      "technical_indicators": {
+        "rsi": 65.0,
+        "macd": 2.0,
+        "bb_upper": 105.0,
+        "bb_lower": 95.0
+      },
+      "summary": "Test summary",
+      "position": {
+        "quantity": 100
+      },
+      "analyst_targets": null
+    }
+  ],
+  "new_picks": []
+}

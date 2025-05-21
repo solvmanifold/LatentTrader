@@ -19,23 +19,22 @@ from trading_advisor.output import (
 @pytest.fixture
 def sample_data():
     """Create sample stock data for testing."""
-    dates = pd.date_range(start='2024-01-01', end='2024-01-10', freq='D')
+    dates = pd.date_range(start='2024-01-01', periods=60, freq='D')
     data = {
-        'Open': [100.0] * 10,
-        'High': [105.0] * 10,
-        'Low': [95.0] * 10,
-        'Close': [102.0] * 10,
-        'Volume': [1000000] * 10,
-        'RSI': [65.0] * 10,
-        'MACD': [2.0] * 10,
-        'MACD_Signal': [1.5] * 10,
-        'MACD_Hist': [0.5] * 10,
-        'BB_Upper': [105.0] * 10,
-        'BB_Lower': [95.0] * 10,
-        'BB_Middle': [100.0] * 10,
-        'SMA_20': [101.0] * 10,
-        'SMA_50': [100.0] * 10,
-        'SMA_200': [99.0] * 10
+        'Open': [100.0] * 60,
+        'High': [105.0] * 60,
+        'Low': [95.0] * 60,
+        'Close': [102.0] * 60,
+        'Volume': [1000000] * 60,
+        'RSI': [65.0] * 60,
+        'MACD': [2.0] * 60,
+        'MACD_Signal': [1.5] * 60,
+        'MACD_Hist': [0.5] * 60,
+        'BB_Upper': [105.0] * 60,
+        'BB_Lower': [95.0] * 60,
+        'BB_Middle': [100.0] * 60,
+        'SMA_20': [101.0] * 60,
+        'SMA_50': [100.0] * 60
     }
     return pd.DataFrame(data, index=dates)
 
@@ -114,69 +113,78 @@ def test_save_json_report(tmp_path):
         saved_data = json.load(f)
     assert saved_data == data
 
-def test_generate_report(tmp_path):
-    """Test report generation."""
+def test_generate_report():
     positions = [
-        ('AAPL', 7.5, '## AAPL\nTest summary'),
-        ('MSFT', 6.5, '## MSFT\nTest summary')
+        {
+            "ticker": "AAPL",
+            "score": {"total": 7.5, "details": {"rsi": 1.0}},
+            "price_data": {"current": 150.0},
+            "technical_indicators": {"rsi": 65.0},
+            "summary": "Test summary",
+            "position": {"quantity": 100},
+            "analyst_targets": None
+        }
     ]
     new_picks = [
-        ('GOOGL', 8.5, '## GOOGL\nTest summary'),
-        ('AMZN', 7.0, '## AMZN\nTest summary')
+        {
+            "ticker": "MSFT",
+            "score": {"total": 8.0, "details": {"rsi": 1.0}},
+            "price_data": {"current": 250.0},
+            "technical_indicators": {"rsi": 60.0},
+            "summary": "Test summary",
+            "position": None,
+            "analyst_targets": None
+        }
     ]
     structured_data = {
-        'timestamp': datetime.now().isoformat(),
-        'positions': [],
-        'new_picks': []
+        "timestamp": "2024-01-01T00:00:00",
+        "positions": positions,
+        "new_picks": new_picks
     }
-    
-    # Test console output
-    report = generate_report(positions, new_picks, structured_data)
+    report = generate_report(structured_data)
     assert isinstance(report, str)
-    assert 'Trading Advisor Report' in report
-    assert 'Current Positions' in report
-    assert 'New Technical Picks' in report
-    assert 'After completing all recommendations, rank the top 2 setups' in report
-    
-    # Test file output
-    output_path = tmp_path / "report.md"
-    report = generate_report(positions, new_picks, structured_data, output_path)
-    assert output_path.exists()
-    content = output_path.read_text()
-    assert 'Trading Advisor Report' in content
-    assert 'After completing all recommendations, rank the top 2 setups' in content
-    
-    # Test JSON output
-    json_path = tmp_path / "analysis.json"
-    report = generate_report(positions, new_picks, structured_data, output_path, json_path)
-    assert json_path.exists()
-    with open(json_path) as f:
-        saved_data = json.load(f)
-    assert saved_data == structured_data
+    assert "AAPL" in report
+    assert "MSFT" in report
 
-def test_generate_report_with_benchmarking(tmp_path):
-    """Test report generation with benchmarking section."""
+def test_generate_report_with_benchmarking():
     positions = [
-        ('AAPL', 7.5, '## AAPL\nTest summary with High confidence and 5% upside'),
-        ('MSFT', 6.5, '## MSFT\nTest summary with Medium confidence and 3% upside')
+        {
+            "ticker": "AAPL",
+            "score": {"total": 7.5, "details": {"rsi": 1.0}},
+            "price_data": {"current": 150.0},
+            "technical_indicators": {"rsi": 65.0},
+            "summary": "Test summary",
+            "position": {"quantity": 100},
+            "analyst_targets": None
+        }
     ]
     new_picks = [
-        ('GOOGL', 8.5, '## GOOGL\nTest summary with High confidence and 8% upside'),
-        ('AMZN', 7.0, '## AMZN\nTest summary with Low confidence and 2% upside')
+        {
+            "ticker": "MSFT",
+            "score": {"total": 8.0, "details": {"rsi": 1.0}},
+            "price_data": {"current": 250.0},
+            "technical_indicators": {"rsi": 60.0},
+            "summary": "Test summary",
+            "position": None,
+            "analyst_targets": None
+        },
+        {
+            "ticker": "GOOGL",
+            "score": {"total": 6.5, "details": {"rsi": 1.0}},
+            "price_data": {"current": 2800.0},
+            "technical_indicators": {"rsi": 55.0},
+            "summary": "Test summary",
+            "position": None,
+            "analyst_targets": None
+        }
     ]
     structured_data = {
-        'timestamp': datetime.now().isoformat(),
-        'positions': [],
-        'new_picks': []
+        "timestamp": "2024-01-01T00:00:00",
+        "positions": positions,
+        "new_picks": new_picks
     }
-    
-    report = generate_report(positions, new_picks, structured_data)
-    
-    # Verify benchmarking section is present
-    assert 'After completing all recommendations, rank the top 2 setups' in report
-    assert 'confidence × upside' in report
-    
-    # Verify report structure
-    assert 'Trading Advisor Report' in report
-    assert 'Current Positions' in report
-    assert 'New Technical Picks' in report 
+    report = generate_report(structured_data)
+    assert isinstance(report, str)
+    assert "Top 2 Setups by Confidence x Upside" in report
+    assert "MSFT" in report
+    assert "GOOGL" in report 

@@ -1,1 +1,5 @@
-Low
+CRM
+REGN
+FSLR
+CPAY
+TDY

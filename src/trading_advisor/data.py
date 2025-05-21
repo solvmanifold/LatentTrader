@@ -204,11 +204,11 @@ def load_positions(positions_file: Optional[Path]) -> Dict[str, Dict]:
     
     return parse_brokerage_csv(positions_file)
 
-def load_tickers(tickers_input: Optional[str]) -> list[str]:
+def load_tickers(tickers_input: Optional[Path]) -> list[str]:
     """Load tickers from input file or use default."""
     if tickers_input is None:
         return ["AAPL"]  # Default to AAPL if no tickers provided
-    elif tickers_input == "all":
+    elif str(tickers_input) == "all":
         # Fetch all S&P 500 tickers from Wikipedia
         try:
             import requests
@@ -248,11 +248,8 @@ def load_tickers(tickers_input: Optional[str]) -> list[str]:
         # Load tickers from the provided text file
         try:
             with open(tickers_input, 'r') as f:
-                tickers = [line.strip() for line in f if line.strip()]  # Skip empty lines
-            if not tickers:
-                logger.error(f"No tickers found in {tickers_input}")
-                sys.exit(1)
+                tickers = [line.strip() for line in f if line.strip()]
             return tickers
         except Exception as e:
-            logger.error(f"Error loading tickers from {tickers_input}: {e}")
+            logger.error(f"Error reading tickers from {tickers_input}: {e}")
             sys.exit(1) 

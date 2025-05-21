@@ -276,61 +276,40 @@ def report(
 @app.command()
 def prompt(
     json_file: str = typer.Option(..., help='Path to analysis JSON file'),
-    output: str = typer.Option(..., help='Path to output prompt file')
+    output: str = typer.Option(..., help='Path to output prompt file'),
+    deep_research: bool = typer.Option(
+        False,
+        "--deep-research",
+        help="Generate a deep research prompt with tactical swing trading format"
+    )
 ):
-    """Generate a ChatGPT-ready prompt for deep research analysis."""
+    """Generate a research prompt from analysis data."""
     try:
-        # Load analysis data
+        # Ensure output directory exists
+        output_path = Path(output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Load JSON data
         with open(json_file, 'r') as f:
-            structured_data = json.load(f)
+            data = json.load(f)
         
         # Generate prompt
-        prompt = generate_research_prompt(structured_data)
+        if deep_research:
+            prompt_text = generate_deep_research_prompt(data)
+        else:
+            prompt_text = generate_research_prompt(data)
         
-        # Save prompt
-        with open(output, 'w') as f:
-            f.write(prompt)
+        # Save prompt to file
+        with open(output_path, 'w') as f:
+            f.write(prompt_text)
         
         typer.echo(f"Research prompt written to {output}")
         
     except Exception as e:
+        import traceback
+        print('PROMPT DEBUG ERROR:', e)
+        traceback.print_exc()
         typer.echo(f"Error generating research prompt: {str(e)}", err=True)
-        raise typer.Exit(1)
-
-@app.command()
-def deep_research(
-    json_file: Path = typer.Option(
-        ...,
-        "--json", "-j",
-        help="Path to the JSON output file from the analyze command"
-    ),
-    output: Path = typer.Option(
-        "output/deep_research_prompt.md",
-        "--output", "-o",
-        help="Path to save the deep research prompt"
-    )
-):
-    """Generate a deep research prompt for tactical swing trading analysis."""
-    try:
-        # Load JSON data
-        with open(json_file, "r") as f:
-            data = json.load(f)
-
-        # Generate deep research prompt
-        prompt_content = generate_deep_research_prompt(data)
-
-        # Save prompt to file
-        output.parent.mkdir(parents=True, exist_ok=True)
-        with open(output, "w") as f:
-            f.write(prompt_content)
-
-        typer.echo(f"Deep research prompt written to {output}")
-
-    except json.JSONDecodeError:
-        typer.echo("Error loading JSON data", err=True)
-        raise typer.Exit(1)
-    except Exception as e:
-        typer.echo(f"Error generating deep research prompt: {str(e)}", err=True)
         raise typer.Exit(1)
 
 def run():

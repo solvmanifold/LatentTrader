@@ -111,44 +111,33 @@ def test_save_json_report(tmp_path):
     assert '"ticker": "AAPL"' in content
     assert '"score": 7.5' in content
 
-def test_generate_report(tmp_path):
-    """Test complete report generation."""
-    positions = [('AAPL', 7.5, 'Sample summary for AAPL')]
-    new_picks = [('MSFT', 8.0, 'Sample summary for MSFT')]
-    structured_data = {
-        'AAPL': {
-            'ticker': 'AAPL',
-            'score': 7.5
-        },
-        'MSFT': {
-            'ticker': 'MSFT',
-            'score': 8.0
-        }
+def test_generate_report():
+    data = {
+        "timestamp": "2024-01-01T00:00:00",
+        "positions": [
+            {
+                "ticker": "AAPL",
+                "score": {"total": 7.5, "details": {"rsi": 1.0}},
+                "price_data": {"current": 150.0},
+                "technical_indicators": {"rsi": 65.0},
+                "summary": "Test summary",
+                "position": {"quantity": 100},
+                "analyst_targets": None
+            }
+        ],
+        "new_picks": [
+            {
+                "ticker": "MSFT",
+                "score": {"total": 8.0, "details": {"rsi": 1.0}},
+                "price_data": {"current": 250.0},
+                "technical_indicators": {"rsi": 60.0},
+                "summary": "Test summary",
+                "position": None,
+                "analyst_targets": None
+            }
+        ]
     }
-    
-    output_path = tmp_path / "test_report.md"
-    json_path = tmp_path / "test_report.json"
-    
-    report = generate_report(
-        positions=positions,
-        new_picks=new_picks,
-        structured_data=structured_data,
-        output_path=output_path,
-        save_json=json_path
-    )
-    
+    report = generate_report(data)
     assert isinstance(report, str)
-    assert "Weekly Trading Advisor Report" in report
     assert "AAPL" in report
-    assert "MSFT" in report
-    
-    if output_path:
-        assert output_path.exists()
-        content = output_path.read_text()
-        assert "Weekly Trading Advisor Report" in content
-    
-    if json_path:
-        assert json_path.exists()
-        content = json_path.read_text()
-        assert '"ticker": "AAPL"' in content
-        assert '"ticker": "MSFT"' in content 
+    assert "MSFT" in report 

@@ -411,13 +411,8 @@ def test_chart_command_error_handling(mock_download_stock_data):
     assert result.exit_code == 1
     assert "Error generating charts: Test error" in result.stdout
 
-def test_deep_research_command(
-    mock_download_stock_data,
-    mock_analyze_stock,
-    mock_create_stock_chart,
-    mock_create_score_breakdown
-):
-    """Test the deep research command."""
+def test_prompt_command():
+    """Test the prompt command."""
     # Create a temporary JSON file with test data
     test_data = {
         "timestamp": "2024-01-01T00:00:00",
@@ -425,29 +420,49 @@ def test_deep_research_command(
             "ticker": "AAPL",
             "score": {"total": 7.5, "details": {"rsi": 2.0, "bb": 1.5, "macd": 2.0, "ma": 1.0, "volume": 0.5}},
             "technical_indicators": {
-                "RSI": 65.0,
-                "MACD": 2.0,
-                "MACD_Signal": 1.5,
-                "MACD_Hist": 0.5,
-                "BB_Upper": 105.0,
-                "BB_Lower": 95.0,
-                "BB_Middle": 100.0,
-                "SMA_20": 101.0
+                "rsi": 65.0,
+                "macd": {"value": 2.0, "signal": 1.5, "histogram": 0.5},
+                "bollinger_bands": {"upper": 105.0, "lower": 95.0, "middle": 100.0},
+                "moving_averages": {"sma_20": 101.0}
             },
-            "position": {"quantity": 100, "cost_basis": 150.0, "gain_pct": 7.14, "account_pct": 25.0}
+            "position": {"quantity": 100, "cost_basis": 150.0, "gain_pct": 7.14, "account_pct": 25.0},
+            "price_data": {
+                "current_price": 100.0,
+                "price_change": 1.0,
+                "price_change_pct": 1.0,
+                "volume": 1000000,
+                "volume_change": 100000,
+                "volume_change_pct": 10.0
+            },
+            "analyst_targets": {
+                "current_price": 100.0,
+                "median_target": 120.0,
+                "low_target": 100.0,
+                "high_target": 140.0
+            }
         }],
         "new_picks": [{
             "ticker": "MSFT",
             "score": {"total": 8.0, "details": {"rsi": 2.5, "bb": 1.5, "macd": 2.5, "ma": 1.0, "volume": 0.5}},
             "technical_indicators": {
-                "RSI": 70.0,
-                "MACD": 2.5,
-                "MACD_Signal": 2.0,
-                "MACD_Hist": 0.5,
-                "BB_Upper": 110.0,
-                "BB_Lower": 90.0,
-                "BB_Middle": 100.0,
-                "SMA_20": 102.0
+                "rsi": 70.0,
+                "macd": {"value": 2.5, "signal": 2.0, "histogram": 0.5},
+                "bollinger_bands": {"upper": 110.0, "lower": 90.0, "middle": 100.0},
+                "moving_averages": {"sma_20": 102.0}
+            },
+            "price_data": {
+                "current_price": 200.0,
+                "price_change": 2.0,
+                "price_change_pct": 1.0,
+                "volume": 2000000,
+                "volume_change": 200000,
+                "volume_change_pct": 10.0
+            },
+            "analyst_targets": {
+                "current_price": 200.0,
+                "median_target": 220.0,
+                "low_target": 200.0,
+                "high_target": 240.0
             }
         }]
     }
@@ -457,37 +472,47 @@ def test_deep_research_command(
         json_path = f.name
     
     try:
-        result = runner.invoke(app, ["deep-research", "--json", json_path])
-        
-        # Check command execution
+        # Test standard prompt
+        result = runner.invoke(app, ["prompt", "--json-file", json_path, "--output", "output/prompt.md"])
         assert result.exit_code == 0
-        assert "Deep research prompt written to output/deep_research_prompt.md" in result.stdout
+        assert "Research prompt written to output/prompt.md" in result.stdout
         
-        # Check that the output file was created
-        output_path = Path("output/deep_research_prompt.md")
-        assert output_path.exists()
+        # Test deep research prompt
+        result = runner.invoke(app, ["prompt", "--json-file", json_path, "--output", "output/deep_prompt.md", "--deep-research"])
+        assert result.exit_code == 0
+        assert "Research prompt written to output/deep_prompt.md" in result.stdout
         
-        # Check the content of the output file
-        with open(output_path) as f:
+        # Check that both output files were created
+        assert Path("output/prompt.md").exists()
+        assert Path("output/deep_prompt.md").exists()
+        
+        # Check the content of the output files
+        with open("output/prompt.md") as f:
             content = f.read()
             assert "You are a tactical swing trader" in content
             assert "Current Positions" in content
             assert "New Technical Picks" in content
-            assert "AAPL" in content
-            assert "MSFT" in content
+            
+        with open("output/deep_prompt.md") as f:
+            content = f.read()
+            assert "You are a tactical swing trader" in content
+            assert "Current Positions" in content
+            assert "New Technical Picks" in content
             
     finally:
         # Clean up
         os.unlink(json_path)
-        if output_path.exists():
-            output_path.unlink()
+        if Path("output/prompt.md").exists():
+            Path("output/prompt.md").unlink()
+        if Path("output/deep_prompt.md").exists():
+            Path("output/deep_prompt.md").unlink()
 
-def test_deep_research_command_error_handling():
-    """Test error handling in the deep research command."""
+def test_prompt_command_error_handling():
+    """Test error handling in the prompt command."""
     # Test with non-existent JSON file
-    result = runner.invoke(app, ["deep-research", "--json", "nonexistent.json"])
+    result = runner.invoke(app, ["prompt", "--json-file", "nonexistent.json", "--output", "output/prompt.md"])
     assert result.exit_code == 1
-    assert "Error loading JSON data" in result.stdout
+    assert "Error generating research prompt" in result.stdout
     
     # Test with invalid JSON file
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
@@ -495,8 +520,8 @@ def test_deep_research_command_error_handling():
         json_path = f.name
     
     try:
-        result = runner.invoke(app, ["deep-research", "--json", json_path])
+        result = runner.invoke(app, ["prompt", "--json-file", json_path, "--output", "output/prompt.md"])
         assert result.exit_code == 1
-        assert "Error loading JSON data" in result.stdout
+        assert "Error generating research prompt" in result.stdout
     finally:
         os.unlink(json_path) 

@@ -289,6 +289,9 @@ def generate_report(structured_data):
     
     return "\n\n".join(report)
 
+def get_indicator(technical, key):
+    return technical.get(key) or technical.get(key.upper()) or technical.get(key.lower())
+
 def generate_research_prompt(structured_data: Dict) -> str:
     """Generate a ChatGPT-ready prompt for deep research analysis, using a tactical swing trading playbook format."""
     prompt = []
@@ -315,17 +318,17 @@ def generate_research_prompt(structured_data: Dict) -> str:
         summary = [f"💡 {ticker}:"]
         
         # MACD trend
-        macd = technical['macd']
+        macd = get_indicator(technical, 'macd')
         macd_trend = "Bullish" if macd['histogram'] > 0 else ("Bearish" if macd['histogram'] < 0 else "Flat")
         summary.append(f"{macd_trend} MACD")
         
         # RSI band
-        rsi = technical['rsi']
+        rsi = get_indicator(technical, 'rsi')
         rsi_band = "overbought" if rsi >= 70 else ("oversold" if rsi <= 30 else "neutral")
         summary.append(f"RSI {rsi_band}")
         
         # Bollinger Band context
-        bb = technical['bollinger_bands']
+        bb = get_indicator(technical, 'bollinger_bands')
         price = price_data['current_price']
         if price > bb['upper']:
             bb_context = f"above upper band (${bb['upper']:.2f})"
@@ -344,7 +347,7 @@ def generate_research_prompt(structured_data: Dict) -> str:
                 summary.append(f"{upside:.0f}% upside to analyst target")
         
         # MA trend
-        ma = technical['moving_averages']
+        ma = get_indicator(technical, 'moving_averages')
         ma_trend = "above" if price > ma['sma_20'] else ("below" if price < ma['sma_20'] else "at")
         summary.append(f"{ma_trend} 20d MA")
         
@@ -397,15 +400,15 @@ def generate_research_prompt(structured_data: Dict) -> str:
                 prompt.append(f"Volume: {price_data['volume']/1e6:.1f}M")
             
             # Technical indicators
-            rsi = technical['rsi']
+            rsi = get_indicator(technical, 'rsi')
             rsi_band = "overbought" if rsi >= 70 else ("oversold" if rsi <= 30 else "neutral")
             prompt.append(f"RSI: {rsi:.1f} — {rsi_band}")
             
-            macd = technical['macd']
+            macd = get_indicator(technical, 'macd')
             macd_trend = "Bullish" if macd['histogram'] > 0 else ("Bearish" if macd['histogram'] < 0 else "Flat")
             prompt.append(f"MACD: {macd_trend} (Hist: {macd['histogram']:+.2f}) 📈" if macd_trend == "Bullish" else f"MACD: {macd_trend} (Hist: {macd['histogram']:+.2f})")
             
-            bb = technical['bollinger_bands']
+            bb = get_indicator(technical, 'bollinger_bands')
             price = price_data['current_price']
             if price > bb['upper']:
                 bb_context = f"Above upper band (${bb['upper']:.2f})"
@@ -417,7 +420,7 @@ def generate_research_prompt(structured_data: Dict) -> str:
                 bb_context = f"Near lower band (${bb['lower']:.2f})"
             prompt.append(f"BB: {bb_context}")
             
-            ma = technical['moving_averages']
+            ma = get_indicator(technical, 'moving_averages')
             ma_trend = "Bullish" if price > ma['sma_20'] else ("Bearish" if price < ma['sma_20'] else "Neutral")
             prompt.append(f"MA Trend: {ma_trend} (20d) 📈" if ma_trend == "Bullish" else f"MA Trend: {ma_trend} (20d)")
             
@@ -454,15 +457,15 @@ def generate_research_prompt(structured_data: Dict) -> str:
                 prompt.append(f"Volume: {price_data['volume']/1e6:.1f}M")
             
             # Technical indicators
-            rsi = technical['rsi']
+            rsi = get_indicator(technical, 'rsi')
             rsi_band = "overbought" if rsi >= 70 else ("oversold" if rsi <= 30 else "neutral")
             prompt.append(f"RSI: {rsi:.1f} — {rsi_band}")
             
-            macd = technical['macd']
+            macd = get_indicator(technical, 'macd')
             macd_trend = "Bullish" if macd['histogram'] > 0 else ("Bearish" if macd['histogram'] < 0 else "Flat")
             prompt.append(f"MACD: {macd_trend} (Hist: {macd['histogram']:+.2f}) 📈" if macd_trend == "Bullish" else f"MACD: {macd_trend} (Hist: {macd['histogram']:+.2f})")
             
-            bb = technical['bollinger_bands']
+            bb = get_indicator(technical, 'bollinger_bands')
             price = price_data['current_price']
             if price > bb['upper']:
                 bb_context = f"Above upper band (${bb['upper']:.2f})"
@@ -474,7 +477,7 @@ def generate_research_prompt(structured_data: Dict) -> str:
                 bb_context = f"Near lower band (${bb['lower']:.2f})"
             prompt.append(f"BB: {bb_context}")
             
-            ma = technical['moving_averages']
+            ma = get_indicator(technical, 'moving_averages')
             ma_trend = "Bullish" if price > ma['sma_20'] else ("Bearish" if price < ma['sma_20'] else "Neutral")
             prompt.append(f"MA Trend: {ma_trend} (20d) 📈" if ma_trend == "Bullish" else f"MA Trend: {ma_trend} (20d)")
             
@@ -513,9 +516,24 @@ def generate_deep_research_prompt(structured_data: Dict) -> str:
     if structured_data['positions']:
         prompt.append("\n📊 Current Positions:")
         for position in structured_data['positions']:
+            # Create a DataFrame with both current and previous day's data
+            tech_data = {
+                'RSI': [position['technical_indicators']['rsi'], position['technical_indicators']['rsi']],
+                'MACD': [position['technical_indicators']['macd']['value'], position['technical_indicators']['macd']['value']],
+                'MACD_Signal': [position['technical_indicators']['macd']['signal'], position['technical_indicators']['macd']['signal']],
+                'MACD_Hist': [position['technical_indicators']['macd']['histogram'], position['technical_indicators']['macd']['histogram']],
+                'BB_Upper': [position['technical_indicators']['bollinger_bands']['upper'], position['technical_indicators']['bollinger_bands']['upper']],
+                'BB_Lower': [position['technical_indicators']['bollinger_bands']['lower'], position['technical_indicators']['bollinger_bands']['lower']],
+                'BB_Middle': [position['technical_indicators']['bollinger_bands']['middle'], position['technical_indicators']['bollinger_bands']['middle']],
+                'SMA_20': [position['technical_indicators']['moving_averages']['sma_20'], position['technical_indicators']['moving_averages']['sma_20']],
+                'Close': [position['price_data']['current_price'], position['price_data']['current_price'] * 0.99],  # Simulate previous day's price
+                'Volume': [position['price_data']['volume'], position['price_data']['volume'] * 0.95]  # Simulate previous day's volume
+            }
+            df = pd.DataFrame(tech_data)
+            
             prompt.append(generate_technical_summary(
                 position['ticker'],
-                pd.DataFrame(position['technical_indicators']),
+                df,
                 position['score']['total'],
                 position['score']['details'],
                 position.get('analyst_targets'),
@@ -526,9 +544,24 @@ def generate_deep_research_prompt(structured_data: Dict) -> str:
     if structured_data['new_picks']:
         prompt.append("\n📊 New Technical Picks:")
         for pick in structured_data['new_picks']:
+            # Create a DataFrame with both current and previous day's data
+            tech_data = {
+                'RSI': [pick['technical_indicators']['rsi'], pick['technical_indicators']['rsi']],
+                'MACD': [pick['technical_indicators']['macd']['value'], pick['technical_indicators']['macd']['value']],
+                'MACD_Signal': [pick['technical_indicators']['macd']['signal'], pick['technical_indicators']['macd']['signal']],
+                'MACD_Hist': [pick['technical_indicators']['macd']['histogram'], pick['technical_indicators']['macd']['histogram']],
+                'BB_Upper': [pick['technical_indicators']['bollinger_bands']['upper'], pick['technical_indicators']['bollinger_bands']['upper']],
+                'BB_Lower': [pick['technical_indicators']['bollinger_bands']['lower'], pick['technical_indicators']['bollinger_bands']['lower']],
+                'BB_Middle': [pick['technical_indicators']['bollinger_bands']['middle'], pick['technical_indicators']['bollinger_bands']['middle']],
+                'SMA_20': [pick['technical_indicators']['moving_averages']['sma_20'], pick['technical_indicators']['moving_averages']['sma_20']],
+                'Close': [pick['price_data']['current_price'], pick['price_data']['current_price'] * 0.99],  # Simulate previous day's price
+                'Volume': [pick['price_data']['volume'], pick['price_data']['volume'] * 0.95]  # Simulate previous day's volume
+            }
+            df = pd.DataFrame(tech_data)
+            
             prompt.append(generate_technical_summary(
                 pick['ticker'],
-                pd.DataFrame(pick['technical_indicators']),
+                df,
                 pick['score']['total'],
                 pick['score']['details'],
                 pick.get('analyst_targets')

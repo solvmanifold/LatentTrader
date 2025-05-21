@@ -1,0 +1,116 @@
+You are a tactical swing trader and market strategist evaluating a technical scan and open positions. Your task is to develop an actionable 1–2 week trading playbook for each stock listed below.
+
+In addition to the provided technical summaries and analyst targets, use current market context, news events, earnings calendars, and public sentiment (e.g. Reddit, Twitter, financial media) to support or override your recommendations.
+
+Return your response in this exact bullet format for each stock:
+
+✅ Action (e.g. Buy Now, Hold, Adjust)  
+🎯 Entry strategy (limit or breakout entry, price conditions, timing)  
+🛑 Stop-loss level (specific price or %)  
+💰 Profit-taking strategy (target price, resistance level, or trailing stop)  
+🔍 Confidence level (High / Medium / Low)  
+🧠 Rationale (1–2 lines)
+
+Begin each ticker with a 💡 summary that integrates both technical and real-time context.
+
+If a setup is weak or conflicting, say 'No trade this week' and explain why.
+
+Assume:
+- A 1–2 week swing trade horizon
+- Technicals are important, but can be overridden by breaking news, macro conditions, or earnings catalysts
+- The investor is risk-aware but ready to act decisively on high-conviction short-term setups
+
+Prioritize quality over quantity. Be specific and tactical in your recommendations.
+
+---
+
+
+📊 Current Positions:
+
+📊 $TSLA — Current Position
+
+💡 TSLA bullish MACD, RSI neutral, near upper band ($362.47), above 20d MA
+Position: 7 shares @ $1983.80 | +21.3% | 6.8% of account
+Price: $340.38 (5d: -1.0%)
+Volume: 124.4M
+RSI: 68.4 — neutral 
+MACD: Bullish (Hist: +5.87) 📈
+BB: Near upper band ($362.47)
+MA Trend: Bullish (20d) 📈
+Median analyst target: $296 → -14.5% upside (range: $115–$465)
+➡️ Technical Score: 4.5/10
+
+📊 $TSM — Current Position
+
+💡 TSM bullish MACD, RSI neutral, near upper band ($202.47), 14% upside to analyst target, above 20d MA 📈
+Position: 20 shares @ $3501.40 | +10.5% | 11.0% of account
+Price: $191.52 (5d: -1.0%)
+Volume: 6.7M
+RSI: 69.4 — neutral 
+MACD: Bullish (Hist: +2.14) 📈
+BB: Near upper band ($202.47)
+MA Trend: Bullish (20d) 📈
+Median analyst target: $223 → +14.4% upside (range: $166–$265)
+➡️ Technical Score: 5.9/10
+
+📊 New Technical Picks:
+
+📊 $CRM — New Technical Pick
+
+💡 CRM bullish MACD, RSI neutral, near upper band ($298.80), 27% upside to analyst target, above 20d MA 📈
+Price: $285.18 (5d: -1.0%)
+Volume: 3.8M
+RSI: 62.3 — neutral 
+MACD: Bullish (Hist: +1.77) 📈
+BB: Near upper band ($298.80)
+MA Trend: Bullish (20d) 📈
+Median analyst target: $365 → +27.1% upside (range: $243–$442)
+➡️ Technical Score: 6.4/10
+
+📊 $REGN — New Technical Pick
+
+💡 REGN bullish MACD, RSI neutral, near upper band ($628.06), 31% upside to analyst target, above 20d MA 📈
+Price: $608.64 (5d: -1.0%)
+Volume: 1.0M
+RSI: 57.3 — neutral 
+MACD: Bullish (Hist: +6.33) 📈
+BB: Near upper band ($628.06)
+MA Trend: Bullish (20d) 📈
+Median analyst target: $797 → +30.9% upside (range: $535–$958)
+➡️ Technical Score: 6.4/10
+
+📊 $FSLR — New Technical Pick
+
+💡 FSLR bullish MACD, RSI neutral, near upper band ($193.88), 21% upside to analyst target, above 20d MA 📈
+Price: $165.55 (5d: -1.0%)
+Volume: 5.8M
+RSI: 59.5 — neutral 
+MACD: Bullish (Hist: +3.31) 📈
+BB: Near upper band ($193.88)
+MA Trend: Bullish (20d) 📈
+Median analyst target: $199 → +21.4% upside (range: $100–$304)
+➡️ Technical Score: 6.4/10
+
+📊 $CPAY — New Technical Pick
+
+💡 CPAY bullish MACD, RSI neutral, near upper band ($358.01), 18% upside to analyst target, above 20d MA 📈
+Price: $337.42 (5d: -1.0%)
+Volume: 0.4M
+RSI: 54.7 — neutral 
+MACD: Bullish (Hist: +2.21) 📈
+BB: Near upper band ($358.01)
+MA Trend: Bullish (20d) 📈
+Median analyst target: $394 → +17.9% upside (range: $330–$445)
+➡️ Technical Score: 6.2/10
+
+📊 $TDY — New Technical Pick
+
+💡 TDY bullish MACD, RSI neutral, near upper band ($508.69), 13% upside to analyst target, above 20d MA 📈
+Price: $490.49 (5d: -1.0%)
+Volume: 0.4M
+RSI: 61.6 — neutral 
+MACD: Bullish (Hist: +2.73) 📈
+BB: Near upper band ($508.69)
+MA Trend: Bullish (20d) 📈
+Median analyst target: $557 → +12.9% upside (range: $535–$600)
+➡️ Technical Score: 5.7/10

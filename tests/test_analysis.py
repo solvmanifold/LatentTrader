@@ -15,14 +15,23 @@ from trading_advisor.config import SCORE_WEIGHTS
 
 @pytest.fixture
 def sample_data():
-    """Create sample data for testing."""
-    dates = pd.date_range(start='2024-01-01', end='2024-01-10', freq='D')
+    """Create sample stock data for testing."""
+    dates = pd.date_range(start='2024-01-01', periods=60, freq='D')  # Changed to 60 days
     data = {
-        'Open': [100.0] * 10,
-        'High': [105.0] * 10,
-        'Low': [95.0] * 10,
-        'Close': [102.0] * 10,
-        'Volume': [1000000] * 10
+        'Open': [100.0] * 60,
+        'High': [105.0] * 60,
+        'Low': [95.0] * 60,
+        'Close': [102.0] * 60,
+        'Volume': [1000000] * 60,
+        'RSI': [65.0] * 60,
+        'MACD': [2.0] * 60,
+        'MACD_Signal': [1.5] * 60,
+        'MACD_Hist': [0.5] * 60,
+        'BB_Upper': [105.0] * 60,
+        'BB_Lower': [95.0] * 60,
+        'BB_Middle': [100.0] * 60,
+        'SMA_20': [101.0] * 60,
+        'SMA_50': [100.0] * 60
     }
     return pd.DataFrame(data, index=dates)
 
@@ -79,20 +88,30 @@ def test_get_analyst_targets():
 def test_score_components():
     """Test individual score components."""
     # Create data with specific conditions
-    dates = pd.date_range(start='2024-01-01', end='2024-01-10', freq='D')
+    dates = pd.date_range(start='2024-01-01', periods=60, freq='D')
     data = {
-        'Open': [100.0] * 10,
-        'High': [105.0] * 10,
-        'Low': [95.0] * 10,
-        'Close': [102.0] * 10,
-        'Volume': [1000000] * 10
+        'Open': [100.0] * 60,
+        'High': [105.0] * 60,
+        'Low': [95.0] * 60,
+        'Close': [102.0] * 60,
+        'Volume': [1000000] * 60,
+        'RSI': [50.0] * 60,
+        'MACD': [1.0] * 60,
+        'MACD_Signal': [0.5] * 60,
+        'MACD_Hist': [0.5] * 60,
+        'BB_Upper': [110.0] * 60,
+        'BB_Middle': [105.0] * 60,
+        'BB_Lower': [100.0] * 60,
+        'BB_Pband': [0.5] * 60,
+        'SMA_20': [104.0] * 60,
+        'SMA_50': [103.0] * 60
     }
     df = pd.DataFrame(data, index=dates)
-    df = calculate_technical_indicators(df)
     
     # Test RSI component
     df['RSI'] = 29  # Oversold condition (must be < 30)
     score, details = calculate_score(df)
+    assert isinstance(score, float)
     assert details['rsi'] > 0  # Should be positive for oversold
     
     # Test MACD component
@@ -100,22 +119,25 @@ def test_score_components():
     df['MACD_Signal'] = 0.5
     df['MACD_Hist'] = 0.6  # > MACD_WEAK_DIVERGENCE
     score, details = calculate_score(df)
+    assert isinstance(score, float)
     assert details['macd'] > 0  # Should be positive for bullish MACD
     
     # Test Bollinger Bands component
     df['BB_Pband'] = 0.02  # Oversold condition
     score, details = calculate_score(df)
+    assert isinstance(score, float)
     assert details['bollinger'] == SCORE_WEIGHTS['bollinger_low']  # Should be positive for oversold
 
 def test_score_normalization():
-    """Test score normalization to [0, 10] range."""
-    dates = pd.date_range(start='2024-01-01', end='2024-01-10', freq='D')
+    """Test score normalization."""
+    # Create sample data with 60 days
+    dates = pd.date_range(start='2024-01-01', periods=60, freq='D')
     data = {
-        'Open': [100.0] * 10,
-        'High': [105.0] * 10,
-        'Low': [95.0] * 10,
-        'Close': [102.0] * 10,
-        'Volume': [1000000] * 10
+        'Open': [100.0] * 60,
+        'High': [105.0] * 60,
+        'Low': [95.0] * 60,
+        'Close': [102.0] * 60,
+        'Volume': [1000000] * 60
     }
     df = pd.DataFrame(data, index=dates)
     df = calculate_technical_indicators(df)
