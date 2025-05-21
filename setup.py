@@ -40,7 +40,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "weekly-trading-advisor=weekly_trading_advisor.cli:app",
+            "weekly-trading-advisor=src.cli:app",
         ],
     },
 ) 

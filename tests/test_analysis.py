@@ -3,7 +3,7 @@
 import pandas as pd
 import pytest
 
-from weekly_trading_advisor.analysis import (
+from src.analysis import (
     calculate_technical_indicators,
     calculate_score,
     analyze_stock

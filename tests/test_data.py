@@ -5,7 +5,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-from weekly_trading_advisor.data import (
+from src.data import (
     get_yf_ticker,
     ensure_data_dir,
     read_csv_with_dates,

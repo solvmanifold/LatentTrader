@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
-from .config import SCORE_WEIGHTS
+from config import SCORE_WEIGHTS
 
 logger = logging.getLogger(__name__)
 

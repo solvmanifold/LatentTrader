@@ -10,10 +10,10 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
-from . import __version__
-from .analysis import analyze_stock
-from .data import download_stock_data, ensure_data_dir, load_positions, load_tickers
-from .output import generate_report, generate_structured_data, generate_technical_summary
+from __init__ import __version__
+from analysis import analyze_stock
+from data import download_stock_data, ensure_data_dir, load_positions, load_tickers
+from output import generate_report, generate_structured_data, generate_technical_summary
 
 # Configure logging
 logging.basicConfig(

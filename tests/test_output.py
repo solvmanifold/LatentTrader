@@ -7,7 +7,7 @@ from datetime import datetime
 
 import pandas as pd
 
-from weekly_trading_advisor.output import (
+from src.output import (
     generate_technical_summary,
     generate_structured_data,
     save_json_report,

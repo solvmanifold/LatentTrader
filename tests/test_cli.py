@@ -6,7 +6,7 @@ from typer.testing import CliRunner
 from unittest.mock import patch, MagicMock
 import pandas as pd
 
-from weekly_trading_advisor.cli import app
+from src.cli import app
 
 runner = CliRunner()
 
