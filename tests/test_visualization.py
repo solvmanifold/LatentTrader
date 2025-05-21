@@ -43,7 +43,7 @@ def output_dir(tmp_path):
 
 def test_create_stock_chart(sample_data, sample_indicators, output_dir):
     """Test creating a stock chart."""
-    # Create chart
+    # Test without returning figure
     output_path = create_stock_chart(sample_data, "AAPL", sample_indicators, output_dir)
     
     # Check that file was created
@@ -52,10 +52,23 @@ def test_create_stock_chart(sample_data, sample_indicators, output_dir):
     
     # Check file size (should be non-zero)
     assert os.path.getsize(output_path) > 0
+    
+    # Test with returning figure
+    output_path, fig = create_stock_chart(sample_data, "AAPL", sample_indicators, output_dir, return_fig=True)
+    
+    # Check that file was created
+    assert os.path.exists(output_path)
+    assert output_path.endswith("AAPL_chart.html")
+    
+    # Check file size (should be non-zero)
+    assert os.path.getsize(output_path) > 0
+    
+    # Check that figure object was returned
+    assert fig is not None
 
 def test_create_score_breakdown(sample_indicators, output_dir):
     """Test creating a score breakdown chart."""
-    # Create score breakdown
+    # Test without returning figure
     output_path = create_score_breakdown("AAPL", 7.0, sample_indicators, output_dir)
     
     # Check that file was created
@@ -64,13 +77,26 @@ def test_create_score_breakdown(sample_indicators, output_dir):
     
     # Check file size (should be non-zero)
     assert os.path.getsize(output_path) > 0
+    
+    # Test with returning figure
+    output_path, fig = create_score_breakdown("AAPL", 7.0, sample_indicators, output_dir, return_fig=True)
+    
+    # Check that file was created
+    assert os.path.exists(output_path)
+    assert output_path.endswith("AAPL_score.html")
+    
+    # Check file size (should be non-zero)
+    assert os.path.getsize(output_path) > 0
+    
+    # Check that figure object was returned
+    assert fig is not None
 
 def test_create_stock_chart_missing_indicators(sample_data, output_dir):
     """Test creating a stock chart with missing indicators."""
     # Create minimal indicators
     indicators = {'score': 5.0}
     
-    # Create chart
+    # Test without returning figure
     output_path = create_stock_chart(sample_data, "AAPL", indicators, output_dir)
     
     # Check that file was created
@@ -79,13 +105,26 @@ def test_create_stock_chart_missing_indicators(sample_data, output_dir):
     
     # Check file size (should be non-zero)
     assert os.path.getsize(output_path) > 0
+    
+    # Test with returning figure
+    output_path, fig = create_stock_chart(sample_data, "AAPL", indicators, output_dir, return_fig=True)
+    
+    # Check that file was created
+    assert os.path.exists(output_path)
+    assert output_path.endswith("AAPL_chart.html")
+    
+    # Check file size (should be non-zero)
+    assert os.path.getsize(output_path) > 0
+    
+    # Check that figure object was returned
+    assert fig is not None
 
 def test_create_score_breakdown_missing_scores(sample_indicators, output_dir):
     """Test creating a score breakdown with missing score components."""
     # Create minimal indicators
     indicators = {'score': 5.0}
     
-    # Create score breakdown
+    # Test without returning figure
     output_path = create_score_breakdown("AAPL", 5.0, indicators, output_dir)
     
     # Check that file was created
@@ -93,4 +132,17 @@ def test_create_score_breakdown_missing_scores(sample_indicators, output_dir):
     assert output_path.endswith("AAPL_score.html")
     
     # Check file size (should be non-zero)
-    assert os.path.getsize(output_path) > 0 
+    assert os.path.getsize(output_path) > 0
+    
+    # Test with returning figure
+    output_path, fig = create_score_breakdown("AAPL", 5.0, indicators, output_dir, return_fig=True)
+    
+    # Check that file was created
+    assert os.path.exists(output_path)
+    assert output_path.endswith("AAPL_score.html")
+    
+    # Check file size (should be non-zero)
+    assert os.path.getsize(output_path) > 0
+    
+    # Check that figure object was returned
+    assert fig is not None 

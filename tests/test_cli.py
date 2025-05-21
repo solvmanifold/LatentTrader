@@ -72,14 +72,16 @@ def mock_analyze_stock():
 def mock_create_stock_chart():
     """Mock the create_stock_chart function."""
     with patch('trading_advisor.cli.create_stock_chart') as mock:
-        mock.return_value = "output/charts/AAPL_chart.html"
+        mock_fig = MagicMock()
+        mock.return_value = ("output/charts/AAPL_chart.html", mock_fig)
         yield mock
 
 @pytest.fixture
 def mock_create_score_breakdown():
     """Mock the create_score_breakdown function."""
     with patch('trading_advisor.cli.create_score_breakdown') as mock:
-        mock.return_value = "output/charts/AAPL_score.html"
+        mock_fig = MagicMock()
+        mock.return_value = ("output/charts/AAPL_score.html", mock_fig)
         yield mock
 
 @pytest.fixture
