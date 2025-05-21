@@ -6,7 +6,7 @@ from typer.testing import CliRunner
 from unittest.mock import patch, MagicMock
 import pandas as pd
 
-from src.cli import app
+from trading_advisor.cli import app
 
 runner = CliRunner()
 
@@ -37,7 +37,7 @@ def test_version():
     """Test version command."""
     result = runner.invoke(app, ["--version"])
     assert result.exit_code == 0
-    assert "Weekly Trading Advisor v" in result.stdout
+    assert "Trading Advisor v" in result.stdout
 
 def test_analyze_help():
     """Test analyze command help."""
@@ -45,14 +45,14 @@ def test_analyze_help():
     assert result.exit_code == 0
     assert "Analyze stocks and generate trading advice" in result.stdout
 
-@patch('src.cli.ensure_data_dir')
-@patch('src.cli.load_tickers')
-@patch('src.cli.load_positions')
-@patch('src.cli.download_stock_data')
-@patch('src.cli.analyze_stock')
-@patch('src.cli.generate_technical_summary')
-@patch('src.cli.generate_structured_data')
-@patch('src.cli.generate_report')
+@patch('trading_advisor.cli.ensure_data_dir')
+@patch('trading_advisor.cli.load_tickers')
+@patch('trading_advisor.cli.load_positions')
+@patch('trading_advisor.cli.download_stock_data')
+@patch('trading_advisor.cli.analyze_stock')
+@patch('trading_advisor.cli.generate_technical_summary')
+@patch('trading_advisor.cli.generate_structured_data')
+@patch('trading_advisor.cli.generate_report')
 def test_analyze_command(
     mock_generate_report,
     mock_generate_structured_data,
@@ -107,14 +107,14 @@ def test_analyze_command(
     assert mock_generate_structured_data.call_count == 3
     mock_generate_report.assert_called_once()
 
-@patch('src.cli.ensure_data_dir')
-@patch('src.cli.load_tickers')
-@patch('src.cli.load_positions')
-@patch('src.cli.download_stock_data')
-@patch('src.cli.analyze_stock')
-@patch('src.cli.generate_technical_summary')
-@patch('src.cli.generate_structured_data')
-@patch('src.cli.generate_report')
+@patch('trading_advisor.cli.ensure_data_dir')
+@patch('trading_advisor.cli.load_tickers')
+@patch('trading_advisor.cli.load_positions')
+@patch('trading_advisor.cli.download_stock_data')
+@patch('trading_advisor.cli.analyze_stock')
+@patch('trading_advisor.cli.generate_technical_summary')
+@patch('trading_advisor.cli.generate_structured_data')
+@patch('trading_advisor.cli.generate_report')
 def test_analyze_positions_only(
     mock_generate_report,
     mock_generate_structured_data,

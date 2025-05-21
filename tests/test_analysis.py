@@ -5,13 +5,13 @@ import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta
 
-from analysis import (
+from trading_advisor.analysis import (
     calculate_score,
     calculate_technical_indicators,
     analyze_stock,
     get_analyst_targets
 )
-from config import SCORE_WEIGHTS
+from trading_advisor.config import SCORE_WEIGHTS
 
 @pytest.fixture
 def sample_data():

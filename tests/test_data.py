@@ -4,16 +4,18 @@ import pandas as pd
 import pytest
 from pathlib import Path
 from unittest.mock import patch, MagicMock
+from datetime import datetime, timedelta
 
-from src.data import (
-    get_yf_ticker,
+from trading_advisor.data import (
+    download_stock_data,
     ensure_data_dir,
     read_csv_with_dates,
     is_csv_format_valid,
     handle_multiindex_columns,
     parse_brokerage_csv,
     load_positions,
-    load_tickers
+    load_tickers,
+    get_yf_ticker
 )
 
 @pytest.fixture
@@ -48,11 +50,13 @@ def test_get_yf_ticker():
     """Test getting a cached Ticker object."""
     ticker = get_yf_ticker("AAPL")
     assert ticker is not None
-    assert get_yf_ticker("AAPL") is ticker  # Should return cached object
+    # Test caching
+    ticker2 = get_yf_ticker("AAPL")
+    assert ticker is ticker2
 
 def test_ensure_data_dir(tmp_path):
-    """Test data directory creation."""
-    with patch('src.data.DATA_DIR', tmp_path):
+    """Test ensuring data directory exists."""
+    with patch('trading_advisor.data.DATA_DIR', tmp_path):
         ensure_data_dir()
         assert tmp_path.exists()
         assert tmp_path.is_dir()

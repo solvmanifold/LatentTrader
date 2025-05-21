@@ -1,13 +1,15 @@
 """Tests for the output module."""
 
 import json
+import os
 import pytest
 from pathlib import Path
+from unittest.mock import patch, MagicMock
 from datetime import datetime
 
 import pandas as pd
 
-from src.output import (
+from trading_advisor.output import (
     generate_technical_summary,
     generate_structured_data,
     save_json_report,
