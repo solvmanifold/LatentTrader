@@ -18,7 +18,7 @@ SCORE_WEIGHTS = {
     'rsi_oversold': 2,      # RSI below 30
     'rsi_overbought': -1,   # RSI above 70 (penalty)
     'bollinger': 2,         # Price outside Bollinger Bands
-    'macd_crossover': 2,    # Strong bearish MACD
+    'macd_crossover': -2,   # Strongly bearish MACD (penalty)
     'macd_strong_divergence': 2,  # Strong bullish MACD
     'macd_moderate_divergence': 1,  # Weak bullish MACD
     'sma_strong_above': 2,  # Price > 2% above 20-day MA
