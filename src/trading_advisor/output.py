@@ -489,4 +489,49 @@ def generate_research_prompt(structured_data: Dict) -> str:
     # Final instruction
     prompt.append("---\n\nAfter reviewing all positions and new picks above, please rank the top 2 setups by confidence × upside and briefly explain your reasoning.")
 
+    return "\n".join(prompt)
+
+def generate_deep_research_prompt(structured_data: Dict) -> str:
+    """Generate a deep research prompt for tactical swing trading analysis."""
+    prompt = []
+    
+    # Add instructions
+    prompt.append("You are a tactical swing trader and market strategist evaluating a technical scan and open positions. Your task is to develop an actionable 1–2 week trading playbook for each stock listed below.")
+    prompt.append("\nIn addition to the provided technical summaries and analyst targets, use current market context, news events, earnings calendars, and public sentiment (e.g. Reddit, Twitter, financial media) to support or override your recommendations.")
+    prompt.append("\nReturn your response in this exact bullet format for each stock:")
+    prompt.append("\n✅ Action (e.g. Buy Now, Hold, Adjust)  \n🎯 Entry strategy (limit or breakout entry, price conditions, timing)  \n🛑 Stop-loss level (specific price or %)  \n💰 Profit-taking strategy (target price, resistance level, or trailing stop)  \n🔍 Confidence level (High / Medium / Low)  \n🧠 Rationale (1–2 lines)")
+    prompt.append("\nBegin each ticker with a 💡 summary that integrates both technical and real-time context.")
+    prompt.append("\nIf a setup is weak or conflicting, say 'No trade this week' and explain why.")
+    prompt.append("\nAssume:")
+    prompt.append("- A 1–2 week swing trade horizon")
+    prompt.append("- Technicals are important, but can be overridden by breaking news, macro conditions, or earnings catalysts")
+    prompt.append("- The investor is risk-aware but ready to act decisively on high-conviction short-term setups")
+    prompt.append("\nPrioritize quality over quantity. Be specific and tactical in your recommendations.")
+    prompt.append("\n---\n")
+    
+    # Add current positions
+    if structured_data['positions']:
+        prompt.append("\n📊 Current Positions:")
+        for position in structured_data['positions']:
+            prompt.append(generate_technical_summary(
+                position['ticker'],
+                pd.DataFrame(position['technical_indicators']),
+                position['score']['total'],
+                position['score']['details'],
+                position.get('analyst_targets'),
+                position.get('position')
+            ))
+    
+    # Add new picks
+    if structured_data['new_picks']:
+        prompt.append("\n📊 New Technical Picks:")
+        for pick in structured_data['new_picks']:
+            prompt.append(generate_technical_summary(
+                pick['ticker'],
+                pd.DataFrame(pick['technical_indicators']),
+                pick['score']['total'],
+                pick['score']['details'],
+                pick.get('analyst_targets')
+            ))
+    
     return "\n".join(prompt) 

@@ -5,6 +5,9 @@ from pathlib import Path
 from typer.testing import CliRunner
 from unittest.mock import patch, MagicMock
 import pandas as pd
+import json
+import tempfile
+import os
 
 from trading_advisor.cli import app
 
@@ -406,4 +409,94 @@ def test_chart_command_error_handling(mock_download_stock_data):
     
     # Check that command failed with error message
     assert result.exit_code == 1
-    assert "Error generating charts: Test error" in result.stdout 
+    assert "Error generating charts: Test error" in result.stdout
+
+def test_deep_research_command(
+    mock_download_stock_data,
+    mock_analyze_stock,
+    mock_create_stock_chart,
+    mock_create_score_breakdown
+):
+    """Test the deep research command."""
+    # Create a temporary JSON file with test data
+    test_data = {
+        "timestamp": "2024-01-01T00:00:00",
+        "positions": [{
+            "ticker": "AAPL",
+            "score": {"total": 7.5, "details": {"rsi": 2.0, "bb": 1.5, "macd": 2.0, "ma": 1.0, "volume": 0.5}},
+            "technical_indicators": {
+                "RSI": 65.0,
+                "MACD": 2.0,
+                "MACD_Signal": 1.5,
+                "MACD_Hist": 0.5,
+                "BB_Upper": 105.0,
+                "BB_Lower": 95.0,
+                "BB_Middle": 100.0,
+                "SMA_20": 101.0
+            },
+            "position": {"quantity": 100, "cost_basis": 150.0, "gain_pct": 7.14, "account_pct": 25.0}
+        }],
+        "new_picks": [{
+            "ticker": "MSFT",
+            "score": {"total": 8.0, "details": {"rsi": 2.5, "bb": 1.5, "macd": 2.5, "ma": 1.0, "volume": 0.5}},
+            "technical_indicators": {
+                "RSI": 70.0,
+                "MACD": 2.5,
+                "MACD_Signal": 2.0,
+                "MACD_Hist": 0.5,
+                "BB_Upper": 110.0,
+                "BB_Lower": 90.0,
+                "BB_Middle": 100.0,
+                "SMA_20": 102.0
+            }
+        }]
+    }
+    
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(test_data, f)
+        json_path = f.name
+    
+    try:
+        result = runner.invoke(app, ["deep-research", "--json", json_path])
+        
+        # Check command execution
+        assert result.exit_code == 0
+        assert "Deep research prompt written to output/deep_research_prompt.md" in result.stdout
+        
+        # Check that the output file was created
+        output_path = Path("output/deep_research_prompt.md")
+        assert output_path.exists()
+        
+        # Check the content of the output file
+        with open(output_path) as f:
+            content = f.read()
+            assert "You are a tactical swing trader" in content
+            assert "Current Positions" in content
+            assert "New Technical Picks" in content
+            assert "AAPL" in content
+            assert "MSFT" in content
+            
+    finally:
+        # Clean up
+        os.unlink(json_path)
+        if output_path.exists():
+            output_path.unlink()
+
+def test_deep_research_command_error_handling():
+    """Test error handling in the deep research command."""
+    # Test with non-existent JSON file
+    result = runner.invoke(app, ["deep-research", "--json", "nonexistent.json"])
+    assert result.exit_code == 1
+    assert "Error loading JSON data" in result.stdout
+    
+    # Test with invalid JSON file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        f.write("invalid json")
+        json_path = f.name
+    
+    try:
+        result = runner.invoke(app, ["deep-research", "--json", json_path])
+        assert result.exit_code == 1
+        assert "Error loading JSON data" in result.stdout
+    finally:
+        os.unlink(json_path) 

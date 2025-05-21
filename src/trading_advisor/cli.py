@@ -16,7 +16,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 from trading_advisor import __version__
 from trading_advisor.analysis import analyze_stock
 from trading_advisor.data import download_stock_data, ensure_data_dir, load_positions, load_tickers
-from trading_advisor.output import generate_report, generate_structured_data, generate_technical_summary, save_json_report, generate_research_prompt
+from trading_advisor.output import generate_report, generate_structured_data, generate_technical_summary, save_json_report, generate_research_prompt, generate_deep_research_prompt
 from trading_advisor.config import SCORE_WEIGHTS
 from trading_advisor.visualization import create_stock_chart, create_score_breakdown
 
@@ -295,6 +295,42 @@ def prompt(
         
     except Exception as e:
         typer.echo(f"Error generating research prompt: {str(e)}", err=True)
+        raise typer.Exit(1)
+
+@app.command()
+def deep_research(
+    json_file: Path = typer.Option(
+        ...,
+        "--json", "-j",
+        help="Path to the JSON output file from the analyze command"
+    ),
+    output: Path = typer.Option(
+        "output/deep_research_prompt.md",
+        "--output", "-o",
+        help="Path to save the deep research prompt"
+    )
+):
+    """Generate a deep research prompt for tactical swing trading analysis."""
+    try:
+        # Load JSON data
+        with open(json_file, "r") as f:
+            data = json.load(f)
+
+        # Generate deep research prompt
+        prompt_content = generate_deep_research_prompt(data)
+
+        # Save prompt to file
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with open(output, "w") as f:
+            f.write(prompt_content)
+
+        typer.echo(f"Deep research prompt written to {output}")
+
+    except json.JSONDecodeError:
+        typer.echo("Error loading JSON data", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Error generating deep research prompt: {str(e)}", err=True)
         raise typer.Exit(1)
 
 def run():
