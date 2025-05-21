@@ -52,7 +52,7 @@ def test_get_yf_ticker():
 
 def test_ensure_data_dir(tmp_path):
     """Test data directory creation."""
-    with patch('weekly_trading_advisor.data.DATA_DIR', tmp_path):
+    with patch('src.data.DATA_DIR', tmp_path):
         ensure_data_dir()
         assert tmp_path.exists()
         assert tmp_path.is_dir()

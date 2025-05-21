@@ -38,7 +38,7 @@ def test_calculate_technical_indicators(sample_data):
     ]
     # Indicators that may require more data
     long_window_indicators = [
-        'MACD', 'MACD_Signal', 'MACD_Hist', 'SMA_50', 'SMA_200'
+        'MACD', 'MACD_Signal', 'MACD_Hist'
     ]
     
     for indicator in computable_indicators:

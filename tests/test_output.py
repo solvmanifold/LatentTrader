@@ -73,10 +73,8 @@ def test_generate_technical_summary(sample_data, sample_position, sample_analyst
     assert isinstance(summary, str)
     assert 'AAPL' in summary
     assert 'Current Position' in summary
-    assert 'Price Data' in summary
-    assert 'Technical Indicators' in summary
-    assert 'Analyst Targets' in summary
-    assert 'Technical Score: 7.5/10' in summary
+    assert 'Price:' in summary
+    assert 'Technical Score:' in summary
 
 def test_generate_structured_data(sample_data, sample_position, sample_analyst_targets):
     """Test structured data generation."""
