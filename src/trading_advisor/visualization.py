@@ -6,6 +6,15 @@ import pandas as pd
 from typing import Dict, Any, Optional
 import os
 
+def _sanitize_dict_values(d):
+    # Recursively sanitize all string values in a dict (including nested dicts)
+    if isinstance(d, dict):
+        return {k: _sanitize_dict_values(v) for k, v in d.items()}
+    elif isinstance(d, str):
+        return d.replace('<br>', ' ').replace('\n', ' ')
+    else:
+        return d
+
 def create_stock_chart(
     df: pd.DataFrame,
     ticker: str,
@@ -168,6 +177,8 @@ def create_score_breakdown(
     Returns:
         Path to the saved HTML file
     """
+    # Sanitize indicators deeply before any use
+    indicators = _sanitize_dict_values(indicators)
     # Create figure with subplots
     fig = make_subplots(
         rows=2, cols=2,
@@ -248,6 +259,9 @@ def create_score_breakdown(
         f"Last ${indicators.get('last_price', 0):.2f} | Target: ${analyst_target:.2f} ({target_upside:+.1f}%){analyst_range}"
         if analyst_target else "N/A"
     )
+    # Sanitize analyst_targets_str
+    analyst_targets_str = str(analyst_targets_str).replace('<br>', ' ').replace('\n', ' ')
+
     details = {
         'RSI': f"{indicators.get('rsi', 0):.1f} ({'Oversold' if indicators.get('rsi', 0) < 30 else 'Overbought' if indicators.get('rsi', 0) > 70 else 'Neutral'})",
         'MACD': f"{indicators.get('macd', 0):.2f} ({'Bullish' if indicators.get('macd', 0) > 0 else 'Bearish'})",
@@ -256,6 +270,7 @@ def create_score_breakdown(
         'Volume': f"{indicators.get('volume_change', 0):.1f}% vs prev day",
         'Analyst Targets': analyst_targets_str
     }
+
     fig.add_trace(
         go.Table(
             header=dict(values=["<b>Indicator</b>", "<b>Value</b>"], fill_color="paleturquoise", align="left"),
@@ -424,6 +439,8 @@ def create_combined_visualization(
         f"Last ${score_indicators.get('last_price', 0):.2f} | Target: ${analyst_target:.2f} ({target_upside:+.1f}%){analyst_range}"
         if analyst_target else "N/A"
     )
+    # Sanitize analyst_targets_str
+    analyst_targets_str = str(analyst_targets_str).replace('<br>', ' ').replace('\n', ' ')
     details = {
         'RSI': f"{score_indicators.get('rsi', 0):.1f} ({'Oversold' if score_indicators.get('rsi', 0) < 30 else 'Overbought' if score_indicators.get('rsi', 0) > 70 else 'Neutral'})",
         'MACD': f"{score_indicators.get('macd', 0):.2f} ({'Bullish' if score_indicators.get('macd', 0) > 0 else 'Bearish'})",
@@ -432,6 +449,7 @@ def create_combined_visualization(
         'Volume': f"{score_indicators.get('volume_change', 0):.1f}% vs prev day",
         'Analyst Targets': analyst_targets_str
     }
+
     fig.add_trace(
         go.Table(
             header=dict(values=["<b>Indicator</b>", "<b>Value</b>"], fill_color="paleturquoise", align="left"),

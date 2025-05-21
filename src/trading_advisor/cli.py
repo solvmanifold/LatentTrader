@@ -265,6 +265,10 @@ def chart(
             'analyst_target': analyst_target,
             'target_upside': target_upside,
         }
+        # Sanitize indicators to remove any <br> or \n from string values
+        for k, v in indicators.items():
+            if isinstance(v, str):
+                indicators[k] = v.replace('<br>', ' ').replace('\n', ' ')
         # Generate charts
         chart_path, chart_fig = create_stock_chart(
             df=df,

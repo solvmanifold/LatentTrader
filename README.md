@@ -45,6 +45,13 @@ A Python CLI tool for generating tactical swing trading advice based on technica
 pip install trading-advisor
 ```
 
+## Recent Improvements
+
+- Table values in score breakdown are now robustly sanitized and explicitly converted to strings, preventing HTML tags or formatting issues in both HTML and static image exports.
+- Debug print statements have been removed for clean CLI output.
+- If you see unexpected <br> tags in PNG/PDF exports, this is a limitation of the Plotly/Kaleido rendering stack; the HTML output will always be correct.
+- For best results, always check the HTML output for the most accurate rendering.
+
 ## Usage
 
 ### Analyze Stocks
