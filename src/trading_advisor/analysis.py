@@ -7,7 +7,7 @@ import pandas as pd
 import ta
 import yfinance as yf
 
-from config import SCORE_WEIGHTS, MAX_RAW_SCORE, MACD_STRONG_DIVERGENCE, MACD_WEAK_DIVERGENCE
+from trading_advisor.config import SCORE_WEIGHTS, MAX_RAW_SCORE, MACD_STRONG_DIVERGENCE, MACD_WEAK_DIVERGENCE
 
 logger = logging.getLogger(__name__)
 

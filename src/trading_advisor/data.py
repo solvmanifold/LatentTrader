@@ -11,7 +11,7 @@ import pandas as pd
 import yfinance as yf
 from functools import lru_cache
 
-from config import DATA_DIR, LOOKBACK_DAYS, REQUIRED_COLUMNS
+from trading_advisor.config import DATA_DIR, LOOKBACK_DAYS, REQUIRED_COLUMNS
 
 logger = logging.getLogger(__name__)
 

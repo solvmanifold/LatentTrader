@@ -1,4 +1,4 @@
-"""Setup configuration for the Weekly Trading Advisor package."""
+"""Setup configuration for the Trading Advisor package."""
 
 from setuptools import setup, find_packages
 
@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name="weekly-trading-advisor",
+    name="trading-advisor",
     version="0.1.0",
     author="Aaron",
     author_email="aaron@example.com",
@@ -14,7 +14,8 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/solvmanifold/LatentTrader",
-    packages=find_packages(),
+    packages=find_packages(where="src"),
+    package_dir={"": "src"},
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Financial and Insurance Industry",
@@ -39,7 +40,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "weekly-trading-advisor=cli:app",
+            "trading-advisor=trading_advisor.cli:app",
         ],
     },
 ) 
