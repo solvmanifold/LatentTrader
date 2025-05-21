@@ -77,11 +77,13 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     bb_upper = df['BB_Upper'].iloc[-1]
     bb_pband = df['BB_Pband'].iloc[-1]
     if bb_pband < 0.05:
-        score += min(SCORE_WEIGHTS['bollinger'], 2.0)
-        score_details['bollinger'] = min(SCORE_WEIGHTS['bollinger'], 2.0)
+        weight = SCORE_WEIGHTS['bollinger_low']
+        score += weight
+        score_details['bollinger'] = weight
     elif bb_pband > 0.95:
-        score -= min(SCORE_WEIGHTS['bollinger'], 2.0)
-        score_details['bollinger'] = -min(SCORE_WEIGHTS['bollinger'], 2.0)
+        weight = SCORE_WEIGHTS['bollinger_high']
+        score += weight
+        score_details['bollinger'] = weight
     else:
         score_details['bollinger'] = 0.0
     
