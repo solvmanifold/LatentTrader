@@ -53,7 +53,11 @@ def test_analyze_help():
 @patch('trading_advisor.cli.generate_technical_summary')
 @patch('trading_advisor.cli.generate_structured_data')
 @patch('trading_advisor.cli.generate_report')
+@patch('trading_advisor.cli.console')
+@patch('trading_advisor.cli.Progress')
 def test_analyze_command(
+    mock_progress,
+    mock_console,
     mock_generate_report,
     mock_generate_structured_data,
     mock_generate_technical_summary,
@@ -69,19 +73,47 @@ def test_analyze_command(
     # Setup mocks
     mock_load_tickers.return_value = ["AAPL", "MSFT", "GOOGL"]
     mock_load_positions.return_value = {"AAPL": {"quantity": 100}}
+    
+    # Mock the progress bar
+    mock_progress_instance = MagicMock()
+    mock_progress.return_value.__enter__.return_value = mock_progress_instance
+    
     # Return a non-empty DataFrame for download_stock_data
     df = pd.DataFrame({
         'Open': [100.0] * 20,
         'High': [105.0] * 20,
         'Low': [95.0] * 20,
         'Close': [102.0] * 20,
-        'Volume': [1000000] * 20
+        'Volume': [1000000] * 20,
+        'RSI': [65.0] * 20,
+        'MACD': [2.0] * 20,
+        'MACD_Signal': [1.5] * 20,
+        'MACD_Hist': [0.5] * 20,
+        'BB_Upper': [105.0] * 20,
+        'BB_Lower': [95.0] * 20,
+        'BB_Middle': [100.0] * 20,
+        'SMA_20': [101.0] * 20,
+        'SMA_50': [100.0] * 20,
+        'SMA_200': [99.0] * 20
     }, index=pd.date_range(start='2024-01-01', periods=20, freq='D'))
     mock_download_stock_data.return_value = df
-    mock_analyze_stock.return_value = (7.5, {"rsi": 1.0}, None)
-    mock_generate_technical_summary.return_value = "Test summary"
-    mock_generate_structured_data.return_value = {"ticker": "AAPL", "score": {"total": 7.5}}
+
+    mock_analyze_stock.side_effect = lambda *args, **kwargs: (7.5, {"rsi": 1.0}, None)
+    mock_generate_technical_summary.side_effect = lambda *args, **kwargs: "Test summary"
+    def structured_data_side_effect(ticker, *args, **kwargs):
+        scores = {"AAPL": 7.5, "MSFT": 8.0, "GOOGL": 6.5}
+        return {
+            "ticker": ticker,
+            "score": {"total": scores[ticker]},
+            "price_data": {"current": 150.0},
+            "technical_indicators": {"rsi": 65.0},
+            "summary": "Test summary",
+            "position": {"quantity": 100} if ticker == "AAPL" else None
+        }
+    mock_generate_structured_data.side_effect = structured_data_side_effect
+
     mock_generate_report.return_value = "Test report"
+    mock_console.print = MagicMock()
     
     # Test with all options
     result = runner.invoke(app, [
@@ -92,10 +124,14 @@ def test_analyze_command(
         "--output", "report.md",
         "--save-json", "analysis.json",
         "--history-days", "50"
-    ])
+    ], catch_exceptions=False)
     
     assert result.exit_code == 0
-    assert "Test report" in result.stdout
+    try:
+        mock_console.print.assert_called_once_with("Test report")
+    except AssertionError as e:
+        print("\nCLI output for test_analyze_command:\n", result.output)
+        raise
     
     # Verify mock calls
     mock_ensure_data_dir.assert_called_once()
@@ -115,7 +151,11 @@ def test_analyze_command(
 @patch('trading_advisor.cli.generate_technical_summary')
 @patch('trading_advisor.cli.generate_structured_data')
 @patch('trading_advisor.cli.generate_report')
+@patch('trading_advisor.cli.console')
+@patch('trading_advisor.cli.Progress')
 def test_analyze_positions_only(
+    mock_progress,
+    mock_console,
     mock_generate_report,
     mock_generate_structured_data,
     mock_generate_technical_summary,
@@ -131,18 +171,46 @@ def test_analyze_positions_only(
     # Setup mocks
     mock_load_tickers.return_value = ["AAPL", "MSFT", "GOOGL"]
     mock_load_positions.return_value = {"AAPL": {"quantity": 100}}
+    
+    # Mock the progress bar
+    mock_progress_instance = MagicMock()
+    mock_progress.return_value.__enter__.return_value = mock_progress_instance
+    
     df = pd.DataFrame({
         'Open': [100.0] * 20,
         'High': [105.0] * 20,
         'Low': [95.0] * 20,
         'Close': [102.0] * 20,
-        'Volume': [1000000] * 20
+        'Volume': [1000000] * 20,
+        'RSI': [65.0] * 20,
+        'MACD': [2.0] * 20,
+        'MACD_Signal': [1.5] * 20,
+        'MACD_Hist': [0.5] * 20,
+        'BB_Upper': [105.0] * 20,
+        'BB_Lower': [95.0] * 20,
+        'BB_Middle': [100.0] * 20,
+        'SMA_20': [101.0] * 20,
+        'SMA_50': [100.0] * 20,
+        'SMA_200': [99.0] * 20
     }, index=pd.date_range(start='2024-01-01', periods=20, freq='D'))
     mock_download_stock_data.return_value = df
-    mock_analyze_stock.return_value = (7.5, {"rsi": 1.0}, None)
-    mock_generate_technical_summary.return_value = "Test summary"
-    mock_generate_structured_data.return_value = {"ticker": "AAPL", "score": {"total": 7.5}}
+
+    mock_analyze_stock.side_effect = lambda *args, **kwargs: (7.5, {"rsi": 1.0}, None)
+    mock_generate_technical_summary.side_effect = lambda *args, **kwargs: "Test summary"
+    def structured_data_side_effect(ticker, *args, **kwargs):
+        scores = {"AAPL": 7.5, "MSFT": 8.0, "GOOGL": 6.5}
+        return {
+            "ticker": ticker,
+            "score": {"total": scores[ticker]},
+            "price_data": {"current": 150.0},
+            "technical_indicators": {"rsi": 65.0},
+            "summary": "Test summary",
+            "position": {"quantity": 100} if ticker == "AAPL" else None
+        }
+    mock_generate_structured_data.side_effect = structured_data_side_effect
+
     mock_generate_report.return_value = "Test report"
+    mock_console.print = MagicMock()
     
     # Test with positions-only
     result = runner.invoke(app, [
@@ -150,10 +218,14 @@ def test_analyze_positions_only(
         "--tickers", str(mock_tickers_file),
         "--positions", str(mock_positions_file),
         "--positions-only"
-    ])
+    ], catch_exceptions=False)
     
     assert result.exit_code == 0
-    assert "Test report" in result.stdout
+    try:
+        mock_console.print.assert_called_once_with("Test report")
+    except AssertionError as e:
+        print("\nCLI output for test_analyze_positions_only:\n", result.output)
+        raise
     
     # Verify mock calls
     mock_ensure_data_dir.assert_called_once()
