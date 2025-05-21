@@ -11,6 +11,7 @@ from analysis import (
     analyze_stock,
     get_analyst_targets
 )
+from config import SCORE_WEIGHTS
 
 @pytest.fixture
 def sample_data():
