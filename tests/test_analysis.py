@@ -104,7 +104,7 @@ def test_score_components():
     # Test Bollinger Bands component
     df['BB_Pband'] = 0.02  # Oversold condition
     score, details = calculate_score(df)
-    assert details['bollinger'] > 0  # Should be positive for oversold
+    assert details['bollinger'] == SCORE_WEIGHTS['bollinger_low']  # Should be positive for oversold
 
 def test_score_normalization():
     """Test score normalization to [0, 10] range."""
