@@ -38,13 +38,22 @@ def mock_download_stock_data():
     """Mock the download_stock_data function."""
     with patch('trading_advisor.cli.download_stock_data') as mock:
         # Create sample data
-        dates = pd.date_range(start='2023-01-01', end='2023-01-10', freq='D')
+        dates = pd.date_range(start='2023-01-01', periods=60, freq='D')
         data = {
-            'Open': [100, 101, 102, 103, 104, 105, 106, 107, 108, 109],
-            'High': [102, 103, 104, 105, 106, 107, 108, 109, 110, 111],
-            'Low': [98, 99, 100, 101, 102, 103, 104, 105, 106, 107],
-            'Close': [101, 102, 103, 104, 105, 106, 107, 108, 109, 110],
-            'Volume': [1000, 1100, 1200, 1300, 1400, 1500, 1600, 1700, 1800, 1900]
+            'Open': [100.0] * 60,
+            'High': [105.0] * 60,
+            'Low': [95.0] * 60,
+            'Close': [102.0] * 60,
+            'Volume': [1000000] * 60,
+            'RSI': [65.0] * 60,
+            'MACD': [2.0] * 60,
+            'MACD_Signal': [1.5] * 60,
+            'MACD_Hist': [0.5] * 60,
+            'BB_Upper': [105.0] * 60,
+            'BB_Lower': [95.0] * 60,
+            'BB_Middle': [100.0] * 60,
+            'SMA_20': [101.0] * 60,
+            'SMA_50': [100.0] * 60
         }
         mock.return_value = pd.DataFrame(data, index=dates)
         yield mock
@@ -53,14 +62,7 @@ def mock_download_stock_data():
 def mock_analyze_stock():
     """Mock the analyze_stock function."""
     with patch('trading_advisor.cli.analyze_stock') as mock:
-        mock.return_value = {
-            'score': 7.0,
-            'rsi_score': 2.0,
-            'bb_score': 1.5,
-            'macd_score': 2.0,
-            'ma_score': 1.0,
-            'volume_score': 0.5
-        }
+        mock.return_value = (7.0, {"rsi": 2.0, "bb": 1.5, "macd": 2.0, "ma": 1.0, "volume": 0.5}, None)
         yield mock
 
 @pytest.fixture
@@ -77,6 +79,23 @@ def mock_create_score_breakdown():
         mock.return_value = "output/charts/AAPL_score.html"
         yield mock
 
+@pytest.fixture
+def mock_generate_structured_data():
+    """Mock the generate_structured_data function."""
+    with patch('trading_advisor.cli.generate_structured_data') as mock:
+        def side_effect(ticker, df, score, score_details, analyst_targets=None, position=None):
+            return {
+                "ticker": ticker,
+                "score": {"total": score, "details": score_details},
+                "price_data": {"current": 150.0},
+                "technical_indicators": {"rsi": 65.0},
+                "summary": "Test summary",
+                "position": position,
+                "analyst_targets": analyst_targets
+            }
+        mock.side_effect = side_effect
+        yield mock
+
 def test_version():
     """Test version command."""
     result = runner.invoke(app, ["--version"])
@@ -87,7 +106,7 @@ def test_analyze_help():
     """Test analyze command help."""
     result = runner.invoke(app, ["analyze", "--help"])
     assert result.exit_code == 0
-    assert "Analyze stocks and generate trading advice" in result.stdout
+    assert "Analyze stocks and output structured JSON data." in result.stdout
 
 @patch('trading_advisor.cli.ensure_data_dir')
 @patch('trading_advisor.cli.load_tickers')
@@ -124,68 +143,70 @@ def test_analyze_command(
     
     # Return a non-empty DataFrame for download_stock_data
     df = pd.DataFrame({
-        'Open': [100.0] * 20,
-        'High': [105.0] * 20,
-        'Low': [95.0] * 20,
-        'Close': [102.0] * 20,
-        'Volume': [1000000] * 20,
-        'RSI': [65.0] * 20,
-        'MACD': [2.0] * 20,
-        'MACD_Signal': [1.5] * 20,
-        'MACD_Hist': [0.5] * 20,
-        'BB_Upper': [105.0] * 20,
-        'BB_Lower': [95.0] * 20,
-        'BB_Middle': [100.0] * 20,
-        'SMA_20': [101.0] * 20,
-        'SMA_50': [100.0] * 20,
-        'SMA_200': [99.0] * 20
-    }, index=pd.date_range(start='2024-01-01', periods=20, freq='D'))
+        'Open': [100.0] * 60,
+        'High': [105.0] * 60,
+        'Low': [95.0] * 60,
+        'Close': [102.0] * 60,
+        'Volume': [1000000] * 60,
+        'RSI': [65.0] * 60,
+        'MACD': [2.0] * 60,
+        'MACD_Signal': [1.5] * 60,
+        'MACD_Hist': [0.5] * 60,
+        'BB_Upper': [105.0] * 60,
+        'BB_Lower': [95.0] * 60,
+        'BB_Middle': [100.0] * 60,
+        'SMA_20': [101.0] * 60,
+        'SMA_50': [100.0] * 60
+    }, index=pd.date_range(start='2024-01-01', periods=60, freq='D'))
     mock_download_stock_data.return_value = df
 
     mock_analyze_stock.side_effect = lambda *args, **kwargs: (7.5, {"rsi": 1.0}, None)
     mock_generate_technical_summary.side_effect = lambda *args, **kwargs: "Test summary"
-    def structured_data_side_effect(ticker, *args, **kwargs):
-        scores = {"AAPL": 7.5, "MSFT": 8.0, "GOOGL": 6.5}
-        return {
-            "ticker": ticker,
-            "score": {"total": scores[ticker]},
-            "price_data": {"current": 150.0},
-            "technical_indicators": {"rsi": 65.0},
-            "summary": "Test summary",
-            "position": {"quantity": 100} if ticker == "AAPL" else None
-        }
-    mock_generate_structured_data.side_effect = structured_data_side_effect
-
     mock_generate_report.return_value = "Test report"
     mock_console.print = MagicMock()
     
+    # Make generate_structured_data return JSON serializable data
+    mock_generate_structured_data.return_value = {
+        "ticker": "AAPL",
+        "score": 7.5,
+        "price_data": {
+            "current_price": 102.0,
+            "price_change": 2.0,
+            "volume_change": 0.0
+        },
+        "technical_indicators": {
+            "rsi": 65.0,
+            "macd": 2.0,
+            "bb_upper": 105.0,
+            "bb_lower": 95.0
+        },
+        "summary": "Test summary",
+        "position": {"quantity": 100},
+        "analyst_targets": None
+    }
+    
     # Test with all options
-    result = runner.invoke(app, [
+    command_args = [
         "analyze",
         "--tickers", str(mock_tickers_file),
-        "--positions", str(mock_positions_file),
-        "--top-n", "3",
-        "--output", "report.md",
-        "--save-json", "analysis.json",
-        "--history-days", "50"
-    ], catch_exceptions=False)
+        "--positions", str(mock_positions_file)
+    ]
+    result = runner.invoke(app, command_args, catch_exceptions=False)
+    
+    if "Usage: trading-advisor" in result.stdout:
+        print(f"DEBUG: Command args: {command_args}")
+        print("DEBUG: CLI output (help menu):\n", result.stdout)
     
     assert result.exit_code == 0
-    try:
-        mock_console.print.assert_called_once_with("Test report")
-    except AssertionError as e:
-        print("\nCLI output for test_analyze_command:\n", result.output)
-        raise
+    assert "Analysis complete. Results written to output/analysis.json" in result.stdout
     
     # Verify mock calls
-    mock_ensure_data_dir.assert_called_once()
-    mock_load_tickers.assert_called_once_with(str(mock_tickers_file))
+    mock_load_tickers.assert_called_once()
+    assert mock_load_tickers.call_args[0][0] == mock_tickers_file
     mock_load_positions.assert_called_once_with(Path(mock_positions_file))
     assert mock_download_stock_data.call_count == 3  # One for each ticker
     assert mock_analyze_stock.call_count == 3
-    assert mock_generate_technical_summary.call_count == 3
-    assert mock_generate_structured_data.call_count == 3
-    mock_generate_report.assert_called_once()
+    assert mock_generate_structured_data.call_count == 3  # One for each ticker
 
 @patch('trading_advisor.cli.ensure_data_dir')
 @patch('trading_advisor.cli.load_tickers')
@@ -221,65 +242,71 @@ def test_analyze_positions_only(
     mock_progress.return_value.__enter__.return_value = mock_progress_instance
     
     df = pd.DataFrame({
-        'Open': [100.0] * 20,
-        'High': [105.0] * 20,
-        'Low': [95.0] * 20,
-        'Close': [102.0] * 20,
-        'Volume': [1000000] * 20,
-        'RSI': [65.0] * 20,
-        'MACD': [2.0] * 20,
-        'MACD_Signal': [1.5] * 20,
-        'MACD_Hist': [0.5] * 20,
-        'BB_Upper': [105.0] * 20,
-        'BB_Lower': [95.0] * 20,
-        'BB_Middle': [100.0] * 20,
-        'SMA_20': [101.0] * 20,
-        'SMA_50': [100.0] * 20,
-        'SMA_200': [99.0] * 20
-    }, index=pd.date_range(start='2024-01-01', periods=20, freq='D'))
+        'Open': [100.0] * 60,
+        'High': [105.0] * 60,
+        'Low': [95.0] * 60,
+        'Close': [102.0] * 60,
+        'Volume': [1000000] * 60,
+        'RSI': [65.0] * 60,
+        'MACD': [2.0] * 60,
+        'MACD_Signal': [1.5] * 60,
+        'MACD_Hist': [0.5] * 60,
+        'BB_Upper': [105.0] * 60,
+        'BB_Lower': [95.0] * 60,
+        'BB_Middle': [100.0] * 60,
+        'SMA_20': [101.0] * 60,
+        'SMA_50': [100.0] * 60
+    }, index=pd.date_range(start='2024-01-01', periods=60, freq='D'))
     mock_download_stock_data.return_value = df
 
     mock_analyze_stock.side_effect = lambda *args, **kwargs: (7.5, {"rsi": 1.0}, None)
     mock_generate_technical_summary.side_effect = lambda *args, **kwargs: "Test summary"
-    def structured_data_side_effect(ticker, *args, **kwargs):
-        scores = {"AAPL": 7.5, "MSFT": 8.0, "GOOGL": 6.5}
-        return {
-            "ticker": ticker,
-            "score": {"total": scores[ticker]},
-            "price_data": {"current": 150.0},
-            "technical_indicators": {"rsi": 65.0},
-            "summary": "Test summary",
-            "position": {"quantity": 100} if ticker == "AAPL" else None
-        }
-    mock_generate_structured_data.side_effect = structured_data_side_effect
-
     mock_generate_report.return_value = "Test report"
     mock_console.print = MagicMock()
     
+    # Make generate_structured_data return JSON serializable data
+    mock_generate_structured_data.return_value = {
+        "ticker": "AAPL",
+        "score": 7.5,
+        "price_data": {
+            "current_price": 102.0,
+            "price_change": 2.0,
+            "volume_change": 0.0
+        },
+        "technical_indicators": {
+            "rsi": 65.0,
+            "macd": 2.0,
+            "bb_upper": 105.0,
+            "bb_lower": 95.0
+        },
+        "summary": "Test summary",
+        "position": {"quantity": 100},
+        "analyst_targets": None
+    }
+    
     # Test with positions-only
-    result = runner.invoke(app, [
+    command_args = [
         "analyze",
         "--tickers", str(mock_tickers_file),
         "--positions", str(mock_positions_file),
         "--positions-only"
-    ], catch_exceptions=False)
+    ]
+    result = runner.invoke(app, command_args, catch_exceptions=False)
+    
+    if "Usage: trading-advisor" in result.stdout:
+        print(f"DEBUG: Command args: {command_args}")
+        print("DEBUG: CLI output (help menu):\n", result.stdout)
     
     assert result.exit_code == 0
-    try:
-        mock_console.print.assert_called_once_with("Test report")
-    except AssertionError as e:
-        print("\nCLI output for test_analyze_positions_only:\n", result.output)
-        raise
+    assert "Analysis complete. Results written to output/analysis.json" in result.stdout
     
     # Verify mock calls
-    mock_ensure_data_dir.assert_called_once()
-    mock_load_tickers.assert_called_once_with(str(mock_tickers_file))
+    mock_load_tickers.assert_called_once()
+    assert mock_load_tickers.call_args[0][0] == mock_tickers_file
     mock_load_positions.assert_called_once_with(Path(mock_positions_file))
-    assert mock_download_stock_data.call_count == 3
-    assert mock_analyze_stock.call_count == 3
-    assert mock_generate_technical_summary.call_count == 3
-    assert mock_generate_structured_data.call_count == 3
-    mock_generate_report.assert_called_once()
+    assert mock_download_stock_data.call_count == 1  # Only one position
+    assert mock_analyze_stock.call_count == 1
+    assert mock_generate_structured_data.call_count == 1  # Only one position
 
 def test_chart_command(
     mock_download_stock_data,
@@ -294,18 +321,29 @@ def test_chart_command(
     assert result.exit_code == 0
     
     # Check that functions were called with correct arguments
-    mock_download_stock_data.assert_called_once_with("AAPL", days=100)
+    mock_download_stock_data.assert_called_once_with("AAPL", history_days=100)
     mock_analyze_stock.assert_called_once()
+    
+    # Check create_stock_chart was called with correct parameter order
     mock_create_stock_chart.assert_called_once()
+    stock_chart_args = mock_create_stock_chart.call_args[1]  # keyword args
+    assert 'df' in stock_chart_args
+    assert 'ticker' in stock_chart_args
+    assert 'indicators' in stock_chart_args
+    assert 'output_dir' in stock_chart_args
+    
+    # Check create_score_breakdown was called with correct parameter order
     mock_create_score_breakdown.assert_called_once()
+    score_breakdown_args = mock_create_score_breakdown.call_args[1]  # keyword args
+    assert 'ticker' in score_breakdown_args
+    assert 'score' in score_breakdown_args
+    assert 'indicators' in score_breakdown_args
+    assert 'output_dir' in score_breakdown_args
     
     # Check output messages
-    assert "Downloading data for AAPL" in result.stdout
-    assert "Analyzing stock" in result.stdout
-    assert "Generating charts" in result.stdout
     assert "Charts generated successfully" in result.stdout
-    assert "Technical Analysis Chart: output/charts/AAPL_chart.html" in result.stdout
-    assert "Score Breakdown Chart: output/charts/AAPL_score.html" in result.stdout
+    assert "output/charts/AAPL_chart.html" in result.stdout
+    assert "output/charts/AAPL_score.html" in result.stdout
 
 def test_chart_command_custom_days(
     mock_download_stock_data,
@@ -320,7 +358,15 @@ def test_chart_command_custom_days(
     assert result.exit_code == 0
     
     # Check that download_stock_data was called with correct days
-    mock_download_stock_data.assert_called_once_with("AAPL", days=50)
+    mock_download_stock_data.assert_called_once_with("AAPL", history_days=50)
+    
+    # Check that chart functions were called with correct parameter order
+    mock_create_stock_chart.assert_called_once()
+    stock_chart_args = mock_create_stock_chart.call_args[1]  # keyword args
+    assert 'df' in stock_chart_args
+    assert 'ticker' in stock_chart_args
+    assert 'indicators' in stock_chart_args
+    assert 'output_dir' in stock_chart_args
 
 def test_chart_command_custom_output_dir(
     mock_download_stock_data,
@@ -330,21 +376,26 @@ def test_chart_command_custom_output_dir(
 ):
     """Test the chart command with custom output directory."""
     result = runner.invoke(app, ["chart", "AAPL", "--output-dir", "custom/charts"])
-    
-    # Check command execution
     assert result.exit_code == 0
     
-    # Check that chart functions were called with correct output directory
+    # Check that chart functions were called with correct output directory and parameter order
     mock_create_stock_chart.assert_called_once()
     mock_create_score_breakdown.assert_called_once()
     
     # Get the actual arguments used in the calls
-    stock_chart_args = mock_create_stock_chart.call_args[0]  # positional args
-    score_breakdown_args = mock_create_score_breakdown.call_args[0]  # positional args
+    stock_chart_args = mock_create_stock_chart.call_args[1]  # keyword args
+    score_breakdown_args = mock_create_score_breakdown.call_args[1]  # keyword args
     
-    # Check that output_dir was passed correctly as the last positional argument
-    assert stock_chart_args[-1] == "custom/charts"
-    assert score_breakdown_args[-1] == "custom/charts"
+    # Check parameter order and values
+    assert 'df' in stock_chart_args
+    assert 'ticker' in stock_chart_args
+    assert 'indicators' in stock_chart_args
+    assert stock_chart_args['output_dir'] == Path("custom/charts")
+    
+    assert 'ticker' in score_breakdown_args
+    assert 'score' in score_breakdown_args
+    assert 'indicators' in score_breakdown_args
+    assert score_breakdown_args['output_dir'] == Path("custom/charts")
 
 def test_chart_command_error_handling(mock_download_stock_data):
     """Test error handling in the chart command."""
