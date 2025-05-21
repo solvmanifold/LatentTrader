@@ -215,91 +215,76 @@ def save_json_report(data: Dict, output_path: Path):
     except Exception as e:
         logger.error(f"Error saving JSON report to {output_path}: {e}")
 
-def generate_report(
-    positions: List[Tuple[str, float, str]],
-    new_picks: List[Tuple[str, float, str]],
-    structured_data: Dict,
-    output_path: Optional[Path] = None,
-    save_json: Optional[Path] = None
-) -> str:
-    """Generate the complete report in markdown format."""
-    report = ["# Weekly Trading Advisor Report"]
-    report.append(f"\nGenerated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+def generate_report(structured_data):
+    """Generate a markdown report from structured data."""
+    report = []
     
-    # Add improved Deep Research Prompt at the top
-    report.append("""
----
-
-**Prompt for LLM:**
-
-You are a tactical swing trader managing a technical scan and open positions.
-Your task is to return an actionable 1–2 week trading playbook for each stock listed below.
-
-Return all responses in this exact bullet format for each stock:
-
-✅ Action (e.g. Buy Now, Hold, Adjust)
-🎯 Entry strategy (limit or breakout entry, price conditions, timing)
-🛑 Stop-loss level (specific price or %)
-💰 Profit-taking strategy (target price, resistance level, or trailing stop)
-🔍 Confidence level (High / Medium / Low)
-🧠 Rationale (1–2 lines)
-""")
+    # Add timestamp
+    timestamp = datetime.fromisoformat(structured_data['timestamp'])
+    report.append(f"# Trading Advisor Report")
+    report.append(f"Generated on: {timestamp.strftime('%Y-%m-%d %H:%M:%S')}")
     
-    if positions:
-        report.append("""
-For each Current Position:
-✅ Action: Hold, Sell, or Adjust
-🎯 Entry strategy: If Adjust, specify the tactical move (e.g., raise stop, set trailing stop, scale out)
-🛑 Stop-loss level: Specific price or % below current price
-💰 Profit-taking strategy: Target price, resistance level, or trailing stop
-🔍 Confidence level: High / Medium / Low
-🧠 Rationale: Focus on capital preservation if signals are weakening
-""")
-    
-    report.append("""
-For each New Technical Pick:
-✅ Action: Buy Now, Wait for Setup, or No Trade
-🎯 Entry strategy: Specify limit or breakout entry, price conditions, and timing
-🛑 Stop-loss level: Specific price or % below entry
-💰 Profit-taking strategy: Target price, resistance level, or trailing stop
-🔍 Confidence level: High / Medium / Low
-🧠 Rationale: Explain why this is a viable trade or why to pass
-
-If a setup is weak or ambiguous, say 'No trade this week' and explain why.
-
-Assume:
-- A 1–2 week swing trade horizon
-- Technicals and analyst targets are the primary inputs
-- The investor is risk-aware but willing to act on strong short-term setups
-
-Be concise, tactical, and make clear, justified recommendations.
-
-Use the structured data only as supporting evidence—focus primarily on the 💡 summary to form your trading thesis.
-
----
-""")
-    
-    # Add current positions section
-    if positions:
+    # Add current positions
+    if structured_data['positions']:
         report.append("\n## Current Positions")
-        for ticker, score, summary in positions:
-            report.append(summary)
-            report.append("")  # Add extra newline after each position
+        for position in structured_data['positions']:
+            entry = [f"### {position['ticker']}",
+                     f"**Technical Score:** {position['score']['total']:.1f}/10"]
+            # Add position details
+            if position['position']:
+                entry.append(f"**Position Details:**")
+                entry.append(f"- Quantity: {position['position']['quantity']}")
+                if 'price' in position['position']:
+                    entry.append(f"- Entry Price: ${position['position']['price']:.2f}")
+                if 'market_value' in position['position']:
+                    entry.append(f"- Market Value: ${position['position']['market_value']:.2f}")
+                if 'gain_pct' in position['position']:
+                    entry.append(f"- Gain/Loss: {position['position']['gain_pct']:.1f}%")
+            # Add technical indicators
+            entry.append(f"**Technical Indicators:**")
+            for indicator, value in position['technical_indicators'].items():
+                if isinstance(value, dict):
+                    for sub_indicator, sub_value in value.items():
+                        entry.append(f"- {indicator.upper()} {sub_indicator}: {sub_value:.2f}")
+                else:
+                    entry.append(f"- {indicator.upper()}: {value:.2f}")
+            # Add stop-loss level if we have price data
+            if isinstance(position['price_data'], list) and position['price_data']:
+                current_price = position['price_data'][-1]['Close']
+            elif isinstance(position['price_data'], dict) and 'current_price' in position['price_data']:
+                current_price = position['price_data']['current_price']
+            else:
+                current_price = None
+            if current_price is not None:
+                entry.append(f"🛑 Stop-loss level: ${current_price * 0.97:.2f} (3% below current)")
+            # Add analyst targets if available
+            if position['analyst_targets']:
+                entry.append(f"**Analyst Targets:**")
+                entry.append(f"- Median: ${position['analyst_targets']['median_target']:.2f}")
+                entry.append(f"- Range: ${position['analyst_targets']['low_target']:.2f} - ${position['analyst_targets']['high_target']:.2f}")
+            report.append("\n".join(entry))
     
-    # Add new picks section
-    if new_picks:
-        report.append("\n## New Technical Picks")
-        for ticker, score, summary in new_picks:
-            report.append(summary)
-            report.append("")  # Add extra newline after each pick
+    # Add new picks
+    if structured_data['new_picks']:
+        report.append("\n## New Trading Opportunities")
+        # Sort new picks by score
+        sorted_picks = sorted(structured_data['new_picks'], key=lambda x: x['score']['total'], reverse=True)
+        # Show top 2 setups
+        report.append("### Top 2 Setups by Confidence x Upside")
+        for pick in sorted_picks[:2]:
+            entry = [f"#### {pick['ticker']}",
+                     f"**Technical Score:** {pick['score']['total']:.1f}/10",
+                     f"**Technical Indicators:**"]
+            for indicator, value in pick['technical_indicators'].items():
+                if isinstance(value, dict):
+                    for sub_indicator, sub_value in value.items():
+                        entry.append(f"- {indicator.upper()} {sub_indicator}: {sub_value:.2f}")
+                else:
+                    entry.append(f"- {indicator.upper()}: {value:.2f}")
+            if pick['analyst_targets']:
+                entry.append(f"**Analyst Targets:**")
+                entry.append(f"- Median: ${pick['analyst_targets']['median_target']:.2f}")
+                entry.append(f"- Range: ${pick['analyst_targets']['low_target']:.2f} - ${pick['analyst_targets']['high_target']:.2f}")
+            report.append("\n".join(entry))
     
-    # Save report to file if specified
-    if output_path:
-        output_path.write_text("\n".join(report))
-    
-    # Save structured data if specified
-    if save_json:
-        structured_data["timestamp"] = datetime.now().isoformat()
-        save_json.write_text(json.dumps(structured_data, indent=2))
-    
-    return "\n".join(report) 
+    return "\n\n".join(report) 
