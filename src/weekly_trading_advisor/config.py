@@ -9,6 +9,10 @@ DATA_DIR = Path("data")
 LOOKBACK_DAYS = 100
 REQUIRED_COLUMNS = ["Close", "High", "Low", "Open", "Volume"]
 
+# MACD thresholds
+MACD_STRONG_DIVERGENCE = 2.0  # Histogram value for strong divergence
+MACD_WEAK_DIVERGENCE = 0.5    # Histogram value for weak divergence
+
 # Scoring parameters
 SCORE_WEIGHTS = {
     'rsi_oversold': 2,      # RSI below 30

@@ -7,7 +7,7 @@ import pandas as pd
 import ta
 import yfinance as yf
 
-from .config import SCORE_WEIGHTS, MAX_RAW_SCORE
+from .config import SCORE_WEIGHTS, MAX_RAW_SCORE, MACD_STRONG_DIVERGENCE, MACD_WEAK_DIVERGENCE
 
 logger = logging.getLogger(__name__)
 
@@ -91,13 +91,13 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     macd_signal = latest['MACD_Signal']
     macd_hist = latest['MACD_Hist']
     
-    if macd_hist > 0 and macd > macd_signal:
+    if macd_hist > MACD_STRONG_DIVERGENCE and macd > macd_signal:
         score += SCORE_WEIGHTS['macd_strong_divergence']  # Strong bullish signal
         score_details['macd'] = SCORE_WEIGHTS['macd_strong_divergence']
-    elif macd_hist > 0:
+    elif macd_hist > MACD_WEAK_DIVERGENCE and macd > macd_signal:
         score += SCORE_WEIGHTS['macd_moderate_divergence']  # Weak bullish signal
         score_details['macd'] = SCORE_WEIGHTS['macd_moderate_divergence']
-    elif macd_hist < 0 and macd < macd_signal:
+    elif macd_hist < -MACD_STRONG_DIVERGENCE and macd < macd_signal:
         score += SCORE_WEIGHTS['macd_crossover']  # Strong bearish signal
         score_details['macd'] = SCORE_WEIGHTS['macd_crossover']
     else:
