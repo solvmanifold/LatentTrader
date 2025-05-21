@@ -92,11 +92,6 @@ def analyze(
         "--positions-only",
         help="Only analyze current positions.",
     ),
-    no_positions: bool = typer.Option(
-        False,
-        "--no-positions",
-        help="Skip analysis of current positions.",
-    ),
 ):
     """Analyze stocks and generate trading advice."""
     try:
@@ -105,11 +100,11 @@ def analyze(
         
         # Load tickers and positions
         ticker_list = load_tickers(tickers)
-        positions_dict = {} if no_positions else load_positions(positions)
+        positions_dict = load_positions(positions)
         
         # Union of tickers from tickers.txt and positions file
         all_tickers = set(ticker_list)
-        if not no_positions:
+        if positions_dict:
             all_tickers.update(positions_dict.keys())
         all_tickers = list(all_tickers)
         
@@ -163,7 +158,7 @@ def analyze(
                 )
                 
                 # Add to appropriate results list
-                if position and not no_positions:
+                if position and not positions_only:
                     position_results.append((ticker, score, summary))
                     structured_data["positions"].append(stock_data)
                 elif not positions_only:

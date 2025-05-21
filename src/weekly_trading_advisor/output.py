@@ -20,72 +20,126 @@ def generate_technical_summary(
     analyst_targets: Optional[Dict] = None,
     position: Optional[Dict] = None
 ) -> str:
-    """Generate a markdown-formatted technical summary for a stock."""
+    """Generate a concise, actionable markdown-formatted technical summary for a stock."""
     if df.empty:
         return f"## {ticker}\nNo data available.\n"
     
     latest = df.iloc[-1]
     prev_day = df.iloc[-2]
     
-    # Calculate price changes
+    # Calculate price and volume changes
     price_change = latest['Close'] - prev_day['Close']
     price_change_pct = (price_change / prev_day['Close']) * 100
-    
-    # Calculate volume changes
     volume_change = latest['Volume'] - prev_day['Volume']
     volume_change_pct = (volume_change / prev_day['Volume']) * 100
     
-    # Start building the summary
-    summary = [f"## {ticker}"]
+    # --- Interpretations ---
+    # RSI band
+    rsi = latest['RSI']
+    if rsi >= 70:
+        rsi_band = "overbought"
+        rsi_icon = "🧯"
+    elif rsi <= 30:
+        rsi_band = "oversold"
+        rsi_icon = "📈"
+    else:
+        rsi_band = "neutral"
+        rsi_icon = ""
     
-    # Add position information if available
-    if position:
-        summary.append("\n### Current Position")
-        summary.append(f"- Quantity: {position['quantity']:.2f}")
-        summary.append(f"- Cost Basis: ${position['cost_basis']:.2f}")
-        summary.append(f"- Market Value: ${position['market_value']:.2f}")
-        summary.append(f"- Gain/Loss: {position['gain_pct']:.1f}%")
-        summary.append(f"- Account %: {position['account_pct']:.1f}%")
+    # MACD trend
+    macd_hist = latest['MACD_Hist']
+    macd_trend = "Bullish" if macd_hist > 0 else ("Bearish" if macd_hist < 0 else "Flat")
+    macd_icon = "📈" if macd_trend == "Bullish" else ("❗" if macd_trend == "Bearish" else "")
     
-    # Add price information
-    summary.append("\n### Price Data")
-    summary.append(f"- Current Price: ${latest['Close']:.2f}")
-    summary.append(f"- 5-Day Change: {price_change_pct:.1f}%")
-    summary.append(f"- Volume: {latest['Volume']:,.0f}")
-    summary.append(f"- Volume Change: {volume_change_pct:.1f}%")
+    # Bollinger Band context
+    price = latest['Close']
+    bb_upper = latest['BB_Upper']
+    bb_lower = latest['BB_Lower']
+    bb_middle = latest['BB_Middle']
+    if price > bb_upper:
+        bb_context = f"Above upper band (${bb_upper:.2f})"
+    elif price < bb_lower:
+        bb_context = f"Below lower band (${bb_lower:.2f})"
+    elif price > bb_middle:
+        bb_context = f"Near upper band (${bb_upper:.2f})"
+    elif price < bb_middle:
+        bb_context = f"Near lower band (${bb_lower:.2f})"
+    else:
+        bb_context = "At middle band"
     
-    # Add technical indicators
-    summary.append("\n### Technical Indicators")
-    summary.append(f"- RSI: {latest['RSI']:.1f}")
-    summary.append(f"- MACD: {latest['MACD']:.2f}")
-    summary.append(f"- MACD Signal: {latest['MACD_Signal']:.2f}")
-    summary.append(f"- MACD Histogram: {latest['MACD_Hist']:.2f}")
-    summary.append(f"- Bollinger Bands:")
-    summary.append(f"  - Upper: ${latest['BB_Upper']:.2f}")
-    summary.append(f"  - Middle: ${latest['BB_Middle']:.2f}")
-    summary.append(f"  - Lower: ${latest['BB_Lower']:.2f}")
-    summary.append(f"- Moving Averages:")
-    summary.append(f"  - 20-day: ${latest['SMA_20']:.2f}")
+    # Volume context
+    volume_context = f"{latest['Volume']/1e6:.1f}M"
+    unusual_volume = False
+    if abs(volume_change_pct) > 20:
+        volume_context += f" ({volume_change_pct:+.1f}% vs prev day)"
+        unusual_volume = True
     
-    # Add analyst targets if available
+    # Analyst target context
+    analyst_line = ""
+    upside = None
+    analyst_range = ""
     if analyst_targets:
-        summary.append("\n### Analyst Targets")
-        summary.append(f"- Current Price: ${analyst_targets['current_price']:.2f}")
-        summary.append(f"- Median Target: ${analyst_targets['median_target']:.2f}")
-        if analyst_targets.get('low_target'):
-            summary.append(f"- Low Target: ${analyst_targets['low_target']:.2f}")
-        if analyst_targets.get('high_target'):
-            summary.append(f"- High Target: ${analyst_targets['high_target']:.2f}")
+        current_price = analyst_targets['current_price']
+        median_target = analyst_targets['median_target']
+        low_target = analyst_targets.get('low_target')
+        high_target = analyst_targets.get('high_target')
+        upside = ((median_target - current_price) / current_price) * 100 if median_target and current_price else None
+        analyst_line = f"Median analyst target: ${median_target:.0f}"
+        if upside is not None:
+            analyst_line += f" → {upside:+.1f}% upside"
+        if low_target and high_target:
+            analyst_range = f" (range: ${low_target:.0f}–${high_target:.0f})"
+            analyst_line += analyst_range
     
-    # Add technical score
-    summary.append(f"\n### Technical Score: {score:.1f}/10")
-    summary.append("\nScore Breakdown:")
-    for component, value in score_details.items():
-        # Get the weight for this component from config
-        weight = SCORE_WEIGHTS.get(component, 1.0)
-        # Calculate normalized score (out of 10)
-        normalized = (value / weight) * 10
-        summary.append(f"- {component.replace('_', ' ').title()}: {value:.1f}/{weight:.1f} ({normalized:.1f}/10)")
+    # MA trend
+    ma_trend = "Bullish" if price > latest['SMA_20'] else ("Bearish" if price < latest['SMA_20'] else "Neutral")
+    ma_icon = "📈" if ma_trend == "Bullish" else ("❗" if ma_trend == "Bearish" else "")
+    
+    # TL;DR summary
+    tldr_icons = []
+    if macd_trend == "Bullish" and upside and upside > 10:
+        tldr_icons.append("📈")
+    if rsi_band == "overbought":
+        tldr_icons.append("🧯")
+    if unusual_volume:
+        tldr_icons.append("📈")
+    if macd_trend == "Bearish" and position:
+        tldr_icons.append("❗")
+    tldr = f"💡 {ticker} {macd_trend.lower()} MACD, RSI {rsi_band}, {bb_context.lower()}"
+    if upside and upside > 10:
+        tldr += f", {upside:.0f}% upside to analyst target"
+    if ma_trend == "Bullish":
+        tldr += ", above 20d MA"
+    elif ma_trend == "Bearish":
+        tldr += ", below 20d MA"
+    if unusual_volume:
+        tldr += ", volume spike"
+    if tldr_icons:
+        tldr += " " + " ".join(tldr_icons)
+    
+    # --- Markdown summary ---
+    summary = [f"\n📊 ${ticker} — {'Current Position' if position else 'New Technical Pick'}"]
+    summary.append(f"\n{tldr}")
+    
+    # Position info
+    if position:
+        summary.append(f"Position: {position['quantity']:.0f} shares @ ${position['cost_basis']:.2f} | {position['gain_pct']:+.1f}% | {position['account_pct']:.1f}% of account")
+    
+    # Price and volume
+    summary.append(f"Price: ${latest['Close']:.2f} (5d: {price_change_pct:+.1f}%)")
+    if unusual_volume:
+        summary.append(f"📈 Volume: {volume_change_pct:+.1f}% vs prev day — unusual activity")
+    else:
+        summary.append(f"Volume: {volume_context}")
+    
+    # Technicals
+    summary.append(f"RSI: {rsi:.1f} — {rsi_band} {rsi_icon}")
+    summary.append(f"MACD: {macd_trend} (Hist: {macd_hist:+.2f}) {macd_icon}")
+    summary.append(f"BB: {bb_context}")
+    summary.append(f"MA Trend: {ma_trend} (20d) {ma_icon}")
+    if analyst_line:
+        summary.append(analyst_line)
+    summary.append(f"➡️ Technical Score: {score:.1f}/10")
     
     return "\n".join(summary)
 
@@ -172,16 +226,42 @@ def generate_report(
     report = ["# Weekly Trading Advisor Report"]
     report.append(f"\nGenerated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # Add Deep Research Prompt at the top
+    # Add improved Deep Research Prompt at the top
     report.append("""
 ---
 
-**Deep Research Prompt:**
+**Prompt for LLM:**
 
-You are an equity analyst. Here is the technical summary for several S&P 500 stocks.
+You are a tactical swing trader managing a technical scan and open positions.
+Your task is to return an actionable 1–2 week trading playbook for each stock listed below.
+""")
+    
+    if positions:
+        report.append("""
+For each Current Position:
+- Recommend Hold, Sell, or Adjust
+- If "Adjust", provide a tactical move: e.g., raise stop, set trailing stop, scale out
+- Include a recommended stop-loss level and optional profit-taking level
+- Keep risk in mind—prioritize capital preservation if signals are weakening
+""")
+    
+    report.append("""
+For each New Technical Pick:
+- Decide if it's a viable trade this week
+- If yes, provide:
+  - Entry strategy: buy now, wait for pullback, wait for breakout, etc.
+  - Stop-loss: price level or % below
+  - Profit target: based on analyst target, momentum, or resistance
+  - Confidence level: High / Medium / Low
 
-The first section contains current positions. Please advise whether to hold, sell, or adjust (e.g. trailing stop).
-The second section contains new picks flagged by our model this week. Please assess each for trade viability.
+Assume:
+- A 1–2 week swing trade horizon
+- Technicals and analyst targets are the primary inputs
+- The investor is risk-aware but willing to act on strong short-term setups
+
+Be concise, tactical, and make clear, justified recommendations.
+
+Focus most attention on the 💡 summary line. Use the structured data only to support or refine the thesis.
 
 ---
 """)
@@ -191,23 +271,22 @@ The second section contains new picks flagged by our model this week. Please ass
         report.append("\n## Current Positions")
         for ticker, score, summary in positions:
             report.append(summary)
+            report.append("")  # Add extra newline after each position
     
     # Add new picks section
     if new_picks:
         report.append("\n## New Technical Picks")
         for ticker, score, summary in new_picks:
             report.append(summary)
+            report.append("")  # Add extra newline after each pick
     
-    # Save the report
+    # Save report to file if specified
     if output_path:
-        try:
-            with open(output_path, 'w') as f:
-                f.write("\n".join(report))
-        except Exception as e:
-            logger.error(f"Error saving report to {output_path}: {e}")
+        output_path.write_text("\n".join(report))
     
-    # Save structured data if requested
+    # Save structured data if specified
     if save_json:
-        save_json_report(structured_data, save_json)
+        structured_data["timestamp"] = datetime.now().isoformat()
+        save_json.write_text(json.dumps(structured_data, indent=2))
     
     return "\n".join(report) 
