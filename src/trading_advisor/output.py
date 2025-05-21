@@ -298,6 +298,7 @@ def generate_research_prompt(structured_data: Dict) -> str:
     # Header instructions
     prompt.append("You are a tactical swing trader managing a technical scan and open positions.\n"
                   "Your task is to return an actionable 1–2 week trading playbook for each stock listed below.\n\n"
+                  "IMPORTANT: You do not have access to real-time data, news, or earnings calendars. Base your recommendations solely on the data provided.\n\n"
                   "Return all responses in this exact bullet format for each stock:\n\n"
                   "✅ Action (e.g. Buy Now, Hold, Adjust)\n"
                   "🎯 Entry strategy (limit or breakout entry, price conditions, timing)\n"
@@ -315,7 +316,7 @@ def generate_research_prompt(structured_data: Dict) -> str:
 
     def generate_summary(ticker: str, technical: Dict, price_data: Dict, analyst: Optional[Dict] = None) -> str:
         """Generate a concise summary of technical indicators and analyst targets."""
-        summary = [f"💡 {ticker}:"]
+        summary = [f"💡 {ticker} —"]
         
         # MACD trend
         macd = get_indicator(technical, 'macd')
@@ -368,7 +369,8 @@ def generate_research_prompt(structured_data: Dict) -> str:
         if icons:
             summary.append(" ".join(icons))
         
-        return ", ".join(summary)
+        # Join all parts with commas, but handle the first part (ticker) specially
+        return summary[0] + " " + ", ".join(summary[1:])
 
     # Current Positions
     if structured_data['positions']:
@@ -500,7 +502,9 @@ def generate_deep_research_prompt(structured_data: Dict) -> str:
     
     # Add instructions
     prompt.append("You are a tactical swing trader and market strategist evaluating a technical scan and open positions. Your task is to develop an actionable 1–2 week trading playbook for each stock listed below.")
-    prompt.append("\nIn addition to the provided technical summaries and analyst targets, use current market context, news events, earnings calendars, and public sentiment (e.g. Reddit, Twitter, financial media) to support or override your recommendations.")
+    prompt.append("\nIn addition to the provided technical summaries and analyst targets, use current market context, news events, earnings calendars, and public sentiment to support or override your recommendations.")
+    prompt.append("\nWhen helpful, include macro events (e.g. Fed, CPI), earnings dates, or notable sentiment drivers (Reddit, upgrades/downgrades, insider activity).")
+    prompt.append("\nUse real-time information from search, Reddit (e.g., r/stocks, r/wallstreetbets), financial media (e.g., CNBC, Bloomberg), and social sentiment tools if relevant.")
     prompt.append("\nReturn your response in this exact bullet format for each stock:")
     prompt.append("\n✅ Action (e.g. Buy Now, Hold, Adjust)  \n🎯 Entry strategy (limit or breakout entry, price conditions, timing)  \n🛑 Stop-loss level (specific price or %)  \n💰 Profit-taking strategy (target price, resistance level, or trailing stop)  \n🔍 Confidence level (High / Medium / Low)  \n🧠 Rationale (1–2 lines)")
     prompt.append("\nBegin each ticker with a 💡 summary that integrates both technical and real-time context.")
