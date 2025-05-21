@@ -172,24 +172,18 @@ def analyze(
         position_results.sort(key=lambda x: x[1], reverse=True)
         new_pick_results.sort(key=lambda x: x[1], reverse=True)
         
-        # Take top N new picks
-        new_pick_results = new_pick_results[:top_n]
+        # Take top N new picks for markdown report only
+        report_new_picks = new_pick_results[:top_n]
         
-        # Update structured data to match filtered results
-        structured_data["positions"] = [
-            data for data in structured_data["positions"]
-            if data["ticker"] in [ticker for ticker, _, _ in position_results]
-        ]
-        structured_data["new_picks"] = [
-            data for data in structured_data["new_picks"]
-            if data["ticker"] in [ticker for ticker, _, _ in new_pick_results]
-        ]
+        # Sort structured data by score
+        structured_data["positions"].sort(key=lambda x: x["score"]["total"], reverse=True)
+        structured_data["new_picks"].sort(key=lambda x: x["score"]["total"], reverse=True)
         
         # Generate and save report
         report = generate_report(
             position_results,
-            new_pick_results,
-            structured_data,
+            report_new_picks,  # Use filtered list for markdown
+            structured_data,   # Use full sorted list for JSON
             output,
             save_json
         )
