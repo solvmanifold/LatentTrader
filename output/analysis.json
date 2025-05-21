@@ -1,9 +1,11 @@
 {
-  "timestamp": "2025-05-21T12:26:01.078129",
+  "timestamp": "2025-05-21T13:29:06.934300",
   "positions": [
     {
       "ticker": "AAPL",
-      "score": 7.5,
+      "score": {
+        "total": 7.5
+      },
       "price_data": {
         "current_price": 102.0,
         "price_change": 2.0,

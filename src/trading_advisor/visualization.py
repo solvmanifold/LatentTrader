@@ -67,6 +67,17 @@ def create_stock_chart(
             ),
             row=1, col=1
         )
+    # Add middle Bollinger Band
+    if 'BB_Middle' in df.columns:
+        fig.add_trace(
+            go.Scatter(
+                x=df.index,
+                y=df['BB_Middle'],
+                name='BB Middle',
+                line=dict(color='black', dash='dash')
+            ),
+            row=1, col=1
+        )
 
     # Add moving averages
     if 'MA20' in df.columns:

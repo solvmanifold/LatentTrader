@@ -171,7 +171,7 @@ def test_analyze_command(
     # Make generate_structured_data return JSON serializable data
     mock_generate_structured_data.return_value = {
         "ticker": "AAPL",
-        "score": 7.5,
+        "score": {"total": 7.5},
         "price_data": {
             "current_price": 102.0,
             "price_change": 2.0,
@@ -270,7 +270,7 @@ def test_analyze_positions_only(
     # Make generate_structured_data return JSON serializable data
     mock_generate_structured_data.return_value = {
         "ticker": "AAPL",
-        "score": 7.5,
+        "score": {"total": 7.5},
         "price_data": {
             "current_price": 102.0,
             "price_change": 2.0,
@@ -475,12 +475,12 @@ def test_prompt_command():
         # Test standard prompt
         result = runner.invoke(app, ["prompt", "--json-file", json_path, "--output", "output/prompt.md"])
         assert result.exit_code == 0
-        assert "Research prompt written to output/prompt.md" in result.stdout
+        assert "Prompt written to output/prompt.md" in result.stdout
         
         # Test deep research prompt
         result = runner.invoke(app, ["prompt", "--json-file", json_path, "--output", "output/deep_prompt.md", "--deep-research"])
         assert result.exit_code == 0
-        assert "Research prompt written to output/deep_prompt.md" in result.stdout
+        assert "Prompt written to output/deep_prompt.md" in result.stdout
         
         # Check that both output files were created
         assert Path("output/prompt.md").exists()

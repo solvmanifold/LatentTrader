@@ -175,6 +175,9 @@ def analyze(
                 )
                 results["new_picks"].append(pick_data)
         
+        # Sort positions and new_picks by score['total'] descending
+        results['positions'].sort(key=lambda x: x.get('score', {}).get('total', 0), reverse=True)
+        results['new_picks'].sort(key=lambda x: x.get('score', {}).get('total', 0), reverse=True)
         # Write results to JSON file
         with open(output, "w") as f:
             json.dump(results, f, indent=2)
@@ -346,7 +349,10 @@ def prompt(
         with open(output_path, 'w') as f:
             f.write(prompt_text)
         
-        typer.echo(f"Research prompt written to {output}")
+        if deep_research:
+            typer.echo(f"Deep research prompt written to {output}")
+        else:
+            typer.echo(f"Prompt written to {output}")
         
     except Exception as e:
         import traceback
