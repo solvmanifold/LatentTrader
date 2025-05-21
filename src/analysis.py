@@ -64,11 +64,11 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     # RSI Score
     rsi = df['RSI'].iloc[-3:].mean()
     if rsi < 30:
-        score += SCORE_WEIGHTS['rsi_oversold']  # Oversold
-        score_details['rsi'] = SCORE_WEIGHTS['rsi_oversold']
+        score += min(SCORE_WEIGHTS['rsi_oversold'], 2.0)
+        score_details['rsi'] = min(SCORE_WEIGHTS['rsi_oversold'], 2.0)
     elif rsi > 70:
-        score += SCORE_WEIGHTS['rsi_overbought']  # Overbought
-        score_details['rsi'] = SCORE_WEIGHTS['rsi_overbought']
+        score += min(SCORE_WEIGHTS['rsi_overbought'], 2.0)
+        score_details['rsi'] = min(SCORE_WEIGHTS['rsi_overbought'], 2.0)
     else:
         score_details['rsi'] = 0
     
@@ -77,11 +77,11 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     bb_upper = df['BB_Upper'].iloc[-1]
     bb_pband = df['BB_Pband'].iloc[-1]
     if bb_pband < 0.05:
-        score += SCORE_WEIGHTS['bollinger']
-        score_details['bollinger'] = SCORE_WEIGHTS['bollinger']
+        score += min(SCORE_WEIGHTS['bollinger'], 2.0)
+        score_details['bollinger'] = min(SCORE_WEIGHTS['bollinger'], 2.0)
     elif bb_pband > 0.95:
-        score -= SCORE_WEIGHTS['bollinger']
-        score_details['bollinger'] = -SCORE_WEIGHTS['bollinger']
+        score -= min(SCORE_WEIGHTS['bollinger'], 2.0)
+        score_details['bollinger'] = -min(SCORE_WEIGHTS['bollinger'], 2.0)
     else:
         score_details['bollinger'] = 0.0
     
@@ -91,14 +91,14 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     macd_hist = df['MACD_Hist'].iloc[-3:].mean()
     
     if macd_hist > MACD_STRONG_DIVERGENCE and macd > macd_signal:
-        score += SCORE_WEIGHTS['macd_strong_divergence']  # Strong bullish signal
-        score_details['macd'] = SCORE_WEIGHTS['macd_strong_divergence']
+        score += min(SCORE_WEIGHTS['macd_strong_divergence'], 2.0)
+        score_details['macd'] = min(SCORE_WEIGHTS['macd_strong_divergence'], 2.0)
     elif macd_hist > MACD_WEAK_DIVERGENCE and macd > macd_signal:
-        score += SCORE_WEIGHTS['macd_moderate_divergence']  # Weak bullish signal
-        score_details['macd'] = SCORE_WEIGHTS['macd_moderate_divergence']
+        score += min(SCORE_WEIGHTS['macd_moderate_divergence'], 2.0)
+        score_details['macd'] = min(SCORE_WEIGHTS['macd_moderate_divergence'], 2.0)
     elif macd_hist < -MACD_STRONG_DIVERGENCE and macd < macd_signal:
-        score += SCORE_WEIGHTS['macd_crossover']  # Strong bearish signal
-        score_details['macd'] = SCORE_WEIGHTS['macd_crossover']
+        score += min(SCORE_WEIGHTS['macd_crossover'], 2.0)
+        score_details['macd'] = min(SCORE_WEIGHTS['macd_crossover'], 2.0)
     else:
         score_details['macd'] = 0
     
@@ -106,14 +106,14 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     sma_20 = latest['SMA_20']
     price = latest['Close']
     if price > sma_20 * 1.02:
-        score += 2.0
-        score_details['moving_averages'] = 2.0
+        score += min(2.0, 2.0)
+        score_details['moving_averages'] = min(2.0, 2.0)
     elif price < sma_20 * 0.98:
-        score -= 2.0
-        score_details['moving_averages'] = -2.0
+        score -= min(2.0, 2.0)
+        score_details['moving_averages'] = -min(2.0, 2.0)
     elif price > sma_20:
-        score += 1.0
-        score_details['moving_averages'] = 1.0
+        score += min(1.0, 2.0)
+        score_details['moving_averages'] = min(1.0, 2.0)
     else:
         score_details['moving_averages'] = 0
     
@@ -124,8 +124,8 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     else:
         volume_change = (latest['Volume'] - prev_volume) / prev_volume * 100
     if abs(volume_change) > 20:
-        score += SCORE_WEIGHTS['volume_spike']
-        score_details['volume'] = SCORE_WEIGHTS['volume_spike']
+        score += min(SCORE_WEIGHTS['volume_spike'], 2.0)
+        score_details['volume'] = min(SCORE_WEIGHTS['volume_spike'], 2.0)
     else:
         score_details['volume'] = 0
     
