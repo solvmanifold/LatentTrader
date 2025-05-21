@@ -15,12 +15,24 @@ MACD_WEAK_DIVERGENCE = 0.5    # Histogram value for weak divergence
 
 # Scoring parameters
 SCORE_WEIGHTS = {
-    'rsi': 2.0,
-    'bollinger': 2.0,
-    'macd': 2.0,
-    'sma_above': 2.0,
-    'analyst_targets': 2.0
+    'rsi_oversold': 2,      # RSI below 30
+    'rsi_overbought': 1,    # RSI above 70
+    'bollinger': 2,         # Price outside Bollinger Bands
+    'macd_crossover': 2,    # Strong bearish MACD
+    'macd_strong_divergence': 2,  # Strong bullish MACD
+    'macd_moderate_divergence': 1,  # Weak bullish MACD
+    'sma_above': 1,         # Price above 20-day MA
+    'volume_spike': 1,      # Volume spike > 20%
+    'analyst_high_upside': 2,  # >20% upside to target
+    'analyst_moderate_upside': 1  # 10-20% upside to target
 }
 
-# Maximum possible raw score before normalization
-MAX_RAW_SCORE = sum(SCORE_WEIGHTS.values()) 
+# Maximum possible raw score before normalization (reflects actual logic, not just sum of weights)
+MAX_RAW_SCORE = sum([
+    2.0,  # RSI oversold
+    2.0,  # Bollinger lower
+    2.0,  # MACD strong divergence
+    2.0,  # SMA > 2% above
+    1.0,  # Volume spike
+    2.0   # Analyst >20%
+])  # = 11.0 
