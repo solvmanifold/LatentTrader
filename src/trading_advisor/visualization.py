@@ -47,11 +47,11 @@ def create_stock_chart(
     )
 
     # Add Bollinger Bands
-    if 'bb_upper' in df.columns and 'bb_lower' in df.columns:
+    if 'BB_Upper' in df.columns and 'BB_Lower' in df.columns:
         fig.add_trace(
             go.Scatter(
                 x=df.index,
-                y=df['bb_upper'],
+                y=df['BB_Upper'],
                 name='BB Upper',
                 line=dict(color='rgba(250, 0, 0, 0.3)')
             ),
@@ -60,7 +60,7 @@ def create_stock_chart(
         fig.add_trace(
             go.Scatter(
                 x=df.index,
-                y=df['bb_lower'],
+                y=df['BB_Lower'],
                 name='BB Lower',
                 line=dict(color='rgba(0, 250, 0, 0.3)'),
                 fill='tonexty'
@@ -140,7 +140,7 @@ def create_score_breakdown(
     output_dir: str = "output/charts"
 ) -> str:
     """
-    Create a bar chart showing the breakdown of the technical score.
+    Create a comprehensive visualization of the technical score breakdown.
     
     Args:
         ticker: Stock ticker symbol
@@ -151,36 +151,113 @@ def create_score_breakdown(
     Returns:
         Path to the saved HTML file
     """
-    # Extract score components from indicators
+    # Create figure with subplots
+    fig = make_subplots(
+        rows=2, cols=2,
+        specs=[[{"type": "indicator"}, {"type": "bar"}],
+               [{"type": "table", "colspan": 2}, None]],
+        vertical_spacing=0.1,
+        horizontal_spacing=0.1,
+        subplot_titles=(
+            "Overall Score",
+            "Component Breakdown",
+            "Detailed Analysis"
+        )
+    )
+    
+    # Add gauge chart for total score
+    fig.add_trace(
+        go.Indicator(
+            mode="gauge+number",
+            value=score,
+            title={'text': "Technical Score"},
+            gauge={
+                'axis': {'range': [0, 10]},
+                'bar': {'color': "darkblue"},
+                'steps': [
+                    {'range': [0, 3], 'color': "lightgray"},
+                    {'range': [3, 7], 'color': "gray"},
+                    {'range': [7, 10], 'color': "darkgray"}
+                ],
+                'threshold': {
+                    'line': {'color': "red", 'width': 4},
+                    'thickness': 0.75,
+                    'value': 7
+                }
+            }
+        ),
+        row=1, col=1
+    )
+    
+    # Extract and prepare score components
     score_components = {
         'RSI': indicators.get('rsi_score', 0),
         'Bollinger Bands': indicators.get('bb_score', 0),
         'MACD': indicators.get('macd_score', 0),
         'Moving Averages': indicators.get('ma_score', 0),
-        'Volume': indicators.get('volume_score', 0)
+        'Volume': indicators.get('volume_score', 0),
+        'Analyst Targets': indicators.get('analyst_targets_score', 0),
     }
     
-    # Create figure
-    fig = go.Figure()
+    # Add horizontal bar chart for component breakdown
+    def get_bar_color(v):
+        if v > 0:
+            return 'rgba(50, 171, 96, 0.7)'  # green
+        elif v < 0:
+            return 'rgba(219, 64, 82, 0.7)'  # red
+        else:
+            return 'rgba(200, 200, 200, 0.7)'  # gray
+    colors = [get_bar_color(v) for v in score_components.values()]
     
-    # Add horizontal bar chart
     fig.add_trace(
         go.Bar(
             y=list(score_components.keys()),
             x=list(score_components.values()),
             orientation='h',
-            marker_color='lightblue'
-        )
+            marker_color=colors,
+            text=[f"{v:.1f}" for v in score_components.values()],
+            textposition='auto',
+        ),
+        row=1, col=2
     )
     
-    # Update layout
-    fig.update_layout(
-        title=f"{ticker} Score Breakdown (Total: {score:.1f})",
-        xaxis_title="Score Contribution",
-        yaxis_title="Indicator",
-        height=400,
-        template='plotly_white'
+    # Add details as a table in the second row
+    details = {
+        'RSI': f"{indicators.get('rsi', 0):.1f} ({'Oversold' if indicators.get('rsi', 0) < 30 else 'Overbought' if indicators.get('rsi', 0) > 70 else 'Neutral'})",
+        'MACD': f"{indicators.get('macd', 0):.2f} ({'Bullish' if indicators.get('macd', 0) > 0 else 'Bearish'})",
+        'BB Position': f"{indicators.get('bb_position', 0):.1f}% ({'Upper' if indicators.get('bb_position', 0) > 80 else 'Lower' if indicators.get('bb_position', 0) < 20 else 'Middle'})",
+        'MA Trend': indicators.get('ma_trend', 'Neutral'),
+        'Volume': f"{indicators.get('volume_change', 0):.1f}% vs prev day"
+    }
+    fig.add_trace(
+        go.Table(
+            header=dict(values=["<b>Indicator</b>", "<b>Value</b>"], fill_color="paleturquoise", align="left"),
+            cells=dict(values=[list(details.keys()), list(details.values())], fill_color="lavender", align="left")
+        ),
+        row=2, col=1
     )
+    
+    # Update layout with a single concise annotation for price and target
+    concise_text = f"Last: ${indicators.get('last_price', 0):.2f} | Target: ${indicators.get('analyst_target', 0):.2f} ({indicators.get('target_upside', 0):+.1f}%)"
+    fig.update_layout(
+        title=f"{ticker} Technical Analysis Score",
+        height=800,
+        width=1100,
+        template='plotly_white',
+        showlegend=False,
+        annotations=[
+            dict(
+                text=concise_text,
+                xref="paper", yref="paper",
+                x=0.5, y=1.08,
+                showarrow=False,
+                font=dict(size=16),
+                align="center"
+            )
+        ]
+    )
+    # Ensure all y-axis labels are shown for the bar chart
+    fig.update_yaxes(automargin=True)
     
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)

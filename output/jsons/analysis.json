@@ -1,9 +1,9 @@
 {
-  "timestamp": "2025-05-21T10:55:59.111248",
+  "timestamp": "2025-05-21T12:26:51.255064",
   "positions": [
     {
       "ticker": "TSLA",
-      "timestamp": "2025-05-21T10:56:00.265860",
+      "timestamp": "2025-05-21T12:26:52.425651",
       "price_data": {
         "current_price": 343.82000732421875,
         "price_change": 1.730010986328125,
@@ -40,7 +40,7 @@
         }
       },
       "analyst_targets": {
-        "current_price": 346.09,
+        "current_price": 337.6,
         "median_target": 295.8081,
         "low_target": 115.0,
         "high_target": 465.0
@@ -56,7 +56,7 @@
     },
     {
       "ticker": "TSM",
-      "timestamp": "2025-05-21T10:56:00.914880",
+      "timestamp": "2025-05-21T12:26:52.965013",
       "price_data": {
         "current_price": 193.4499969482422,
         "price_change": -0.0500030517578125,
@@ -82,18 +82,18 @@
         }
       },
       "score": {
-        "total": 5.854138378035588,
+        "total": 6.00457478311053,
         "details": {
           "rsi": 0.0,
           "bollinger": 0.0,
           "macd": 2,
           "moving_averages": 2,
           "volume": 1,
-          "analyst_targets": 1.4395522158391458
+          "analyst_targets": 1.6050322614215833
         }
       },
       "analyst_targets": {
-        "current_price": 194.96,
+        "current_price": 192.18,
         "median_target": 223.02551,
         "low_target": 165.66264,
         "high_target": 265.34
@@ -111,7 +111,7 @@
   "new_picks": [
     {
       "ticker": "CRM",
-      "timestamp": "2025-05-21T10:56:01.590753",
+      "timestamp": "2025-05-21T12:26:53.525676",
       "price_data": {
         "current_price": 288.05999755859375,
         "price_change": 0.42999267578125,
@@ -148,7 +148,7 @@
         }
       },
       "analyst_targets": {
-        "current_price": 287.13,
+        "current_price": 284.21,
         "median_target": 364.97733,
         "low_target": 243.0,
         "high_target": 442.0
@@ -156,7 +156,7 @@
     },
     {
       "ticker": "REGN",
-      "timestamp": "2025-05-21T10:56:02.392408",
+      "timestamp": "2025-05-21T12:26:54.138575",
       "price_data": {
         "current_price": 614.7899780273438,
         "price_change": 19.1300048828125,
@@ -193,7 +193,7 @@
         }
       },
       "analyst_targets": {
-        "current_price": 608.995,
+        "current_price": 602.53,
         "median_target": 797.21375,
         "low_target": 535.0,
         "high_target": 958.0
@@ -201,7 +201,7 @@
     },
     {
       "ticker": "FSLR",
-      "timestamp": "2025-05-21T10:56:03.005286",
+      "timestamp": "2025-05-21T12:26:54.670221",
       "price_data": {
         "current_price": 167.22000122070312,
         "price_change": 2.3000030517578125,
@@ -238,7 +238,7 @@
         }
       },
       "analyst_targets": {
-        "current_price": 164.11,
+        "current_price": 161.12,
         "median_target": 199.18913,
         "low_target": 100.0,
         "high_target": 304.0
@@ -246,7 +246,7 @@
     },
     {
       "ticker": "CPAY",
-      "timestamp": "2025-05-21T10:56:03.820900",
+      "timestamp": "2025-05-21T12:26:55.217555",
       "price_data": {
         "current_price": 340.8299865722656,
         "price_change": -7.930023193359375,
@@ -272,18 +272,18 @@
         }
       },
       "score": {
-        "total": 6.17063473158222,
+        "total": 6.295459365076742,
         "details": {
           "rsi": 0.0,
           "bollinger": 0.0,
           "macd": 2,
           "moving_averages": 2,
           "volume": 1,
-          "analyst_targets": 1.7876982047404433
+          "analyst_targets": 1.925005301584417
         }
       },
       "analyst_targets": {
-        "current_price": 333.935,
+        "current_price": 330.09,
         "median_target": 393.6325,
         "low_target": 330.0,
         "high_target": 445.0
@@ -291,7 +291,7 @@
     },
     {
       "ticker": "TDY",
-      "timestamp": "2025-05-21T10:56:04.348782",
+      "timestamp": "2025-05-21T12:26:55.748251",
       "price_data": {
         "current_price": 495.44000244140625,
         "price_change": -1.600006103515625,
@@ -317,18 +317,18 @@
         }
       },
       "score": {
-        "total": 5.722674571511192,
+        "total": 5.806538007382132,
         "details": {
           "rsi": 0.0,
           "bollinger": 0.0,
           "macd": 2,
           "moving_averages": 2,
           "volume": 1,
-          "analyst_targets": 1.2949420286623103
+          "analyst_targets": 1.3871918081203443
         }
       },
       "analyst_targets": {
-        "current_price": 493.261,
+        "current_price": 489.265,
         "median_target": 557.13544,
         "low_target": 535.0,
         "high_target": 600.0

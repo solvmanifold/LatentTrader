@@ -208,7 +208,51 @@ def chart(
         # Download and analyze stock data
         df = download_stock_data(ticker, history_days=history_days)
         score, score_details, analyst_targets = analyze_stock(ticker, df)
-        
+
+        # Extract latest values for richer indicators
+        latest = df.iloc[-1]
+        prev = df.iloc[-2] if len(df) > 1 else latest
+        # Calculate BB position (percent between lower and upper)
+        if 'BB_Lower' in latest and 'BB_Upper' in latest and (latest['BB_Upper'] - latest['BB_Lower']) != 0:
+            bb_position = (latest['Close'] - latest['BB_Lower']) / (latest['BB_Upper'] - latest['BB_Lower']) * 100
+        else:
+            bb_position = 0.0
+        # Calculate MA trend
+        ma_trend = (
+            'Bullish' if latest.get('Close', 0) > latest.get('SMA_20', 0)
+            else 'Bearish' if latest.get('Close', 0) < latest.get('SMA_20', 0)
+            else 'Neutral'
+        )
+        # Calculate volume change
+        if prev['Volume'] != 0:
+            volume_change = (latest['Volume'] - prev['Volume']) / prev['Volume'] * 100
+        else:
+            volume_change = 0.0
+        # Analyst target and upside
+        analyst_target = analyst_targets['median_target'] if analyst_targets and 'median_target' in analyst_targets else 0.0
+        last_price = latest.get('Close', 0.0)
+        target_upside = ((analyst_target - last_price) / last_price * 100) if last_price else 0.0
+        # MACD value
+        macd_value = latest.get('MACD_Hist', 0.0)
+        # Build indicators dict
+        indicators = {
+            # Score contributions (old keys for backward compatibility)
+            'rsi_score': score_details.get('rsi', 0.0),
+            'bb_score': score_details.get('bollinger', 0.0),
+            'macd_score': score_details.get('macd', 0.0),
+            'ma_score': score_details.get('moving_averages', 0.0),
+            'volume_score': score_details.get('volume', 0.0),
+            'analyst_targets_score': score_details.get('analyst_targets', 0.0),
+            # Actual indicator values
+            'rsi': latest.get('RSI', 0.0),
+            'macd': macd_value,
+            'bb_position': bb_position,
+            'ma_trend': ma_trend,
+            'volume_change': volume_change,
+            'last_price': last_price,
+            'analyst_target': analyst_target,
+            'target_upside': target_upside,
+        }
         # Generate charts
         chart_path = create_stock_chart(
             df=df,
@@ -216,11 +260,10 @@ def chart(
             indicators=score_details,
             output_dir=output_dir
         )
-        
         score_path = create_score_breakdown(
             ticker=ticker,
             score=score,
-            indicators=score_details,
+            indicators=indicators,
             output_dir=output_dir
         )
         
