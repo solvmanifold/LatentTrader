@@ -100,12 +100,23 @@ def analyze(
             typer.echo("Error: --tickers is required unless --positions-only is specified", err=True)
             raise typer.Exit(1)
         
+        # Validate positions file if specified
+        if positions:
+            if not positions.exists():
+                typer.echo(f"Error: Positions file '{positions}' does not exist.", err=True)
+                raise typer.Exit(1)
+        
         # Create output directory if it doesn't exist
         output.parent.mkdir(parents=True, exist_ok=True)
         
         # Load tickers and positions
         ticker_list = load_tickers(tickers) if tickers else []
         positions_data = load_positions(positions) if positions else {}
+        
+        # If positions_only and no positions loaded, warn and exit
+        if positions_only and not positions_data:
+            typer.echo(f"Warning: No positions loaded from '{positions}'. Check the file path and format.", err=True)
+            raise typer.Exit(1)
         
         # Initialize results
         results = {

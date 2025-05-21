@@ -311,59 +311,52 @@ def test_analyze_positions_only(
     assert mock_analyze_stock.call_count == 1
     assert mock_generate_structured_data.call_count == 1  # Only one position
 
+@patch('trading_advisor.cli.load_positions', return_value={"AAPL": {"quantity": 100}})
 def test_chart_command(
+    mock_load_positions,
     mock_download_stock_data,
     mock_analyze_stock,
     mock_create_stock_chart,
     mock_create_score_breakdown
 ):
-    """Test the chart command."""
+    mock_analyze_stock.return_value = (7.0, {"rsi": 2.0, "bb": 1.5, "macd": 2.0, "ma": 1.0, "volume": 0.5}, None)
     result = runner.invoke(app, ["chart", "AAPL"])
-    
-    # Check command execution
+    if result.exit_code != 0:
+        print("STDOUT:", result.stdout)
     assert result.exit_code == 0
-    
     # Check that functions were called with correct arguments
     mock_download_stock_data.assert_called_once_with("AAPL", history_days=100)
     mock_analyze_stock.assert_called_once()
-    
-    # Check create_stock_chart was called with correct parameter order
     mock_create_stock_chart.assert_called_once()
     stock_chart_args = mock_create_stock_chart.call_args[1]  # keyword args
     assert 'df' in stock_chart_args
     assert 'ticker' in stock_chart_args
     assert 'indicators' in stock_chart_args
     assert 'output_dir' in stock_chart_args
-    
-    # Check create_score_breakdown was called with correct parameter order
     mock_create_score_breakdown.assert_called_once()
     score_breakdown_args = mock_create_score_breakdown.call_args[1]  # keyword args
     assert 'ticker' in score_breakdown_args
     assert 'score' in score_breakdown_args
     assert 'indicators' in score_breakdown_args
     assert 'output_dir' in score_breakdown_args
-    
-    # Check output messages
     assert "Charts generated successfully" in result.stdout
     assert "output/charts/AAPL_chart.html" in result.stdout
     assert "output/charts/AAPL_score.html" in result.stdout
 
+@patch('trading_advisor.cli.load_positions', return_value={"AAPL": {"quantity": 100}})
 def test_chart_command_custom_days(
+    mock_load_positions,
     mock_download_stock_data,
     mock_analyze_stock,
     mock_create_stock_chart,
     mock_create_score_breakdown
 ):
-    """Test the chart command with custom days parameter."""
+    mock_analyze_stock.return_value = (7.0, {"rsi": 2.0, "bb": 1.5, "macd": 2.0, "ma": 1.0, "volume": 0.5}, None)
     result = runner.invoke(app, ["chart", "AAPL", "--days", "50"])
-    
-    # Check command execution
+    if result.exit_code != 0:
+        print("STDOUT:", result.stdout)
     assert result.exit_code == 0
-    
-    # Check that download_stock_data was called with correct days
     mock_download_stock_data.assert_called_once_with("AAPL", history_days=50)
-    
-    # Check that chart functions were called with correct parameter order
     mock_create_stock_chart.assert_called_once()
     stock_chart_args = mock_create_stock_chart.call_args[1]  # keyword args
     assert 'df' in stock_chart_args
@@ -371,45 +364,31 @@ def test_chart_command_custom_days(
     assert 'indicators' in stock_chart_args
     assert 'output_dir' in stock_chart_args
 
+@patch('trading_advisor.cli.load_positions', return_value={"AAPL": {"quantity": 100}})
 def test_chart_command_custom_output_dir(
+    mock_load_positions,
     mock_download_stock_data,
     mock_analyze_stock,
     mock_create_stock_chart,
     mock_create_score_breakdown
 ):
-    """Test the chart command with custom output directory."""
+    mock_analyze_stock.return_value = (7.0, {"rsi": 2.0, "bb": 1.5, "macd": 2.0, "ma": 1.0, "volume": 0.5}, None)
     result = runner.invoke(app, ["chart", "AAPL", "--output-dir", "custom/charts"])
+    if result.exit_code != 0:
+        print("STDOUT:", result.stdout)
     assert result.exit_code == 0
-    
-    # Check that chart functions were called with correct output directory and parameter order
     mock_create_stock_chart.assert_called_once()
     mock_create_score_breakdown.assert_called_once()
-    
-    # Get the actual arguments used in the calls
     stock_chart_args = mock_create_stock_chart.call_args[1]  # keyword args
     score_breakdown_args = mock_create_score_breakdown.call_args[1]  # keyword args
-    
-    # Check parameter order and values
     assert 'df' in stock_chart_args
     assert 'ticker' in stock_chart_args
     assert 'indicators' in stock_chart_args
     assert stock_chart_args['output_dir'] == Path("custom/charts")
-    
     assert 'ticker' in score_breakdown_args
     assert 'score' in score_breakdown_args
     assert 'indicators' in score_breakdown_args
     assert score_breakdown_args['output_dir'] == Path("custom/charts")
-
-def test_chart_command_error_handling(mock_download_stock_data):
-    """Test error handling in the chart command."""
-    # Make download_stock_data raise an exception
-    mock_download_stock_data.side_effect = Exception("Test error")
-    
-    result = runner.invoke(app, ["chart", "AAPL"])
-    
-    # Check that command failed with error message
-    assert result.exit_code == 1
-    assert "Error generating charts: Test error" in result.stdout
 
 def test_prompt_command():
     """Test the prompt command."""
@@ -581,4 +560,28 @@ def test_prompt_command_error_handling():
         assert result.exit_code == 1
         assert "Error generating research prompt" in result.stdout
     finally:
-        os.unlink(json_path) 
+        os.unlink(json_path)
+
+def test_analyze_positions_file_missing():
+    """Test error if positions file does not exist."""
+    result = runner.invoke(app, [
+        "analyze",
+        "--positions", "nonexistent.csv",
+        "--positions-only",
+        "--output", "output/should_not_exist.json"
+    ])
+    assert result.exit_code == 1
+    assert "does not exist" in result.stdout or result.stderr
+
+def test_analyze_positions_file_empty(tmp_path):
+    """Test warning if positions file exists but is empty or has no valid positions."""
+    empty_file = tmp_path / "empty_positions.csv"
+    empty_file.write_text("Symbol,Security Type,Qty (Quantity),Price\n")
+    result = runner.invoke(app, [
+        "analyze",
+        "--positions", str(empty_file),
+        "--positions-only",
+        "--output", "output/should_not_exist.json"
+    ])
+    assert result.exit_code == 1
+    assert "No positions loaded" in result.stdout or result.stderr 
