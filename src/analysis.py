@@ -106,14 +106,17 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     sma_20 = latest['SMA_20']
     price = latest['Close']
     if price > sma_20 * 1.02:
-        score += min(2.0, 2.0)
-        score_details['moving_averages'] = min(2.0, 2.0)
+        weight = SCORE_WEIGHTS.get('sma_strong_above', 2.0)
+        score += weight
+        score_details['moving_averages'] = weight
     elif price < sma_20 * 0.98:
-        score -= min(2.0, 2.0)
-        score_details['moving_averages'] = -min(2.0, 2.0)
+        weight = SCORE_WEIGHTS.get('sma_strong_below', 2.0)
+        score -= weight
+        score_details['moving_averages'] = -weight
     elif price > sma_20:
-        score += min(1.0, 2.0)
-        score_details['moving_averages'] = min(1.0, 2.0)
+        weight = SCORE_WEIGHTS.get('sma_above', 1.0)
+        score += weight
+        score_details['moving_averages'] = weight
     else:
         score_details['moving_averages'] = 0
     

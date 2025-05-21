@@ -21,6 +21,8 @@ SCORE_WEIGHTS = {
     'macd_crossover': 2,    # Strong bearish MACD
     'macd_strong_divergence': 2,  # Strong bullish MACD
     'macd_moderate_divergence': 1,  # Weak bullish MACD
+    'sma_strong_above': 2,  # Price > 2% above 20-day MA
+    'sma_strong_below': 2,  # Price < 2% below 20-day MA
     'sma_above': 1,         # Price above 20-day MA
     'volume_spike': 1,      # Volume spike > 20%
     'analyst_high_upside': 2,  # >20% upside to target
