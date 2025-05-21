@@ -292,7 +292,7 @@ def generate_report(structured_data):
 def get_indicator(technical, key):
     return technical.get(key) or technical.get(key.upper()) or technical.get(key.lower())
 
-def generate_research_prompt(structured_data: Dict) -> str:
+def generate_research_prompt(structured_data: Dict, top_n: int = 6) -> str:
     """Generate a ChatGPT-ready prompt for deep research analysis, using a tactical swing trading playbook format."""
     prompt = []
     # Header instructions
@@ -438,7 +438,7 @@ def generate_research_prompt(structured_data: Dict) -> str:
     if structured_data['new_picks']:
         prompt.append("## New Technical Picks\n")
         sorted_picks = sorted(structured_data['new_picks'], key=lambda x: x['score']['total'], reverse=True)
-        for pick in sorted_picks:
+        for pick in sorted_picks[:top_n]:  # Only include top N picks
             ticker = pick['ticker']
             score = pick['score']['total']
             price_data = pick['price_data']
@@ -496,7 +496,7 @@ def generate_research_prompt(structured_data: Dict) -> str:
 
     return "\n".join(prompt)
 
-def generate_deep_research_prompt(structured_data: Dict) -> str:
+def generate_deep_research_prompt(structured_data: Dict, top_n: int = 6) -> str:
     """Generate a deep research prompt for tactical swing trading analysis."""
     prompt = []
     
@@ -547,7 +547,8 @@ def generate_deep_research_prompt(structured_data: Dict) -> str:
     # Add new picks
     if structured_data['new_picks']:
         prompt.append("\n📊 New Technical Picks:")
-        for pick in structured_data['new_picks']:
+        sorted_picks = sorted(structured_data['new_picks'], key=lambda x: x['score']['total'], reverse=True)
+        for pick in sorted_picks[:top_n]:  # Only include top N picks
             # Create a DataFrame with both current and previous day's data
             tech_data = {
                 'RSI': [pick['technical_indicators']['rsi'], pick['technical_indicators']['rsi']],

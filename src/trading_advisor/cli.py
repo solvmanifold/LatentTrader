@@ -327,6 +327,11 @@ def prompt(
         False,
         "--deep-research",
         help="Generate a deep research prompt with tactical swing trading format"
+    ),
+    top_n: int = typer.Option(
+        6,
+        "--top-n",
+        help="Number of highest-scoring new picks to include in the prompt"
     )
 ):
     """Generate a research prompt from analysis data."""
@@ -341,9 +346,9 @@ def prompt(
         
         # Generate prompt
         if deep_research:
-            prompt_text = generate_deep_research_prompt(data)
+            prompt_text = generate_deep_research_prompt(data, top_n=top_n)
         else:
-            prompt_text = generate_research_prompt(data)
+            prompt_text = generate_research_prompt(data, top_n=top_n)
         
         # Save prompt to file
         with open(output_path, 'w') as f:

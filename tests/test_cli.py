@@ -441,30 +441,56 @@ def test_prompt_command():
                 "high_target": 140.0
             }
         }],
-        "new_picks": [{
-            "ticker": "MSFT",
-            "score": {"total": 8.0, "details": {"rsi": 2.5, "bb": 1.5, "macd": 2.5, "ma": 1.0, "volume": 0.5}},
-            "technical_indicators": {
-                "rsi": 70.0,
-                "macd": {"value": 2.5, "signal": 2.0, "histogram": 0.5},
-                "bollinger_bands": {"upper": 110.0, "lower": 90.0, "middle": 100.0},
-                "moving_averages": {"sma_20": 102.0}
+        "new_picks": [
+            {
+                "ticker": "MSFT",
+                "score": {"total": 8.0, "details": {"rsi": 2.5, "bb": 1.5, "macd": 2.5, "ma": 1.0, "volume": 0.5}},
+                "technical_indicators": {
+                    "rsi": 70.0,
+                    "macd": {"value": 2.5, "signal": 2.0, "histogram": 0.5},
+                    "bollinger_bands": {"upper": 110.0, "lower": 90.0, "middle": 100.0},
+                    "moving_averages": {"sma_20": 102.0}
+                },
+                "price_data": {
+                    "current_price": 200.0,
+                    "price_change": 2.0,
+                    "price_change_pct": 1.0,
+                    "volume": 2000000,
+                    "volume_change": 200000,
+                    "volume_change_pct": 10.0
+                },
+                "analyst_targets": {
+                    "current_price": 200.0,
+                    "median_target": 220.0,
+                    "low_target": 200.0,
+                    "high_target": 240.0
+                }
             },
-            "price_data": {
-                "current_price": 200.0,
-                "price_change": 2.0,
-                "price_change_pct": 1.0,
-                "volume": 2000000,
-                "volume_change": 200000,
-                "volume_change_pct": 10.0
-            },
-            "analyst_targets": {
-                "current_price": 200.0,
-                "median_target": 220.0,
-                "low_target": 200.0,
-                "high_target": 240.0
+            {
+                "ticker": "GOOGL",
+                "score": {"total": 7.0, "details": {"rsi": 2.0, "bb": 1.5, "macd": 2.0, "ma": 1.0, "volume": 0.5}},
+                "technical_indicators": {
+                    "rsi": 65.0,
+                    "macd": {"value": 2.0, "signal": 1.5, "histogram": 0.5},
+                    "bollinger_bands": {"upper": 105.0, "lower": 95.0, "middle": 100.0},
+                    "moving_averages": {"sma_20": 101.0}
+                },
+                "price_data": {
+                    "current_price": 150.0,
+                    "price_change": 1.5,
+                    "price_change_pct": 1.0,
+                    "volume": 1500000,
+                    "volume_change": 150000,
+                    "volume_change_pct": 10.0
+                },
+                "analyst_targets": {
+                    "current_price": 150.0,
+                    "median_target": 170.0,
+                    "low_target": 150.0,
+                    "high_target": 190.0
+                }
             }
-        }]
+        ]
     }
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
@@ -472,19 +498,31 @@ def test_prompt_command():
         json_path = f.name
     
     try:
-        # Test standard prompt
+        # Test standard prompt with default top_n
         result = runner.invoke(app, ["prompt", "--json-file", json_path, "--output", "output/prompt.md"])
         assert result.exit_code == 0
         assert "Prompt written to output/prompt.md" in result.stdout
         
-        # Test deep research prompt
+        # Test standard prompt with custom top_n
+        result = runner.invoke(app, ["prompt", "--json-file", json_path, "--output", "output/prompt_top1.md", "--top-n", "1"])
+        assert result.exit_code == 0
+        assert "Prompt written to output/prompt_top1.md" in result.stdout
+        
+        # Test deep research prompt with default top_n
         result = runner.invoke(app, ["prompt", "--json-file", json_path, "--output", "output/deep_prompt.md", "--deep-research"])
         assert result.exit_code == 0
-        assert "Prompt written to output/deep_prompt.md" in result.stdout
+        assert "Deep research prompt written to output/deep_prompt.md" in result.stdout
         
-        # Check that both output files were created
+        # Test deep research prompt with custom top_n
+        result = runner.invoke(app, ["prompt", "--json-file", json_path, "--output", "output/deep_prompt_top1.md", "--deep-research", "--top-n", "1"])
+        assert result.exit_code == 0
+        assert "Deep research prompt written to output/deep_prompt_top1.md" in result.stdout
+        
+        # Check that all output files were created
         assert Path("output/prompt.md").exists()
+        assert Path("output/prompt_top1.md").exists()
         assert Path("output/deep_prompt.md").exists()
+        assert Path("output/deep_prompt_top1.md").exists()
         
         # Check the content of the output files
         with open("output/prompt.md") as f:
@@ -492,20 +530,39 @@ def test_prompt_command():
             assert "You are a tactical swing trader" in content
             assert "Current Positions" in content
             assert "New Technical Picks" in content
+            assert "MSFT" in content
+            assert "GOOGL" in content
+            
+        with open("output/prompt_top1.md") as f:
+            content = f.read()
+            assert "You are a tactical swing trader" in content
+            assert "Current Positions" in content
+            assert "New Technical Picks" in content
+            assert "MSFT" in content
+            assert "GOOGL" not in content  # Should only include top 1 pick
             
         with open("output/deep_prompt.md") as f:
             content = f.read()
             assert "You are a tactical swing trader" in content
             assert "Current Positions" in content
             assert "New Technical Picks" in content
+            assert "MSFT" in content
+            assert "GOOGL" in content
+            
+        with open("output/deep_prompt_top1.md") as f:
+            content = f.read()
+            assert "You are a tactical swing trader" in content
+            assert "Current Positions" in content
+            assert "New Technical Picks" in content
+            assert "MSFT" in content
+            assert "GOOGL" not in content  # Should only include top 1 pick
             
     finally:
         # Clean up
         os.unlink(json_path)
-        if Path("output/prompt.md").exists():
-            Path("output/prompt.md").unlink()
-        if Path("output/deep_prompt.md").exists():
-            Path("output/deep_prompt.md").unlink()
+        for file in ["prompt.md", "prompt_top1.md", "deep_prompt.md", "deep_prompt_top1.md"]:
+            if Path(f"output/{file}").exists():
+                Path(f"output/{file}").unlink()
 
 def test_prompt_command_error_handling():
     """Test error handling in the prompt command."""
