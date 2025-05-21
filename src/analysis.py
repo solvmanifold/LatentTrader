@@ -62,7 +62,7 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     score_details = {}
     
     # RSI Score
-    rsi = latest['RSI']
+    rsi = df['RSI'].iloc[-3:].mean()
     if rsi < 30:
         score += SCORE_WEIGHTS['rsi_oversold']  # Oversold
         score_details['rsi'] = SCORE_WEIGHTS['rsi_oversold']
@@ -86,9 +86,9 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
         score_details['bollinger'] = 0.0
     
     # MACD Score
-    macd = latest['MACD']
-    macd_signal = latest['MACD_Signal']
-    macd_hist = latest['MACD_Hist']
+    macd = df['MACD'].iloc[-3:].mean()
+    macd_signal = df['MACD_Signal'].iloc[-3:].mean()
+    macd_hist = df['MACD_Hist'].iloc[-3:].mean()
     
     if macd_hist > MACD_STRONG_DIVERGENCE and macd > macd_signal:
         score += SCORE_WEIGHTS['macd_strong_divergence']  # Strong bullish signal
@@ -140,7 +140,7 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
                 score_details['analyst_targets'] = 0
     
     # Normalize score to 0-10 range
-    normalized_score = (score / MAX_RAW_SCORE) * 10
+    normalized_score = min(max((score / MAX_RAW_SCORE) * 10, 0), 10)
     
     return normalized_score, score_details
 
