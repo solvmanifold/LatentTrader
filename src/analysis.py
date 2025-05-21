@@ -142,6 +142,11 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     # Normalize score to 0-10 range
     normalized_score = min(max((score / MAX_RAW_SCORE) * 10, 0), 10)
     
+    # Ensure all tracked keys are present in score_details
+    for key in ['macd', 'rsi', 'bollinger', 'moving_averages', 'volume', 'analyst_targets']:
+        if key not in score_details:
+            score_details[key] = 0
+    
     return normalized_score, score_details
 
 def analyze_stock(ticker: str, df: pd.DataFrame) -> Tuple[float, Dict, Optional[Dict]]:
