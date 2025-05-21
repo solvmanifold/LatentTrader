@@ -14,8 +14,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/solvmanifold/LatentTrader",
-    packages=find_packages(where="src"),
-    package_dir={"": "src"},
+    packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Financial and Insurance Industry",
@@ -40,7 +39,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "weekly-trading-advisor=src.cli:app",
+            "weekly-trading-advisor=cli:app",
         ],
     },
 ) 
