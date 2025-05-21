@@ -76,12 +76,12 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     bb_lower = df['BB_Lower'].iloc[-1]
     bb_upper = df['BB_Upper'].iloc[-1]
     bb_pband = df['BB_Pband'].iloc[-1]
-    if bb_pband < -0.05:
+    if bb_pband < 0.05:
         score += SCORE_WEIGHTS['bollinger']
-        score_details['bollinger'] = 1.0
-    elif bb_pband > 1.05:
+        score_details['bollinger'] = SCORE_WEIGHTS['bollinger']
+    elif bb_pband > 0.95:
         score -= SCORE_WEIGHTS['bollinger']
-        score_details['bollinger'] = -1.0
+        score_details['bollinger'] = -SCORE_WEIGHTS['bollinger']
     else:
         score_details['bollinger'] = 0.0
     
@@ -111,7 +111,11 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
         score_details['moving_averages'] = 0
     
     # Volume Spike Score
-    volume_change = (latest['Volume'] - df.iloc[-2]['Volume']) / df.iloc[-2]['Volume'] * 100
+    prev_volume = df.iloc[-2]['Volume']
+    if prev_volume == 0:
+        volume_change = 0
+    else:
+        volume_change = (latest['Volume'] - prev_volume) / prev_volume * 100
     if abs(volume_change) > 20:
         score += SCORE_WEIGHTS['volume_spike']
         score_details['volume'] = SCORE_WEIGHTS['volume_spike']
