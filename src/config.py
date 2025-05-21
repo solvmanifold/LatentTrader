@@ -16,7 +16,7 @@ MACD_WEAK_DIVERGENCE = 0.5    # Histogram value for weak divergence
 # Scoring parameters
 SCORE_WEIGHTS = {
     'rsi_oversold': 2,      # RSI below 30
-    'rsi_overbought': 1,    # RSI above 70
+    'rsi_overbought': -1,   # RSI above 70 (penalty)
     'bollinger': 2,         # Price outside Bollinger Bands
     'macd_crossover': 2,    # Strong bearish MACD
     'macd_strong_divergence': 2,  # Strong bullish MACD
