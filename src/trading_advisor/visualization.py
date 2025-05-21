@@ -222,12 +222,19 @@ def create_score_breakdown(
     )
     
     # Add details as a table in the second row
+    analyst_target = indicators.get('analyst_target', 0)
+    target_upside = indicators.get('target_upside', 0)
+    analyst_range = ''
+    if 'analyst_target_low' in indicators and 'analyst_target_high' in indicators:
+        analyst_range = f", range: ${indicators['analyst_target_low']:.0f}–${indicators['analyst_target_high']:.0f}"
+    analyst_targets_str = f"${analyst_target:.2f} ({target_upside:+.1f}% upside{analyst_range})" if analyst_target else "N/A"
     details = {
         'RSI': f"{indicators.get('rsi', 0):.1f} ({'Oversold' if indicators.get('rsi', 0) < 30 else 'Overbought' if indicators.get('rsi', 0) > 70 else 'Neutral'})",
         'MACD': f"{indicators.get('macd', 0):.2f} ({'Bullish' if indicators.get('macd', 0) > 0 else 'Bearish'})",
         'BB Position': f"{indicators.get('bb_position', 0):.1f}% ({'Upper' if indicators.get('bb_position', 0) > 80 else 'Lower' if indicators.get('bb_position', 0) < 20 else 'Middle'})",
         'MA Trend': indicators.get('ma_trend', 'Neutral'),
-        'Volume': f"{indicators.get('volume_change', 0):.1f}% vs prev day"
+        'Volume': f"{indicators.get('volume_change', 0):.1f}% vs prev day",
+        'Analyst Targets': analyst_targets_str
     }
     fig.add_trace(
         go.Table(
@@ -239,8 +246,25 @@ def create_score_breakdown(
     
     # Update layout with a single concise annotation for price and target
     concise_text = f"Last: ${indicators.get('last_price', 0):.2f} | Target: ${indicators.get('analyst_target', 0):.2f} ({indicators.get('target_upside', 0):+.1f}%)"
+    # Remove the previous technical score annotation and add a new one below the table
+    score_blurb = (
+        "<b>Technical Score:</b> The score (0–10) is a weighted sum of signals from RSI, MACD, Bollinger Bands, Moving Averages, Volume, and Analyst Targets.<br>"
+        "Each bar shows the contribution of a component to the total score.<br>"
+        "<span style='font-size:10px'><b>How each score is computed:</b><br>"
+        "RSI: +2 if oversold (&lt;30), -1 if overbought (&gt;70), 0 otherwise.<br>"
+        "MACD: +2 for strong bullish divergence, +1 for weak bullish, -2 for strong bearish, 0 otherwise.<br>"
+        "Bollinger Bands: +2 if price is near/below lower band, -2 if above upper band, 0 otherwise.<br>"
+        "Moving Averages: +2 if price &gt;2% above 20d MA, -2 if &lt;2% below, +1 if just above, 0 otherwise.<br>"
+        "Volume: +1 if volume spike &gt;20% vs previous day, 0 otherwise.<br>"
+        "Analyst Targets: Up to +2 for high upside to analyst target (scaled by % upside)."
+        "</span>"
+    )
     fig.update_layout(
-        title=f"{ticker} Technical Analysis Score",
+        title={
+            'text': f"{ticker} Technical Analysis Score",
+            'x': 0.5,
+            'xanchor': 'center'
+        },
         height=800,
         width=1100,
         template='plotly_white',
@@ -249,10 +273,21 @@ def create_score_breakdown(
             dict(
                 text=concise_text,
                 xref="paper", yref="paper",
-                x=0.5, y=1.08,
+                x=0.5, y=1.04,
                 showarrow=False,
-                font=dict(size=16),
+                font=dict(size=14),
                 align="center"
+            ),
+            dict(
+                text=score_blurb,
+                xref="paper", yref="paper",
+                x=0.4,
+                y=-0.0,
+                showarrow=False,
+                font=dict(size=10),
+                align="left",
+                bgcolor="white",
+                opacity=0.95
             )
         ]
     )
