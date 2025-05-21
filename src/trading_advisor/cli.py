@@ -4,6 +4,9 @@ import logging
 import sys
 from pathlib import Path
 from typing import Optional
+import json
+from datetime import datetime
+import pandas as pd
 
 import typer
 from rich.console import Console
@@ -15,6 +18,7 @@ from trading_advisor.analysis import analyze_stock
 from trading_advisor.data import download_stock_data, ensure_data_dir, load_positions, load_tickers
 from trading_advisor.output import generate_report, generate_structured_data, generate_technical_summary, save_json_report
 from trading_advisor.config import SCORE_WEIGHTS
+from trading_advisor.visualization import create_stock_chart, create_score_breakdown
 
 # Configure logging
 logging.basicConfig(
@@ -57,148 +61,187 @@ def main(
         typer.echo(ctx.get_help())
         raise typer.Exit()
 
-@app.command(no_args_is_help=True)
+@app.command()
 def analyze(
-    tickers: str = typer.Option(
-        None,
-        "--tickers",
-        "-t",
-        help="Path to file containing ticker symbols, or 'all' for S&P 500.",
+    tickers: Path = typer.Option(
+        ...,
+        "--tickers", "-t",
+        help="Path to file containing ticker symbols"
     ),
     positions: Optional[Path] = typer.Option(
         None,
-        "--positions",
-        "-p",
-        help="Path to brokerage CSV file containing current positions.",
-    ),
-    top_n: int = typer.Option(
-        5,
-        "--top-n",
-        help="Number of top stocks to recommend.",
-    ),
-    output: Optional[Path] = typer.Option(
-        None,
-        "--output",
-        "-o",
-        help="Path to save the markdown report.",
-    ),
-    save_json: Optional[Path] = typer.Option(
-        None,
-        "--save-json",
-        help="Path to save structured JSON data.",
-    ),
-    history_days: int = typer.Option(
-        100,
-        "--history-days",
-        help="Number of days of historical data to analyze.",
+        "--positions", "-p",
+        help="Path to positions CSV file"
     ),
     positions_only: bool = typer.Option(
         False,
         "--positions-only",
-        help="Only analyze current positions.",
+        help="Only analyze positions, skip new picks"
     ),
+    output: Path = typer.Option(
+        "output/analysis.json",
+        "--output", "-o",
+        help="Path to output JSON file"
+    ),
+    history_days: int = typer.Option(
+        100,
+        "--days", "-d",
+        help="Number of days of historical data to analyze"
+    )
 ):
-    """Analyze stocks and generate trading advice."""
+    """Analyze stocks and output structured JSON data."""
     try:
-        # Ensure data directory exists
-        ensure_data_dir()
+        # Create output directory if it doesn't exist
+        output.parent.mkdir(parents=True, exist_ok=True)
         
         # Load tickers and positions
         ticker_list = load_tickers(tickers)
-        positions_dict = load_positions(positions)
+        positions_data = load_positions(positions) if positions else {}
         
-        # Union of tickers from tickers.txt and positions file
-        all_tickers = set(ticker_list)
-        if positions_dict:
-            all_tickers.update(positions_dict.keys())
-        all_tickers = list(all_tickers)
-        
-        # Initialize lists for results
-        position_results = []
-        new_pick_results = []
-        structured_data = {
-            "timestamp": None,
+        # Initialize results
+        results = {
+            "timestamp": datetime.now().isoformat(),
             "positions": [],
             "new_picks": []
         }
         
-        # Create progress bar
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TaskProgressColumn(),
-            console=console
-        ) as progress:
-            # Create main task
-            main_task = progress.add_task(
-                "[cyan]Analyzing stocks...",
-                total=len(all_tickers)
-            )
+        # Analyze positions
+        for symbol, position in positions_data.items():
+            ticker = symbol
+            df = download_stock_data(ticker, history_days=history_days)
+            score, score_details, analyst_targets = analyze_stock(ticker, df)
             
-            # Process each ticker
-            for ticker in all_tickers:
-                # Update progress description
-                progress.update(main_task, description=f"[cyan]Analyzing {ticker}...")
-                
-                # Download and analyze data
-                df = download_stock_data(ticker, history_days)
-                if df.empty:
-                    logger.warning(f"No data available for {ticker}")
-                    progress.advance(main_task)
+            position_data = {
+                "ticker": ticker,
+                "price_data": df.to_dict(orient="records"),
+                "technical_indicators": {
+                    "rsi": df["RSI"].tolist(),
+                    "macd": {
+                        "macd": df["MACD"].tolist(),
+                        "signal": df["MACD_Signal"].tolist(),
+                        "histogram": df["MACD_Hist"].tolist()
+                    },
+                    "bollinger_bands": {
+                        "upper": df["BB_Upper"].tolist(),
+                        "middle": df["BB_Middle"].tolist(),
+                        "lower": df["BB_Lower"].tolist()
+                    },
+                    "moving_averages": {
+                        "sma_20": df["SMA_20"].tolist(),
+                        "sma_50": df["SMA_50"].tolist(),
+                        "sma_200": df["SMA_200"].tolist()
+                    }
+                },
+                "score": {
+                    "total": score,
+                    "details": score_details
+                },
+                "position": position,
+                "analyst_targets": analyst_targets
+            }
+            results["positions"].append(position_data)
+        
+        # Analyze new picks if not positions-only
+        if not positions_only:
+            for ticker in ticker_list:
+                # Skip if already analyzed as a position
+                if any(p["ticker"] == ticker for p in results["positions"]):
                     continue
-                
-                # Analyze the stock
+                    
+                df = download_stock_data(ticker, history_days=history_days)
                 score, score_details, analyst_targets = analyze_stock(ticker, df)
                 
-                # Generate summary
-                position = positions_dict.get(ticker)
-                summary = generate_technical_summary(
-                    ticker, df, score, score_details, analyst_targets, position
-                )
-                
-                # Add to structured data
-                stock_data = generate_structured_data(
-                    ticker, df, score, score_details, analyst_targets, position
-                )
-                
-                # Add to appropriate results list
-                if position and not positions_only:
-                    position_results.append((ticker, score, summary))
-                    structured_data["positions"].append(stock_data)
-                elif not positions_only:
-                    new_pick_results.append((ticker, score, summary))
-                    structured_data["new_picks"].append(stock_data)
-                
-                # Update progress
-                progress.advance(main_task)
+                pick_data = {
+                    "ticker": ticker,
+                    "price_data": df.to_dict(orient="records"),
+                    "technical_indicators": {
+                        "rsi": df["RSI"].tolist(),
+                        "macd": {
+                            "macd": df["MACD"].tolist(),
+                            "signal": df["MACD_Signal"].tolist(),
+                            "histogram": df["MACD_Hist"].tolist()
+                        },
+                        "bollinger_bands": {
+                            "upper": df["BB_Upper"].tolist(),
+                            "middle": df["BB_Middle"].tolist(),
+                            "lower": df["BB_Lower"].tolist()
+                        },
+                        "moving_averages": {
+                            "sma_20": df["SMA_20"].tolist(),
+                            "sma_50": df["SMA_50"].tolist(),
+                            "sma_200": df["SMA_200"].tolist()
+                        }
+                    },
+                    "score": {
+                        "total": score,
+                        "details": score_details
+                    },
+                    "analyst_targets": analyst_targets
+                }
+                results["new_picks"].append(pick_data)
         
-        # Sort results by score
-        position_results.sort(key=lambda x: x[1], reverse=True)
-        new_pick_results.sort(key=lambda x: x[1], reverse=True)
-        
-        # Take top N new picks for markdown report only
-        report_new_picks = new_pick_results[:top_n]
-        
-        # Sort structured data by score
-        structured_data["positions"].sort(key=lambda x: x["score"]["total"], reverse=True)
-        structured_data["new_picks"].sort(key=lambda x: x["score"]["total"], reverse=True)
-        
-        # Generate and save report
-        report = generate_report(
-            position_results,
-            report_new_picks,  # Use filtered list for markdown
-            structured_data,   # Use full sorted list for JSON
-            output,
-            save_json
-        )
-        
-        # Print report to console
-        console.print(report)
+        # Write results to JSON file
+        with open(output, "w") as f:
+            json.dump(results, f, indent=2)
+            
+        typer.echo(f"Analysis complete. Results written to {output}")
         
     except Exception as e:
-        logger.error(f"Error during analysis: {e}")
+        print(f"DEBUG ERROR: {e}")
+        typer.echo(f"Error during analysis: {str(e)}", err=True)
         raise typer.Exit(1)
+
+@app.command()
+def chart(
+    ticker: str = typer.Argument(..., help="Stock ticker symbol"),
+    output_dir: Path = typer.Option(
+        "output/charts",
+        "--output-dir", "-o",
+        help="Directory to save the charts"
+    ),
+    history_days: int = typer.Option(
+        100,
+        "--days", "-d",
+        help="Number of days of historical data to include"
+    )
+):
+    """Generate interactive charts for a stock."""
+    try:
+        # Create output directory if it doesn't exist
+        output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Download and analyze stock data
+        df = download_stock_data(ticker, history_days=history_days)
+        score, score_details, analyst_targets = analyze_stock(ticker, df)
+        
+        # Generate charts
+        chart_path = create_stock_chart(
+            ticker,
+            df,
+            score_details,
+            output_dir=output_dir
+        )
+        
+        score_path = create_score_breakdown(
+            ticker,
+            score,
+            score_details,
+            analyst_targets,
+            output_dir=output_dir
+        )
+        
+        typer.echo(f"Charts generated successfully:")
+        typer.echo(f"  - Price chart: {chart_path}")
+        typer.echo(f"  - Score breakdown: {score_path}")
+        
+    except Exception as e:
+        typer.echo(f"Error generating charts: {str(e)}", err=True)
+        raise typer.Exit(1)
+
+@app.command()
+def version():
+    """Show the version of the Trading Advisor."""
+    console.print("Trading Advisor v1.0.0")
 
 def run():
     """Run the CLI application."""
