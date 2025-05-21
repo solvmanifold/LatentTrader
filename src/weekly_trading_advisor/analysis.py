@@ -106,8 +106,8 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     # Moving Averages Score
     sma_20 = latest['SMA_20']
     if price > sma_20:
-        score += SCORE_WEIGHTS['macd_acceleration']  # Price above 20-day MA (bullish)
-        score_details['moving_averages'] = SCORE_WEIGHTS['macd_acceleration']
+        score += SCORE_WEIGHTS['sma_above']  # Price above 20-day MA (bullish)
+        score_details['moving_averages'] = SCORE_WEIGHTS['sma_above']
     else:
         score_details['moving_averages'] = 0
     
