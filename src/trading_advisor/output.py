@@ -248,20 +248,22 @@ Return all responses in this exact bullet format for each stock:
     if positions:
         report.append("""
 For each Current Position:
-- Recommend Hold, Sell, or Adjust
-- If "Adjust", provide a tactical move: e.g., raise stop, set trailing stop, scale out
-- Include a specific stop-loss level (price or %), and a profit-taking strategy: target price, resistance level, or trailing stop
-- Keep risk in mind—prioritize capital preservation if signals are weakening
+✅ Action: Hold, Sell, or Adjust
+🎯 Entry strategy: If Adjust, specify the tactical move (e.g., raise stop, set trailing stop, scale out)
+🛑 Stop-loss level: Specific price or % below current price
+💰 Profit-taking strategy: Target price, resistance level, or trailing stop
+🔍 Confidence level: High / Medium / Low
+🧠 Rationale: Focus on capital preservation if signals are weakening
 """)
     
     report.append("""
 For each New Technical Pick:
-- Decide if it's a viable trade this week
-- If yes, provide:
-  - Entry strategy: specify limit or breakout entry, and any price conditions or timing
-  - Stop-loss: specific price level or % below
-  - Profit target: based on analyst target, momentum, or resistance
-  - Confidence level: High / Medium / Low
+✅ Action: Buy Now, Wait for Setup, or No Trade
+🎯 Entry strategy: Specify limit or breakout entry, price conditions, and timing
+🛑 Stop-loss level: Specific price or % below entry
+💰 Profit-taking strategy: Target price, resistance level, or trailing stop
+🔍 Confidence level: High / Medium / Low
+🧠 Rationale: Explain why this is a viable trade or why to pass
 
 If a setup is weak or ambiguous, say 'No trade this week' and explain why.
 
