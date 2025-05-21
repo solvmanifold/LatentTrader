@@ -27,6 +27,7 @@ def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df['BB_Upper'] = bollinger.bollinger_hband()
     df['BB_Lower'] = bollinger.bollinger_lband()
     df['BB_Middle'] = bollinger.bollinger_mavg()
+    df['BB_Pband'] = (df['Close'] - df['BB_Lower']) / (df['BB_Upper'] - df['BB_Lower'])
     
     # Moving Averages (only 20-day for short-term trading)
     df['SMA_20'] = ta.trend.sma_indicator(df['Close'], window=20)
@@ -72,19 +73,17 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
         score_details['rsi'] = 0
     
     # Bollinger Bands Score
-    price = latest['Close']
-    bb_lower = latest['BB_Lower']
-    bb_upper = latest['BB_Upper']
-    bb_middle = latest['BB_Middle']
-    
-    if price < bb_lower:
-        score += SCORE_WEIGHTS['bb_lower']  # Price below lower band
-        score_details['bollinger'] = SCORE_WEIGHTS['bb_lower']
-    elif price > bb_upper:
-        score += SCORE_WEIGHTS['bb_upper']  # Price above upper band
-        score_details['bollinger'] = SCORE_WEIGHTS['bb_upper']
+    bb_lower = df['BB_Lower'].iloc[-1]
+    bb_upper = df['BB_Upper'].iloc[-1]
+    bb_pband = df['BB_Pband'].iloc[-1]
+    if bb_pband < -0.05:
+        score += SCORE_WEIGHTS['bollinger']
+        score_details['bollinger'] = 1.0
+    elif bb_pband > 1.05:
+        score -= SCORE_WEIGHTS['bollinger']
+        score_details['bollinger'] = -1.0
     else:
-        score_details['bollinger'] = 0
+        score_details['bollinger'] = 0.0
     
     # MACD Score
     macd = latest['MACD']
@@ -105,7 +104,7 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
     
     # Moving Averages Score
     sma_20 = latest['SMA_20']
-    if price > sma_20:
+    if latest['Close'] > sma_20:
         score += SCORE_WEIGHTS['sma_above']  # Price above 20-day MA (bullish)
         score_details['moving_averages'] = SCORE_WEIGHTS['sma_above']
     else:
