@@ -62,6 +62,23 @@ Generate both markdown and JSON output:
 trading-advisor analyze --tickers tickers.txt --output report.md --save-json analysis.json
 ```
 
+### Generate Interactive Charts
+
+To generate technical analysis charts for a specific stock:
+
+```bash
+trading-advisor chart AAPL
+```
+
+**Options:**
+
+- `--output-dir`, `-o`: Directory to save the charts (default: `output/charts`)
+- `--days`, `-d`: Number of days of historical data to include (default: 100)
+
+This command produces two interactive HTML files:
+- `{ticker}_chart.html`: A candlestick chart with Bollinger Bands, moving averages, volume, and RSI.
+- `{ticker}_score.html`: A breakdown of the technical score components.
+
 ### Command Line Options
 
 - `--tickers`, `-t`: Path to file containing ticker symbols, or 'all' for S&P 500
