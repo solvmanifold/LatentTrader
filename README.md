@@ -83,47 +83,16 @@ This command produces two interactive HTML files:
 
 - `--tickers`, `-t`: Path to file containing ticker symbols, or 'all' for S&P 500
 - `--positions`, `-p`: Path to brokerage CSV file containing current positions
-- `--top-n`: Number of top stocks to recommend (default: 5)
-- `--output`, `-o`: Path to save the markdown report
-- `--save-json`: Path to save structured JSON data
+- `--output`, `-o`: Path to save the JSON output (default: output/analysis.json)
 - `--history-days`: Number of days of historical data to analyze (default: 100)
 - `--positions-only`: Only analyze current positions
-- `--no-positions`: Skip analysis of current positions
 - `--version`, `-v`: Show version and exit
 
-## Example Output
+### New Workflow
 
-### Markdown Report
-
-```markdown
-# Trading Advisor Report
-
-Generated on: 2024-03-20 14:30:00
-
-## Current Positions
-
-### AAPL
-✅ Action: Hold
-🎯 Entry strategy: Maintain current position
-🛑 Stop-loss level: $170.00 (3% below current)
-💰 Profit-taking strategy: $180.00 target
-🔍 Confidence level: High
-🧠 Rationale: Strong technicals with bullish MACD
-
-## New Technical Picks
-
-### NVDA
-✅ Action: Buy Now
-🎯 Entry strategy: Limit order at $880.00
-🛑 Stop-loss level: $850.00 (3.4% below entry)
-💰 Profit-taking strategy: $950.00 target
-🔍 Confidence level: High
-🧠 Rationale: Bullish setup with strong volume
-
-## Top Setups
-1. NVDA: High confidence × 8% upside = Strong momentum with clear entry
-2. AAPL: High confidence × 5% upside = Solid technicals with analyst support
-```
+The CLI now follows a modular workflow:
+1. Run `analyze` to produce a structured JSON output.
+2. Use additional commands (to be implemented) to generate markdown reports, prompts, or interactive charts from the JSON.
 
 ### JSON Output Structure
 
@@ -133,37 +102,40 @@ Generated on: 2024-03-20 14:30:00
   "positions": [
     {
       "ticker": "AAPL",
-      "price_data": {
-        "current_price": 175.50,
-        "price_change": 4.25,
-        "price_change_pct": 2.5,
-        "volume": 50000000,
-        "volume_change": 1000000,
-        "volume_change_pct": 2.0
-      },
+      "price_data": [
+        {
+          "Date": "2024-03-20",
+          "Open": 175.0,
+          "High": 176.0,
+          "Low": 174.0,
+          "Close": 175.5,
+          "Volume": 50000000
+        }
+      ],
       "technical_indicators": {
-        "rsi": 65.5,
+        "rsi": [65.5],
         "macd": {
-          "value": 2.5,
-          "signal": 1.8,
-          "histogram": 0.7
+          "macd": [2.5],
+          "signal": [1.8],
+          "histogram": [0.7]
         },
         "bollinger_bands": {
-          "upper": 180.0,
-          "middle": 175.0,
-          "lower": 170.0
+          "upper": [180.0],
+          "middle": [175.0],
+          "lower": [170.0]
         },
         "moving_averages": {
-          "sma_20": 174.0,
-          "sma_50": 172.0,
-          "sma_200": 170.0
+          "sma_20": [174.0],
+          "sma_50": [172.0],
+          "sma_200": [170.0]
         }
       },
       "score": {
         "total": 7.5,
         "details": {
           "rsi": 1.0,
-          "bollinger": 1.0,
+          "bollinger_low": 1.0,
+          "bollinger_high": 1.0,
           "macd": 2.0,
           "moving_averages": 2.0,
           "analyst_targets": 1.5
@@ -181,46 +153,53 @@ Generated on: 2024-03-20 14:30:00
   "new_picks": [
     {
       "ticker": "NVDA",
-      "price_data": {
-        "current_price": 890.00,
-        "price_change": 45.00,
-        "price_change_pct": 5.2,
-        "volume": 30000000,
-        "volume_change": 2000000,
-        "volume_change_pct": 7.1
-      },
+      "price_data": [
+        {
+          "Date": "2024-03-20",
+          "Open": 890.0,
+          "High": 895.0,
+          "Low": 885.0,
+          "Close": 890.0,
+          "Volume": 30000000
+        }
+      ],
       "technical_indicators": {
-        "rsi": 70.5,
+        "rsi": [70.5],
         "macd": {
-          "value": 15.5,
-          "signal": 10.8,
-          "histogram": 4.7
+          "macd": [15.5],
+          "signal": [10.8],
+          "histogram": [4.7]
         },
         "bollinger_bands": {
-          "upper": 900.0,
-          "middle": 880.0,
-          "lower": 860.0
+          "upper": [900.0],
+          "middle": [890.0],
+          "lower": [880.0]
         },
         "moving_averages": {
-          "sma_20": 875.0,
-          "sma_50": 850.0,
-          "sma_200": 800.0
+          "sma_20": [888.0],
+          "sma_50": [885.0],
+          "sma_200": [880.0]
         }
       },
       "score": {
-        "total": 8.3,
+        "total": 8.0,
         "details": {
           "rsi": 1.5,
-          "bollinger": 1.5,
+          "bollinger_low": 1.0,
+          "bollinger_high": 1.0,
           "macd": 2.0,
           "moving_averages": 2.0,
-          "analyst_targets": 1.3
+          "analyst_targets": 0.5
         }
       }
     }
   ]
 }
 ```
+
+### Test Coverage
+
+The CLI is now fully tested. See `tests/test_analyze_command.py` for details.
 
 ## Requirements
 
