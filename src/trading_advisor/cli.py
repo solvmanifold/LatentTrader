@@ -7,18 +7,22 @@ from typing import Optional
 import json
 from datetime import datetime
 import pandas as pd
+import os
 
 import typer
 from rich.console import Console
 from rich.logging import RichHandler
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+import plotly.io as pio
+from fpdf import FPDF
+from PIL import Image
 
 from trading_advisor import __version__
 from trading_advisor.analysis import analyze_stock
 from trading_advisor.data import download_stock_data, ensure_data_dir, load_positions, load_tickers
 from trading_advisor.output import generate_report, generate_structured_data, generate_technical_summary, save_json_report, generate_research_prompt, generate_deep_research_prompt
 from trading_advisor.config import SCORE_WEIGHTS
-from trading_advisor.visualization import create_stock_chart, create_score_breakdown
+from trading_advisor.visualization import create_stock_chart, create_score_breakdown, create_combined_visualization
 
 # Configure logging
 logging.basicConfig(
@@ -201,6 +205,11 @@ def chart(
         100,
         "--days", "-d",
         help="Number of days of historical data to include"
+    ),
+    pdf: bool = typer.Option(
+        False,
+        "--pdf",
+        help="Export both charts as images and combine into a single PDF"
     )
 ):
     """Generate interactive charts for a stock."""
@@ -237,7 +246,7 @@ def chart(
         target_upside = ((analyst_target - last_price) / last_price * 100) if last_price else 0.0
         # MACD value
         macd_value = latest.get('MACD_Hist', 0.0)
-        # Build indicators dict
+        # Build indicators dict for score breakdown
         indicators = {
             # Score contributions (old keys for backward compatibility)
             'rsi_score': score_details.get('rsi', 0.0),
@@ -257,23 +266,47 @@ def chart(
             'target_upside': target_upside,
         }
         # Generate charts
-        chart_path = create_stock_chart(
+        chart_path, chart_fig = create_stock_chart(
             df=df,
             ticker=ticker,
             indicators=score_details,
-            output_dir=output_dir
+            output_dir=output_dir,
+            return_fig=True
         )
-        score_path = create_score_breakdown(
+        score_path, score_fig = create_score_breakdown(
             ticker=ticker,
             score=score,
             indicators=indicators,
-            output_dir=output_dir
+            output_dir=output_dir,
+            return_fig=True
         )
-        
         typer.echo(f"Charts generated successfully:")
         typer.echo(f"  - Price chart: {chart_path}")
         typer.echo(f"  - Score breakdown: {score_path}")
-        
+
+        # Set high-res layout for export (A4 at 1654x1170 px)
+        a4_px_width = 1654
+        a4_px_height = 1170
+        chart_fig.update_layout(width=a4_px_width, height=a4_px_height)
+        score_fig.update_layout(width=a4_px_width, height=a4_px_height)
+        if pdf:
+            # Export HTML charts to PNG at native A4 size
+            chart_img = os.path.splitext(chart_path)[0] + ".png"
+            score_img = os.path.splitext(score_path)[0] + ".png"
+            chart_fig.write_image(chart_img, format="png", scale=1)
+            score_fig.write_image(score_img, format="png", scale=1)
+            # Combine into PDF
+            pdf_path = output_dir / f"{ticker}_charts.pdf"
+            pdf = FPDF(unit="pt", format=[a4_px_width * 0.75, a4_px_height * 0.75])
+            for img_path in [score_img, chart_img]:
+                cover = Image.open(img_path)
+                width, height = cover.size
+                pdf.add_page()
+                # Insert image at native size (no resizing)
+                pdf.image(img_path, 0, 0, width * 0.75, height * 0.75)
+            pdf.output(str(pdf_path))
+            typer.echo(f"PDF exported: {pdf_path}")
+
     except Exception as e:
         typer.echo(f"Error generating charts: {str(e)}", err=True)
         raise typer.Exit(1)
