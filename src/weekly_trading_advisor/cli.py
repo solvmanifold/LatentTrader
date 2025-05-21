@@ -174,7 +174,16 @@ def analyze(
         
         # Take top N new picks
         new_pick_results = new_pick_results[:top_n]
-        structured_data["new_picks"] = structured_data["new_picks"][:top_n]
+        
+        # Update structured data to match filtered results
+        structured_data["positions"] = [
+            data for data in structured_data["positions"]
+            if data["ticker"] in [ticker for ticker, _, _ in position_results]
+        ]
+        structured_data["new_picks"] = [
+            data for data in structured_data["new_picks"]
+            if data["ticker"] in [ticker for ticker, _, _ in new_pick_results]
+        ]
         
         # Generate and save report
         report = generate_report(
