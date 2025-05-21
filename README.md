@@ -1,6 +1,6 @@
-# Weekly Trading Advisor
+# Trading Advisor
 
-A Python CLI tool for generating trading advice based on technical indicators and analyst targets for S&P 500 stocks.
+A Python CLI tool for generating tactical swing trading advice based on technical indicators and analyst targets for S&P 500 stocks.
 
 ## Features
 
@@ -11,11 +11,12 @@ A Python CLI tool for generating trading advice based on technical indicators an
   - Bollinger Bands
   - Moving Averages (20, 50, 200-day)
 - Incorporates analyst price targets
-- Generates markdown-formatted reports
+- Generates markdown-formatted reports with actionable trading playbooks
 - Supports current position analysis
 - Caches Ticker objects for performance
 - Saves structured JSON data for programmatic analysis
 - Normalized technical scores (0-10) for easy comparison
+- Ranks top setups by confidence × upside
 
 ## Installation
 
@@ -41,24 +42,24 @@ A Python CLI tool for generating trading advice based on technical indicators an
 ### From PyPI (Coming Soon)
 
 ```bash
-pip install weekly-trading-advisor
+pip install trading-advisor
 ```
 
 ## Usage
 
 Basic usage:
 ```bash
-weekly-trading-advisor analyze --tickers tickers.txt
+trading-advisor analyze --tickers tickers.txt
 ```
 
 Analyze current positions and generate recommendations:
 ```bash
-weekly-trading-advisor analyze --tickers tickers.txt --positions positions.csv
+trading-advisor analyze --tickers tickers.txt --positions positions.csv
 ```
 
 Generate both markdown and JSON output:
 ```bash
-weekly-trading-advisor analyze --tickers tickers.txt --output report.md --save-json analysis.json
+trading-advisor analyze --tickers tickers.txt --output report.md --save-json analysis.json
 ```
 
 ### Command Line Options
@@ -78,25 +79,33 @@ weekly-trading-advisor analyze --tickers tickers.txt --output report.md --save-j
 ### Markdown Report
 
 ```markdown
-# Weekly Trading Advisor Report
+# Trading Advisor Report
 
 Generated on: 2024-03-20 14:30:00
 
 ## Current Positions
 
 ### AAPL
-- Current Price: $175.50
-- 5-Day Change: +2.5%
-- Technical Score: 7.5/10
-...
+✅ Action: Hold
+🎯 Entry strategy: Maintain current position
+🛑 Stop-loss level: $170.00 (3% below current)
+💰 Profit-taking strategy: $180.00 target
+🔍 Confidence level: High
+🧠 Rationale: Strong technicals with bullish MACD
 
 ## New Technical Picks
 
 ### NVDA
-- Current Price: $890.00
-- 5-Day Change: +5.2%
-- Technical Score: 8.3/10
-...
+✅ Action: Buy Now
+🎯 Entry strategy: Limit order at $880.00
+🛑 Stop-loss level: $850.00 (3.4% below entry)
+💰 Profit-taking strategy: $950.00 target
+🔍 Confidence level: High
+🧠 Rationale: Bullish setup with strong volume
+
+## Top Setups
+1. NVDA: High confidence × 8% upside = Strong momentum with clear entry
+2. AAPL: High confidence × 5% upside = Solid technicals with analyst support
 ```
 
 ### JSON Output Structure

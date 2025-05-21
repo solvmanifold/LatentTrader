@@ -133,16 +133,18 @@ def test_generate_report(tmp_path):
     # Test console output
     report = generate_report(positions, new_picks, structured_data)
     assert isinstance(report, str)
-    assert 'Weekly Trading Advisor Report' in report
+    assert 'Trading Advisor Report' in report
     assert 'Current Positions' in report
     assert 'New Technical Picks' in report
+    assert 'After completing all recommendations, rank the top 2 setups' in report
     
     # Test file output
     output_path = tmp_path / "report.md"
     report = generate_report(positions, new_picks, structured_data, output_path)
     assert output_path.exists()
     content = output_path.read_text()
-    assert 'Weekly Trading Advisor Report' in content
+    assert 'Trading Advisor Report' in content
+    assert 'After completing all recommendations, rank the top 2 setups' in content
     
     # Test JSON output
     json_path = tmp_path / "analysis.json"
@@ -150,4 +152,31 @@ def test_generate_report(tmp_path):
     assert json_path.exists()
     with open(json_path) as f:
         saved_data = json.load(f)
-    assert saved_data == structured_data 
+    assert saved_data == structured_data
+
+def test_generate_report_with_benchmarking(tmp_path):
+    """Test report generation with benchmarking section."""
+    positions = [
+        ('AAPL', 7.5, '## AAPL\nTest summary with High confidence and 5% upside'),
+        ('MSFT', 6.5, '## MSFT\nTest summary with Medium confidence and 3% upside')
+    ]
+    new_picks = [
+        ('GOOGL', 8.5, '## GOOGL\nTest summary with High confidence and 8% upside'),
+        ('AMZN', 7.0, '## AMZN\nTest summary with Low confidence and 2% upside')
+    ]
+    structured_data = {
+        'timestamp': datetime.now().isoformat(),
+        'positions': [],
+        'new_picks': []
+    }
+    
+    report = generate_report(positions, new_picks, structured_data)
+    
+    # Verify benchmarking section is present
+    assert 'After completing all recommendations, rank the top 2 setups' in report
+    assert 'confidence × upside' in report
+    
+    # Verify report structure
+    assert 'Trading Advisor Report' in report
+    assert 'Current Positions' in report
+    assert 'New Technical Picks' in report 
