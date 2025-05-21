@@ -136,15 +136,9 @@ def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) ->
         
         if median_target:
             upside = ((median_target - current_price) / current_price) * 100
-            
-            if upside > 20:
-                score += SCORE_WEIGHTS['analyst_high_upside']
-                score_details['analyst_targets'] = SCORE_WEIGHTS['analyst_high_upside']
-            elif upside > 10:
-                score += SCORE_WEIGHTS['analyst_moderate_upside']
-                score_details['analyst_targets'] = SCORE_WEIGHTS['analyst_moderate_upside']
-            else:
-                score_details['analyst_targets'] = 0
+            weight = min(max(upside / 10, 0), 2.0)
+            score += weight
+            score_details['analyst_targets'] = weight
     
     # Normalize score to 0-10 range
     normalized_score = min(max((score / MAX_RAW_SCORE) * 10, 0), 10)
