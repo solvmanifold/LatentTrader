@@ -18,7 +18,7 @@ from fpdf import FPDF
 from PIL import Image
 
 from trading_advisor import __version__
-from trading_advisor.analysis import analyze_stock
+from trading_advisor.analysis import analyze_stock, calculate_technical_indicators
 from trading_advisor.data import download_stock_data, ensure_data_dir, load_positions, load_tickers
 from trading_advisor.output import generate_report, generate_structured_data, generate_technical_summary, save_json_report, generate_research_prompt, generate_deep_research_prompt
 from trading_advisor.config import SCORE_WEIGHTS
@@ -206,7 +206,7 @@ def analyze(
 
 @app.command()
 def chart(
-    ticker: str = typer.Argument(..., help="Stock ticker symbol"),
+    tickers: list[str] = typer.Argument(None, help="Stock ticker symbols (can specify multiple)", show_default=False),
     output_dir: Path = typer.Option(
         "output/charts",
         "--output-dir", "-o",
@@ -221,106 +221,180 @@ def chart(
         False,
         "--pdf",
         help="Export both charts as images and combine into a single PDF"
+    ),
+    json_file: Optional[Path] = typer.Option(
+        None,
+        "--json", "-j",
+        help="Path to analysis JSON file (from analyze command)"
     )
 ):
-    """Generate interactive charts for a stock."""
+    """Generate interactive charts for one or more stocks, optionally using an analysis JSON file."""
     try:
         # Create output directory if it doesn't exist
         output_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Download and analyze stock data
-        df = download_stock_data(ticker, history_days=history_days)
-        score, score_details, analyst_targets = analyze_stock(ticker, df)
 
-        # Extract latest values for richer indicators
-        latest = df.iloc[-1]
-        prev = df.iloc[-2] if len(df) > 1 else latest
-        # Calculate BB position (percent between lower and upper)
-        if 'BB_Lower' in latest and 'BB_Upper' in latest and (latest['BB_Upper'] - latest['BB_Lower']) != 0:
-            bb_position = (latest['Close'] - latest['BB_Lower']) / (latest['BB_Upper'] - latest['BB_Lower']) * 100
-        else:
-            bb_position = 0.0
-        # Calculate MA trend
-        ma_trend = (
-            'Bullish' if latest.get('Close', 0) > latest.get('SMA_20', 0)
-            else 'Bearish' if latest.get('Close', 0) < latest.get('SMA_20', 0)
-            else 'Neutral'
-        )
-        # Calculate volume change
-        if prev['Volume'] != 0:
-            volume_change = (latest['Volume'] - prev['Volume']) / prev['Volume'] * 100
-        else:
-            volume_change = 0.0
-        # Analyst target and upside
-        analyst_target = analyst_targets['median_target'] if analyst_targets and 'median_target' in analyst_targets else 0.0
-        last_price = latest.get('Close', 0.0)
-        target_upside = ((analyst_target - last_price) / last_price * 100) if last_price else 0.0
-        # MACD value
-        macd_value = latest.get('MACD_Hist', 0.0)
-        # Build indicators dict for score breakdown
-        indicators = {
-            # Score contributions (old keys for backward compatibility)
-            'rsi_score': score_details.get('rsi', 0.0),
-            'bb_score': score_details.get('bollinger', 0.0),
-            'macd_score': score_details.get('macd', 0.0),
-            'ma_score': score_details.get('moving_averages', 0.0),
-            'volume_score': score_details.get('volume', 0.0),
-            'analyst_targets_score': score_details.get('analyst_targets', 0.0),
-            # Actual indicator values
-            'rsi': latest.get('RSI', 0.0),
-            'macd': macd_value,
-            'bb_position': bb_position,
-            'ma_trend': ma_trend,
-            'volume_change': volume_change,
-            'last_price': last_price,
-            'analyst_target': analyst_target,
-            'target_upside': target_upside,
-        }
-        # Sanitize indicators to remove any <br> or \n from string values
-        for k, v in indicators.items():
-            if isinstance(v, str):
-                indicators[k] = v.replace('<br>', ' ').replace('\n', ' ')
-        # Generate charts
-        chart_path, chart_fig = create_stock_chart(
-            df=df,
-            ticker=ticker,
-            indicators=score_details,
-            output_dir=output_dir,
-            return_fig=True
-        )
-        score_path, score_fig = create_score_breakdown(
-            ticker=ticker,
-            score=score,
-            indicators=indicators,
-            output_dir=output_dir,
-            return_fig=True
-        )
-        typer.echo(f"Charts generated successfully:")
-        typer.echo(f"  - Price chart: {chart_path}")
-        typer.echo(f"  - Score breakdown: {score_path}")
+        # Special case: if a single positional argument is given and it looks like a .json file, suggest using --json
+        if tickers and len(tickers) == 1 and str(tickers[0]).lower().endswith('.json') and not json_file:
+            typer.echo(f"Error: It looks like you provided a JSON file as a ticker. Did you mean to use --json {tickers[0]}?\n\nUsage: trading-advisor chart --json {tickers[0]}", err=True)
+            raise typer.Exit(1)
 
-        # Set high-res layout for export (A4 at 1654x1170 px)
-        a4_px_width = 1654
-        a4_px_height = 1170
-        chart_fig.update_layout(width=a4_px_width, height=a4_px_height)
-        score_fig.update_layout(width=a4_px_width, height=a4_px_height)
-        if pdf:
-            # Export HTML charts to PNG at native A4 size
-            chart_img = os.path.splitext(chart_path)[0] + ".png"
-            score_img = os.path.splitext(score_path)[0] + ".png"
-            chart_fig.write_image(chart_img, format="png", scale=1)
-            score_fig.write_image(score_img, format="png", scale=1)
-            # Combine into PDF
-            pdf_path = output_dir / f"{ticker}_charts.pdf"
-            pdf = FPDF(unit="pt", format=[a4_px_width * 0.75, a4_px_height * 0.75])
-            for img_path in [score_img, chart_img]:
-                cover = Image.open(img_path)
-                width, height = cover.size
-                pdf.add_page()
-                # Insert image at native size (no resizing)
-                pdf.image(img_path, 0, 0, width * 0.75, height * 0.75)
-            pdf.output(str(pdf_path))
-            typer.echo(f"PDF exported: {pdf_path}")
+        # Load tickers and analysis data from JSON if provided
+        analysis_data = None
+        tickers_from_json = []
+        if json_file:
+            if not json_file.exists():
+                typer.echo(f"Error: JSON file '{json_file}' does not exist.", err=True)
+                raise typer.Exit(1)
+            with open(json_file, "r") as f:
+                analysis_data = json.load(f)
+            # Collect all tickers from positions and new_picks
+            tickers_from_json = [p["ticker"] for p in analysis_data.get("positions", [])]
+            tickers_from_json += [p["ticker"] for p in analysis_data.get("new_picks", [])]
+            tickers_from_json = list(set(tickers_from_json))
+
+        # Determine which tickers to chart
+        if json_file and not tickers:
+            tickers_to_chart = tickers_from_json
+        elif json_file and tickers:
+            tickers_to_chart = [t for t in tickers if t in tickers_from_json]
+            if not tickers_to_chart:
+                typer.echo("Error: None of the specified tickers are present in the JSON file.\n\nIf you want to chart all tickers from the JSON, use:\n  trading-advisor chart --json <file.json>\nIf you want to chart a subset, use:\n  trading-advisor chart TICKER1 TICKER2 --json <file.json>", err=True)
+                raise typer.Exit(1)
+        elif not json_file and tickers:
+            tickers_to_chart = tickers
+        else:
+            typer.echo("Error: You must specify at least one ticker or provide a JSON file.\n\nUsage examples:\n  trading-advisor chart AAPL MSFT\n  trading-advisor chart --json output/analysis.json\n  trading-advisor chart AAPL --json output/analysis.json", err=True)
+            raise typer.Exit(1)
+
+        # Build a lookup for analysis data if available
+        analysis_lookup = {}
+        if analysis_data:
+            for p in analysis_data.get("positions", []) + analysis_data.get("new_picks", []):
+                analysis_lookup[p["ticker"]] = p
+
+        # Process each ticker with progress bar
+        chart_infos = []
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
+            task = progress.add_task("Generating charts...", total=len(tickers_to_chart))
+
+            for ticker in tickers_to_chart:
+                # Use analysis data from JSON if available, else download/analyze
+                if ticker in analysis_lookup:
+                    p = analysis_lookup[ticker]
+                    # Reconstruct DataFrame from price_data if possible, else fallback
+                    # For now, just use the score and indicators from JSON
+                    score = p.get("score", {}).get("total", 0.0)
+                    score_details = p.get("score", {}).get("details", {})
+                    analyst_targets = p.get("analyst_targets", None)
+                    # Download data for charting (could be optimized to store full df in JSON)
+                    df = download_stock_data(ticker, history_days=history_days)
+                else:
+                    df = download_stock_data(ticker, history_days=history_days)
+                    score, score_details, analyst_targets = analyze_stock(ticker, df)
+
+                # After downloading stock data, calculate technical indicators
+                df = calculate_technical_indicators(df)
+
+                # Ensure DataFrame has expected columns for overlays
+                if 'SMA_20' in df.columns:
+                    df['MA20'] = df['SMA_20']
+                if 'SMA_50' in df.columns:
+                    df['MA50'] = df['SMA_50']
+                # BB columns are already named as expected in most cases, but add mapping if needed
+                # (If your data source uses different names, add more mappings here)
+
+                # Extract latest values for richer indicators
+                latest = df.iloc[-1]
+                prev = df.iloc[-2] if len(df) > 1 else latest
+                if 'BB_Lower' in latest and 'BB_Upper' in latest and (latest['BB_Upper'] - latest['BB_Lower']) != 0:
+                    bb_position = (latest['Close'] - latest['BB_Lower']) / (latest['BB_Upper'] - latest['BB_Lower']) * 100
+                else:
+                    bb_position = 0.0
+                ma_trend = (
+                    'Bullish' if latest.get('Close', 0) > latest.get('SMA_20', 0)
+                    else 'Bearish' if latest.get('Close', 0) < latest.get('SMA_20', 0)
+                    else 'Neutral'
+                )
+                if prev['Volume'] != 0:
+                    volume_change = (latest['Volume'] - prev['Volume']) / prev['Volume'] * 100
+                else:
+                    volume_change = 0.0
+                analyst_target = analyst_targets['median_target'] if analyst_targets and 'median_target' in analyst_targets else 0.0
+                last_price = latest.get('Close', 0.0)
+                target_upside = ((analyst_target - last_price) / last_price * 100) if last_price else 0.0
+                macd_value = latest.get('MACD_Hist', 0.0)
+                # Build indicators dict for score breakdown and chart overlays
+                indicators = {
+                    'rsi_score': score_details.get('rsi', 0.0),
+                    'bb_score': score_details.get('bollinger', 0.0),
+                    'macd_score': score_details.get('macd', 0.0),
+                    'ma_score': score_details.get('moving_averages', 0.0),
+                    'volume_score': score_details.get('volume', 0.0),
+                    'analyst_targets_score': score_details.get('analyst_targets', 0.0),
+                    # Actual indicator values for overlays
+                    'rsi': latest.get('RSI', 0.0),
+                    'macd': macd_value,
+                    'bb_position': bb_position,
+                    'ma_trend': ma_trend,
+                    'volume_change': volume_change,
+                    'last_price': last_price,
+                    'analyst_target': analyst_target,
+                    'target_upside': target_upside,
+                    # Overlay values
+                    'MA20': latest.get('MA20', None),
+                    'MA50': latest.get('MA50', None),
+                    'BB_Upper': latest.get('BB_Upper', None),
+                    'BB_Lower': latest.get('BB_Lower', None),
+                    'BB_Middle': latest.get('BB_Middle', None),
+                }
+                for k, v in indicators.items():
+                    if isinstance(v, str):
+                        indicators[k] = v.replace('<br>', ' ').replace('\n', ' ')
+                chart_path, chart_fig = create_stock_chart(
+                    df=df,
+                    ticker=ticker,
+                    indicators=indicators,
+                    output_dir=output_dir,
+                    return_fig=True
+                )
+                score_path, score_fig = create_score_breakdown(
+                    ticker=ticker,
+                    score=score,
+                    indicators=indicators,
+                    output_dir=output_dir,
+                    return_fig=True
+                )
+                # Collect chart info for later logging
+                chart_infos.append((ticker, chart_path, score_path))
+
+                a4_px_width = 1654
+                a4_px_height = 1170
+                chart_fig.update_layout(width=a4_px_width, height=a4_px_height)
+                score_fig.update_layout(width=a4_px_width, height=a4_px_height)
+                
+                if pdf:
+                    chart_img = os.path.splitext(chart_path)[0] + ".png"
+                    score_img = os.path.splitext(score_path)[0] + ".png"
+                    chart_fig.write_image(chart_img, format="png", scale=1)
+                    score_fig.write_image(score_img, format="png", scale=1)
+                    if ticker == tickers_to_chart[0]:
+                        pdf_path = output_dir / f"charts.pdf"
+                        pdf_obj = FPDF(unit="pt", format=[a4_px_width * 0.75, a4_px_height * 0.75])
+                    for img_path in [score_img, chart_img]:
+                        cover = Image.open(img_path)
+                        width, height = cover.size
+                        pdf_obj.add_page()
+                        pdf_obj.image(img_path, 0, 0, width * 0.75, height * 0.75)
+                    if ticker == tickers_to_chart[-1]:
+                        pdf_obj.output(str(pdf_path))
+                        typer.echo(f"PDF exported: {pdf_path}")
+                progress.update(task, advance=1)
+
+        # After progress bar, print all chart info
+        for ticker, chart_path, score_path in chart_infos:
+            console.print(f"[bold green]Charts generated for {ticker}:[/bold green]")
+            console.print(f"  - Price chart: {chart_path}")
+            console.print(f"  - Score breakdown: {score_path}")
 
     except Exception as e:
         typer.echo(f"Error generating charts: {str(e)}", err=True)
