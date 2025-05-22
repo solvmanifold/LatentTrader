@@ -640,3 +640,96 @@ def test_analyze_positions_file_empty(tmp_path):
     ])
     assert result.exit_code == 1
     assert "No positions loaded" in result.stdout or result.stderr 
+
+def make_analysis_json(tmp_path, tickers):
+    """Helper to create a minimal analysis JSON file with given tickers."""
+    data = {
+        "positions": [{"ticker": t, "score": {"total": 7.0, "details": {"rsi": 2.0, "bb": 1.5, "macd": 2.0, "ma": 1.0, "volume": 0.5}}, "analyst_targets": {"median_target": 120.0}} for t in tickers],
+        "new_picks": []
+    }
+    json_path = tmp_path / "analysis.json"
+    with open(json_path, "w") as f:
+        json.dump(data, f)
+    return json_path
+
+@patch('trading_advisor.cli.load_positions', return_value={"AAPL": {"quantity": 100}})
+def test_chart_command_json_only(
+    mock_load_positions,
+    mock_download_stock_data,
+    mock_analyze_stock,
+    mock_create_stock_chart,
+    mock_create_score_breakdown,
+    tmp_path
+):
+    json_path = make_analysis_json(tmp_path, ["AAPL", "MSFT"])
+    result = runner.invoke(app, ["chart", "--json", str(json_path)])
+    assert result.exit_code == 0
+    assert "Charts generated for AAPL" in result.stdout
+    assert "Charts generated for MSFT" in result.stdout
+    assert mock_create_stock_chart.call_count == 2
+    assert mock_create_score_breakdown.call_count == 2
+
+@patch('trading_advisor.cli.load_positions', return_value={"AAPL": {"quantity": 100}})
+def test_chart_command_json_and_subset_tickers(
+    mock_load_positions,
+    mock_download_stock_data,
+    mock_analyze_stock,
+    mock_create_stock_chart,
+    mock_create_score_breakdown,
+    tmp_path
+):
+    json_path = make_analysis_json(tmp_path, ["AAPL", "MSFT"])
+    result = runner.invoke(app, ["chart", "AAPL", "--json", str(json_path)])
+    assert result.exit_code == 0
+    assert "Charts generated for AAPL" in result.stdout
+    assert "Charts generated for MSFT" not in result.stdout
+    assert mock_create_stock_chart.call_count == 1
+    assert mock_create_score_breakdown.call_count == 1
+
+@patch('trading_advisor.cli.load_positions', return_value={"AAPL": {"quantity": 100}})
+def test_chart_command_json_and_tickers_not_in_json(
+    mock_load_positions,
+    mock_download_stock_data,
+    mock_analyze_stock,
+    mock_create_stock_chart,
+    mock_create_score_breakdown,
+    tmp_path
+):
+    json_path = make_analysis_json(tmp_path, ["AAPL", "MSFT"])
+    result = runner.invoke(app, ["chart", "GOOGL", "--json", str(json_path)])
+    assert result.exit_code == 1
+    assert "None of the specified tickers are present in the JSON file" in result.stdout
+
+@patch('trading_advisor.cli.load_positions', return_value={"AAPL": {"quantity": 100}})
+def test_chart_command_no_tickers_no_json(
+    mock_load_positions,
+    mock_download_stock_data,
+    mock_analyze_stock,
+    mock_create_stock_chart,
+    mock_create_score_breakdown
+):
+    result = runner.invoke(app, ["chart"])
+    assert result.exit_code == 1
+    assert "You must specify at least one ticker or provide a JSON file" in result.stdout 
+
+@patch('trading_advisor.cli.download_stock_data')
+def test_backtest_command(mock_download_stock_data):
+    import pandas as pd
+    from datetime import datetime, timedelta
+    # Create a simple DataFrame for two weeks
+    dates = pd.date_range(start='2023-01-02', periods=10, freq='B')
+    data = {
+        'Open': [100 + i for i in range(10)],
+        'High': [101 + i for i in range(10)],
+        'Low': [99 + i for i in range(10)],
+        'Close': [100 + i for i in range(10)],
+        'Volume': [1000 + 10*i for i in range(10)]
+    }
+    df = pd.DataFrame(data, index=dates)
+    mock_download_stock_data.return_value = df
+    result = runner.invoke(app, [
+        'backtest', 'AAPL', '--start-date', '2023-01-02', '--end-date', '2023-01-13', '--top-n', '1', '--hold-days', '5', '--stop-loss', '-0.05', '--profit-target', '0.05'
+    ])
+    assert result.exit_code == 0
+    assert "Backtest complete." in result.stdout
+    assert "Trade log:" in result.stdout 
