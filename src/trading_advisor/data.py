@@ -78,7 +78,8 @@ def normalize_ticker(ticker: str) -> str:
     return ticker
 
 def download_stock_data(ticker: str, history_days: int = LOOKBACK_DAYS, max_retries: int = 3, end_date: datetime = None) -> pd.DataFrame:
-    """Download stock data for a ticker, only getting new data if available. Optionally specify end_date."""
+    """Download stock data for a ticker, only getting new data if available. Optionally specify end_date.
+    The on-disk CSV will always contain all available data (including future data), and only missing data is filled in."""
     logger.propagate = True  # Ensure logs propagate to root logger
     logger.info(f"[LOG TEST] download_stock_data called for {ticker}")
     normalized_ticker = normalize_ticker(ticker)
@@ -86,29 +87,39 @@ def download_stock_data(ticker: str, history_days: int = LOOKBACK_DAYS, max_retr
     file_path = DATA_DIR / f"{ticker}.csv"
     if end_date is None:
         end_date = get_current_date()
-    # If we have existing data, read it first
+    # Load all existing data (not just up to end_date)
     if file_path.exists():
         if not is_csv_format_valid(file_path):
             logger.error(f"The file {file_path} is not in the expected format. Please delete or fix it before running the script.")
             sys.exit(1)
         try:
-            logger.info(f"Loading existing data for {ticker} from {file_path}")
-            df = read_csv_with_dates(file_path, end_date)
-            if not df.empty:
-                latest_date = df.index[-1].date()
-                if latest_date >= end_date.date():
-                    logger.info(f"Returning cached data for {ticker} (up to {latest_date})")
-                    return df
-                start_date = datetime.combine(latest_date, datetime.min.time())
-            else:
-                start_date = end_date - timedelta(days=history_days)
+            logger.info(f"Loading all existing data for {ticker} from {file_path}")
+            existing_df = pd.read_csv(file_path, parse_dates=True, index_col=0)
+            existing_df.index = pd.to_datetime(existing_df.index).tz_localize(None)
         except Exception as e:
             logger.error(f"Error reading existing data for {ticker}: {e}")
-            start_date = end_date - timedelta(days=history_days)
+            existing_df = pd.DataFrame()
+    else:
+        existing_df = pd.DataFrame()
+    # Determine what dates are missing (up to end_date)
+    if not existing_df.empty:
+        all_dates = pd.date_range(existing_df.index.min(), end_date, freq='B')
+        missing_dates = [d for d in all_dates if d not in existing_df.index]
+        if missing_dates:
+            start_date = min(missing_dates)
+        else:
+            start_date = end_date  # No missing dates
     else:
         start_date = end_date - timedelta(days=history_days)
     if start_date.date() > end_date.date():
-        return read_csv_with_dates(file_path, end_date) if file_path.exists() else pd.DataFrame()
+        # No missing data to fetch
+        logger.info(f"No missing data to fetch for {ticker} up to {end_date.date()}")
+        # Save (to ensure file exists) and return filtered DataFrame
+        if not existing_df.empty:
+            existing_df.to_csv(file_path, date_format='%Y-%m-%d')
+            return existing_df[existing_df.index.date <= end_date.date()]
+        else:
+            return pd.DataFrame()
     for attempt in range(max_retries):
         try:
             logger.info(f"Attempting to download data for {ticker} (attempt {attempt+1}) from {start_date.date()} to {end_date.date()}")
@@ -120,23 +131,20 @@ def download_stock_data(ticker: str, history_days: int = LOOKBACK_DAYS, max_retr
             )
             if len(df) > 0:
                 df.index = pd.to_datetime(df.index).tz_localize(None)
-                df = df[df.index.date <= end_date.date()]
-                if file_path.exists():
-                    try:
-                        existing_df = read_csv_with_dates(file_path, end_date)
-                        df = pd.concat([existing_df, df])
-                        df = df[~df.index.duplicated(keep='last')]
-                        df = df.sort_index()
-                    except Exception as e:
-                        logger.error(f"Error processing existing data for {ticker}: {e}")
-                        pass
+                # Merge with all existing data (including future data)
+                if not existing_df.empty:
+                    merged_df = pd.concat([existing_df, df])
+                    merged_df = merged_df[~merged_df.index.duplicated(keep='last')]
+                    merged_df = merged_df.sort_index()
+                else:
+                    merged_df = df
                 try:
-                    df.to_csv(file_path, date_format='%Y-%m-%d')
-                    logger.info(f"Saved data for {ticker} to {file_path} ({len(df)} rows)")
-                    return df
+                    merged_df.to_csv(file_path, date_format='%Y-%m-%d')
+                    logger.info(f"Saved merged data for {ticker} to {file_path} ({len(merged_df)} rows)")
+                    return merged_df[merged_df.index.date <= end_date.date()]
                 except Exception as e:
                     logger.error(f"Error saving data for {ticker}: {e}")
-                    return df
+                    return merged_df[merged_df.index.date <= end_date.date()]
             else:
                 logger.warning(f"No data returned for {ticker} from yfinance.")
             time.sleep(2)
@@ -145,7 +153,11 @@ def download_stock_data(ticker: str, history_days: int = LOOKBACK_DAYS, max_retr
                 logger.error(f"Failed to download {ticker} after {max_retries} attempts: {e}")
             time.sleep(2 ** (attempt + 1))
     logger.warning(f"All download attempts failed for {ticker}. Returning existing data if available.")
-    return read_csv_with_dates(file_path, end_date) if file_path.exists() else pd.DataFrame()
+    if not existing_df.empty:
+        existing_df.to_csv(file_path, date_format='%Y-%m-%d')
+        return existing_df[existing_df.index.date <= end_date.date()]
+    else:
+        return pd.DataFrame()
 
 def parse_brokerage_csv(file_path: Path) -> Dict[str, Dict]:
     """Parse the brokerage CSV file and return a dictionary of positions."""

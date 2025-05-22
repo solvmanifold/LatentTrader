@@ -56,235 +56,144 @@ def get_analyst_targets(ticker: str) -> Optional[Dict]:
     
     return None
 
-def calculate_score_row(row, analyst_targets=None):
-    """Calculate a technical score for a single row (date) of a DataFrame."""
-    score = 0.0
-    score_details = {}
-    # RSI Score
-    rsi = row.get('RSI', float('nan'))
-    if pd.notna(rsi):
-        if rsi < 30:
-            score += min(SCORE_WEIGHTS['rsi_oversold'], 2.0)
-            score_details['rsi'] = min(SCORE_WEIGHTS['rsi_oversold'], 2.0)
-        elif rsi > 70:
-            score += min(SCORE_WEIGHTS['rsi_overbought'], 2.0)
-            score_details['rsi'] = min(SCORE_WEIGHTS['rsi_overbought'], 2.0)
+def calculate_score(df_or_row, analyst_targets=None, window=3):
+    """
+    Calculate a technical score for a DataFrame (using last `window` rows for smoothing)
+    or for a single row (Series).
+    Returns (score, score_details).
+    """
+    def score_row(row, analyst_targets=None):
+        score = 0.0
+        score_details = {}
+        # RSI Score
+        rsi = row.get('RSI', float('nan'))
+        if pd.notna(rsi):
+            if rsi < 30:
+                score += min(SCORE_WEIGHTS['rsi_oversold'], 2.0)
+                score_details['rsi'] = min(SCORE_WEIGHTS['rsi_oversold'], 2.0)
+            elif rsi > 70:
+                score += min(SCORE_WEIGHTS['rsi_overbought'], 2.0)
+                score_details['rsi'] = min(SCORE_WEIGHTS['rsi_overbought'], 2.0)
+            else:
+                score_details['rsi'] = 0.0
         else:
             score_details['rsi'] = 0.0
-    else:
-        score_details['rsi'] = 0.0
-    # Bollinger Bands Score
-    bb_lower = row.get('BB_Lower', float('nan'))
-    bb_upper = row.get('BB_Upper', float('nan'))
-    bb_pband = row.get('BB_Pband', float('nan'))
-    if pd.notna(bb_pband):
-        if bb_pband < 0.05:
-            weight = SCORE_WEIGHTS['bollinger_low']
-            score += weight
-            score_details['bollinger'] = weight
-        elif bb_pband > 0.95:
-            weight = SCORE_WEIGHTS['bollinger_high']
-            score += weight
-            score_details['bollinger'] = weight
+        # Bollinger Bands Score
+        bb_lower = row.get('BB_Lower', float('nan'))
+        bb_upper = row.get('BB_Upper', float('nan'))
+        bb_pband = row.get('BB_Pband', float('nan'))
+        if pd.notna(bb_pband):
+            if bb_pband < 0.05:
+                weight = SCORE_WEIGHTS['bollinger_low']
+                score += weight
+                score_details['bollinger'] = weight
+            elif bb_pband > 0.95:
+                weight = SCORE_WEIGHTS['bollinger_high']
+                score += weight
+                score_details['bollinger'] = weight
+            else:
+                score_details['bollinger'] = 0.0
         else:
             score_details['bollinger'] = 0.0
-    else:
-        score_details['bollinger'] = 0.0
-    # MACD Score
-    macd = row.get('MACD', float('nan'))
-    macd_signal = row.get('MACD_Signal', float('nan'))
-    macd_hist = row.get('MACD_Hist', float('nan'))
-    if pd.notna(macd_hist) and pd.notna(macd) and pd.notna(macd_signal):
-        if macd_hist > MACD_STRONG_DIVERGENCE and macd > macd_signal:
-            score += min(SCORE_WEIGHTS['macd_strong_divergence'], 2.0)
-            score_details['macd'] = min(SCORE_WEIGHTS['macd_strong_divergence'], 2.0)
-        elif macd_hist > MACD_WEAK_DIVERGENCE and macd > macd_signal:
-            score += min(SCORE_WEIGHTS['macd_moderate_divergence'], 2.0)
-            score_details['macd'] = min(SCORE_WEIGHTS['macd_moderate_divergence'], 2.0)
-        elif macd_hist < -MACD_STRONG_DIVERGENCE and macd < macd_signal:
-            score += min(SCORE_WEIGHTS['macd_crossover'], 2.0)
-            score_details['macd'] = min(SCORE_WEIGHTS['macd_crossover'], 2.0)
+        # MACD Score
+        macd = row.get('MACD', float('nan'))
+        macd_signal = row.get('MACD_Signal', float('nan'))
+        macd_hist = row.get('MACD_Hist', float('nan'))
+        if pd.notna(macd_hist) and pd.notna(macd) and pd.notna(macd_signal):
+            if macd_hist > MACD_STRONG_DIVERGENCE and macd > macd_signal:
+                score += min(SCORE_WEIGHTS['macd_strong_divergence'], 2.0)
+                score_details['macd'] = min(SCORE_WEIGHTS['macd_strong_divergence'], 2.0)
+            elif macd_hist > MACD_WEAK_DIVERGENCE and macd > macd_signal:
+                score += min(SCORE_WEIGHTS['macd_moderate_divergence'], 2.0)
+                score_details['macd'] = min(SCORE_WEIGHTS['macd_moderate_divergence'], 2.0)
+            elif macd_hist < -MACD_STRONG_DIVERGENCE and macd < macd_signal:
+                score += min(SCORE_WEIGHTS['macd_crossover'], 2.0)
+                score_details['macd'] = min(SCORE_WEIGHTS['macd_crossover'], 2.0)
+            else:
+                score_details['macd'] = 0.0
         else:
             score_details['macd'] = 0.0
-    else:
-        score_details['macd'] = 0.0
-    # Moving Averages Score
-    sma_20 = row.get('SMA_20', float('nan'))
-    sma_50 = row.get('SMA_50', float('nan'))
-    price = row.get('Close', float('nan'))
-    if pd.notna(price) and pd.notna(sma_20):
-        if price > sma_20 * 1.02:
-            weight = SCORE_WEIGHTS.get('sma_strong_above', 2.0)
-            score += weight
-            score_details['moving_averages'] = weight
-        elif price < sma_20 * 0.98:
-            weight = SCORE_WEIGHTS.get('sma_strong_below', 2.0)
-            score -= weight
-            score_details['moving_averages'] = -weight
-        elif price > sma_20:
-            weight = SCORE_WEIGHTS.get('sma_above', 1.0)
-            score += weight
-            score_details['moving_averages'] = weight
-        elif pd.notna(sma_50) and price > sma_50:
-            weight = SCORE_WEIGHTS.get('sma_above_50', 1.0)
-            score += weight
-            score_details['moving_averages'] = weight
+        # Moving Averages Score
+        sma_20 = row.get('SMA_20', float('nan'))
+        sma_50 = row.get('SMA_50', float('nan'))
+        price = row.get('Close', float('nan'))
+        if pd.notna(price) and pd.notna(sma_20):
+            if price > sma_20 * 1.02:
+                weight = SCORE_WEIGHTS.get('sma_strong_above', 2.0)
+                score += weight
+                score_details['moving_averages'] = weight
+            elif price < sma_20 * 0.98:
+                weight = SCORE_WEIGHTS.get('sma_strong_below', 2.0)
+                score -= weight
+                score_details['moving_averages'] = -weight
+            elif price > sma_20:
+                weight = SCORE_WEIGHTS.get('sma_above', 1.0)
+                score += weight
+                score_details['moving_averages'] = weight
+            elif pd.notna(sma_50) and price > sma_50:
+                weight = SCORE_WEIGHTS.get('sma_above_50', 1.0)
+                score += weight
+                score_details['moving_averages'] = weight
+            else:
+                score_details['moving_averages'] = 0.0
         else:
             score_details['moving_averages'] = 0.0
-    else:
-        score_details['moving_averages'] = 0.0
-    # Volume Spike Score
-    prev_volume = row.get('Prev_Volume', float('nan'))
-    volume = row.get('Volume', float('nan'))
-    if pd.notna(prev_volume) and prev_volume != 0 and pd.notna(volume):
-        volume_change = (volume - prev_volume) / prev_volume * 100
-        if abs(volume_change) > 20:
-            score += min(SCORE_WEIGHTS['volume_spike'], 2.0)
-            score_details['volume'] = min(SCORE_WEIGHTS['volume_spike'], 2.0)
+        # Volume Spike Score
+        prev_volume = row.get('Prev_Volume', float('nan'))
+        volume = row.get('Volume', float('nan'))
+        if pd.notna(prev_volume) and prev_volume != 0 and pd.notna(volume):
+            volume_change = (volume - prev_volume) / prev_volume * 100
+            if abs(volume_change) > 20:
+                score += min(SCORE_WEIGHTS['volume_spike'], 2.0)
+                score_details['volume'] = min(SCORE_WEIGHTS['volume_spike'], 2.0)
+            else:
+                score_details['volume'] = 0.0
         else:
             score_details['volume'] = 0.0
-    else:
-        score_details['volume'] = 0.0
-    # Analyst Targets Score (optional, only for latest row in backtest)
-    if analyst_targets and hasattr(analyst_targets, 'get'):
-        current_price = analyst_targets.get('current_price', None)
-        median_target = analyst_targets.get('median_target', None)
-        if median_target and current_price:
-            upside = ((median_target - current_price) / current_price) * 100
-            weight = min(max(upside / 10, 0), 2.0)
-            score += weight
-            score_details['analyst_targets'] = weight
+        # Analyst Targets Score (optional, only for latest row in backtest)
+        if analyst_targets and hasattr(analyst_targets, 'get'):
+            current_price = analyst_targets.get('current_price', None)
+            median_target = analyst_targets.get('median_target', None)
+            if median_target and current_price:
+                upside = ((median_target - current_price) / current_price) * 100
+                weight = min(max(upside / 10, 0), 2.0)
+                score += weight
+                score_details['analyst_targets'] = weight
+            else:
+                score_details['analyst_targets'] = 0.0
         else:
             score_details['analyst_targets'] = 0.0
+        # Normalize score to 0-10 range
+        normalized_score = float(min(max((score / MAX_RAW_SCORE) * 10, 0), 10))
+        # Ensure all tracked keys are present in score_details
+        for key in ['macd', 'rsi', 'bollinger', 'moving_averages', 'volume', 'analyst_targets']:
+            if key not in score_details:
+                score_details[key] = 0.0
+        return normalized_score, score_details
+
+    if isinstance(df_or_row, pd.Series):
+        return score_row(df_or_row, analyst_targets)
+    elif isinstance(df_or_row, pd.DataFrame):
+        if df_or_row.empty:
+            return 0.0, {}
+        window_df = df_or_row.iloc[-window:]
+        row = window_df.mean(numeric_only=True)
+        # For non-numeric columns (e.g., 'Close'), take the last value
+        for col in ['Close', 'Volume', 'SMA_20', 'SMA_50', 'BB_Lower', 'BB_Upper', 'BB_Pband']:
+            if col in window_df.columns:
+                row[col] = window_df[col].iloc[-1]
+        return score_row(row, analyst_targets)
     else:
-        score_details['analyst_targets'] = 0.0
-    # Normalize score to 0-10 range
-    normalized_score = float(min(max((score / MAX_RAW_SCORE) * 10, 0), 10))
-    # Ensure all tracked keys are present in score_details
-    for key in ['macd', 'rsi', 'bollinger', 'moving_averages', 'volume', 'analyst_targets']:
-        if key not in score_details:
-            score_details[key] = 0.0
-    return normalized_score, score_details
+        raise ValueError("Input must be a pandas DataFrame or Series")
 
 def calculate_score_history(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) -> pd.DataFrame:
     """Calculate technical scores for all rows in the DataFrame."""
-    # Add previous volume for volume spike calculation
     df = df.copy()
     df['Prev_Volume'] = df['Volume'].shift(1)
-    results = df.apply(lambda row: calculate_score_row(row, analyst_targets), axis=1)
+    results = df.apply(lambda row: calculate_score(row, analyst_targets, window=1), axis=1)
     df['score'] = results.apply(lambda x: x[0])
     df['score_details'] = results.apply(lambda x: x[1])
     return df
-
-def calculate_score(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) -> Tuple[float, Dict]:
-    """Calculate a technical score based on various indicators."""
-    if df.empty:
-        return 0.0, {}
-    
-    latest = df.iloc[-1]
-    score = 0.0
-    score_details = {}
-    
-    # RSI Score
-    rsi = df['RSI'].iloc[-3:].mean()
-    if rsi < 30:
-        score += min(SCORE_WEIGHTS['rsi_oversold'], 2.0)
-        score_details['rsi'] = min(SCORE_WEIGHTS['rsi_oversold'], 2.0)
-    elif rsi > 70:
-        score += min(SCORE_WEIGHTS['rsi_overbought'], 2.0)
-        score_details['rsi'] = min(SCORE_WEIGHTS['rsi_overbought'], 2.0)
-    else:
-        score_details['rsi'] = 0.0
-    
-    # Bollinger Bands Score
-    bb_lower = df['BB_Lower'].iloc[-1]
-    bb_upper = df['BB_Upper'].iloc[-1]
-    bb_pband = df['BB_Pband'].iloc[-1]
-    if bb_pband < 0.05:
-        weight = SCORE_WEIGHTS['bollinger_low']
-        score += weight
-        score_details['bollinger'] = weight
-    elif bb_pband > 0.95:
-        weight = SCORE_WEIGHTS['bollinger_high']
-        score += weight
-        score_details['bollinger'] = weight
-    else:
-        score_details['bollinger'] = 0.0
-    
-    # MACD Score
-    macd = df['MACD'].iloc[-3:].mean()
-    macd_signal = df['MACD_Signal'].iloc[-3:].mean()
-    macd_hist = df['MACD_Hist'].iloc[-3:].mean()
-    
-    if macd_hist > MACD_STRONG_DIVERGENCE and macd > macd_signal:
-        score += min(SCORE_WEIGHTS['macd_strong_divergence'], 2.0)
-        score_details['macd'] = min(SCORE_WEIGHTS['macd_strong_divergence'], 2.0)
-    elif macd_hist > MACD_WEAK_DIVERGENCE and macd > macd_signal:
-        score += min(SCORE_WEIGHTS['macd_moderate_divergence'], 2.0)
-        score_details['macd'] = min(SCORE_WEIGHTS['macd_moderate_divergence'], 2.0)
-    elif macd_hist < -MACD_STRONG_DIVERGENCE and macd < macd_signal:
-        score += min(SCORE_WEIGHTS['macd_crossover'], 2.0)
-        score_details['macd'] = min(SCORE_WEIGHTS['macd_crossover'], 2.0)
-    else:
-        score_details['macd'] = 0.0
-    
-    # Moving Averages Score
-    sma_20 = latest['SMA_20']
-    sma_50 = latest['SMA_50']
-    price = latest['Close']
-    if price > sma_20 * 1.02:
-        weight = SCORE_WEIGHTS.get('sma_strong_above', 2.0)
-        score += weight
-        score_details['moving_averages'] = weight
-    elif price < sma_20 * 0.98:
-        weight = SCORE_WEIGHTS.get('sma_strong_below', 2.0)
-        score -= weight
-        score_details['moving_averages'] = -weight
-    elif price > sma_20:
-        weight = SCORE_WEIGHTS.get('sma_above', 1.0)
-        score += weight
-        score_details['moving_averages'] = weight
-    elif price > sma_50:
-        weight = SCORE_WEIGHTS.get('sma_above_50', 1.0)
-        score += weight
-        score_details['moving_averages'] = weight
-    else:
-        score_details['moving_averages'] = 0.0
-    
-    # Volume Spike Score
-    prev_volume = df.iloc[-2]['Volume']
-    if prev_volume == 0:
-        volume_change = 0.0
-    else:
-        volume_change = (latest['Volume'] - prev_volume) / prev_volume * 100
-    if abs(volume_change) > 20:
-        score += min(SCORE_WEIGHTS['volume_spike'], 2.0)
-        score_details['volume'] = min(SCORE_WEIGHTS['volume_spike'], 2.0)
-    else:
-        score_details['volume'] = 0.0
-    
-    # Analyst Targets Score
-    if analyst_targets:
-        current_price = analyst_targets['current_price']
-        median_target = analyst_targets['median_target']
-        
-        if median_target:
-            upside = ((median_target - current_price) / current_price) * 100
-            weight = min(max(upside / 10, 0), 2.0)
-            score += weight
-            score_details['analyst_targets'] = weight
-    else:
-        score_details['analyst_targets'] = 0.0
-    
-    # Normalize score to 0-10 range
-    normalized_score = float(min(max((score / MAX_RAW_SCORE) * 10, 0), 10))
-    
-    # Ensure all tracked keys are present in score_details
-    for key in ['macd', 'rsi', 'bollinger', 'moving_averages', 'volume', 'analyst_targets']:
-        if key not in score_details:
-            score_details[key] = 0.0
-    
-    return normalized_score, score_details
 
 def analyze_stock(ticker: str, df: pd.DataFrame) -> Tuple[float, Dict, Optional[Dict]]:
     """Analyze a stock and return its score and details."""

@@ -49,10 +49,19 @@ def test_calculate_technical_indicators(sample_data):
         assert col in df.columns
 
 def test_calculate_score(sample_data):
-    """Test score calculation."""
+    """Test score calculation for DataFrame (windowed)."""
     df = calculate_technical_indicators(sample_data)
     score, details = calculate_score(df)
-    
+    assert isinstance(score, float)
+    assert 0 <= score <= 10
+    assert isinstance(details, dict)
+    assert all(key in details for key in ['macd', 'rsi', 'bollinger', 'moving_averages', 'volume', 'analyst_targets'])
+
+def test_calculate_score_row(sample_data):
+    """Test score calculation for a single row (Series)."""
+    df = calculate_technical_indicators(sample_data)
+    row = df.iloc[-1]
+    score, details = calculate_score(row)
     assert isinstance(score, float)
     assert 0 <= score <= 10
     assert isinstance(details, dict)
