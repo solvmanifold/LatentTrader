@@ -513,12 +513,19 @@ def backtest(
     hold_days: int = typer.Option(10, help="Max holding period in trading days"),
     stop_loss: float = typer.Option(-0.10, help="Stop-loss threshold (e.g., -0.10 for -10%)"),
     profit_target: float = typer.Option(0.10, help="Profit target threshold (e.g., 0.10 for +10%)"),
-    output: Path = typer.Option("output/backtest.json", "--output", "-o", help="Path to save the backtest results as JSON")
+    output: Path = typer.Option("output/backtest.json", "--output", "-o", help="Path to save the backtest results as JSON"),
+    picks_file: Path = typer.Option(None, "--picks-file", help="Optional JSON file mapping week (YYYY-MM-DD) to list of tickers to buy. Overrides scoring logic for those weeks.")
 ):
-    """Backtest the strategy using weekly top-N selection and fixed holding period with stop/profit exits."""
+    """Backtest the strategy using weekly top-N selection and fixed holding period with stop/profit exits.
+    If --picks-file is provided, use those picks for each week (format: {"YYYY-MM-DD": ["AAPL", "MSFT", ...], ...})."""
     import pandas as pd
     import json
     try:
+        # Load picks file if provided
+        picks_by_week = None
+        if picks_file is not None:
+            with open(picks_file, 'r') as f:
+                picks_by_week = json.load(f)
         # Calculate week_starts for progress bar
         start_dt = pd.to_datetime(start_date)
         end_dt = pd.to_datetime(end_date)
@@ -536,23 +543,34 @@ def backtest(
             picks = []
             for week_idx, week_start in enumerate(week_starts):
                 week_str = week_start.strftime('%Y-%m-%d')
-                scores = []
-                for ticker in tickers:
-                    df = download_stock_data(ticker, end_date=week_start)
-                    df = df[df.index <= week_start]
-                    if len(df) < 50:
-                        continue
-                    df = calculate_technical_indicators(df)
-                    scored = calculate_score_history(df)
-                    if scored.empty:
-                        continue
-                    last_row = scored.iloc[-1]
-                    scores.append((ticker, last_row['score'], last_row['Close']))
-                scores = sorted(scores, key=lambda x: x[1], reverse=True)
-                picks = scores[:top_n]
+                # Use picks from file if available for this week
+                if picks_by_week and week_str in picks_by_week:
+                    picks = [(ticker, None, None) for ticker in picks_by_week[week_str]]
+                else:
+                    scores = []
+                    for ticker in tickers:
+                        df = download_stock_data(ticker, end_date=week_start)
+                        df = df[df.index <= week_start]
+                        if len(df) < 50:
+                            continue
+                        df = calculate_technical_indicators(df)
+                        scored = calculate_score_history(df)
+                        if scored.empty:
+                            continue
+                        last_row = scored.iloc[-1]
+                        scores.append((ticker, last_row['score'], last_row['Close']))
+                    scores = sorted(scores, key=lambda x: x[1], reverse=True)
+                    picks = scores[:top_n]
                 for ticker, score, price in picks:
                     if any(p['ticker'] == ticker and not p['closed'] for p in portfolio):
                         continue
+                    # If using picks file, need to get price for entry
+                    if price is None:
+                        df = download_stock_data(ticker, end_date=week_start)
+                        df = df[df.index <= week_start]
+                        if len(df) == 0:
+                            continue
+                        price = df.iloc[-1]['Close']
                     position = {
                         'ticker': ticker,
                         'entry_date': week_start,
@@ -605,7 +623,7 @@ def backtest(
                 progress.update(task, advance=1)
             total_return = (
                 sum(p['exit_price'] - p['entry_price'] for p in portfolio if p['closed']) /
-                (len([p for p in portfolio if p['closed']]) * picks[0][2]) if picks else 0
+                (len([p for p in portfolio if p['closed']]) * (picks[0][2] if picks and picks[0][2] is not None else 1)) if picks else 0
             )
             summary = {
                 'total_closed_trades': len([p for p in portfolio if p['closed']]),
@@ -613,7 +631,6 @@ def backtest(
                 'trade_log': trade_log,
                 'equity_curve': equity_curve
             }
-            # Write results to output file
             output.parent.mkdir(parents=True, exist_ok=True)
             with open(output, 'w') as f:
                 json.dump(summary, f, default=str, indent=2)
