@@ -8,6 +8,7 @@ import pandas as pd
 import json
 import tempfile
 import os
+from PIL import Image as PILImage
 
 from trading_advisor.cli import app
 
@@ -321,29 +322,30 @@ def test_chart_command(
     mock_create_stock_chart,
     mock_create_score_breakdown
 ):
+    def mock_create_stock_chart_side_effect(df, ticker, indicators, output_dir, return_fig=False):
+        return f"output/charts/{ticker}_chart.html", MagicMock()
+    
+    def mock_create_score_breakdown_side_effect(ticker, score, indicators, output_dir, return_fig=False):
+        return f"output/charts/{ticker}_score.html", MagicMock()
+    
+    mock_create_stock_chart.side_effect = mock_create_stock_chart_side_effect
+    mock_create_score_breakdown.side_effect = mock_create_score_breakdown_side_effect
     mock_analyze_stock.return_value = (7.0, {"rsi": 2.0, "bb": 1.5, "macd": 2.0, "ma": 1.0, "volume": 0.5}, None)
-    result = runner.invoke(app, ["chart", "AAPL"])
+    result = runner.invoke(app, ["chart", "AAPL", "MSFT"])
     if result.exit_code != 0:
         print("STDOUT:", result.stdout)
     assert result.exit_code == 0
-    # Check that functions were called with correct arguments
-    mock_download_stock_data.assert_called_once_with("AAPL", history_days=100)
-    mock_analyze_stock.assert_called_once()
-    mock_create_stock_chart.assert_called_once()
-    stock_chart_args = mock_create_stock_chart.call_args[1]  # keyword args
-    assert 'df' in stock_chart_args
-    assert 'ticker' in stock_chart_args
-    assert 'indicators' in stock_chart_args
-    assert 'output_dir' in stock_chart_args
-    mock_create_score_breakdown.assert_called_once()
-    score_breakdown_args = mock_create_score_breakdown.call_args[1]  # keyword args
-    assert 'ticker' in score_breakdown_args
-    assert 'score' in score_breakdown_args
-    assert 'indicators' in score_breakdown_args
-    assert 'output_dir' in score_breakdown_args
-    assert "Charts generated successfully" in result.stdout
+    # Check that functions were called with correct arguments for each ticker
+    assert mock_download_stock_data.call_count == 2
+    mock_download_stock_data.assert_any_call("AAPL", history_days=100)
+    mock_download_stock_data.assert_any_call("MSFT", history_days=100)
+    assert mock_analyze_stock.call_count == 2
+    assert mock_create_stock_chart.call_count == 2
+    assert mock_create_score_breakdown.call_count == 2
+    assert "Charts generated for AAPL" in result.stdout
+    assert "Charts generated for MSFT" in result.stdout
     assert "output/charts/AAPL_chart.html" in result.stdout
-    assert "output/charts/AAPL_score.html" in result.stdout
+    assert "output/charts/MSFT_chart.html" in result.stdout
 
 @patch('trading_advisor.cli.load_positions', return_value={"AAPL": {"quantity": 100}})
 def test_chart_command_custom_days(
@@ -353,18 +355,24 @@ def test_chart_command_custom_days(
     mock_create_stock_chart,
     mock_create_score_breakdown
 ):
+    def mock_create_stock_chart_side_effect(df, ticker, indicators, output_dir, return_fig=False):
+        return f"output/charts/{ticker}_chart.html", MagicMock()
+    
+    def mock_create_score_breakdown_side_effect(ticker, score, indicators, output_dir, return_fig=False):
+        return f"output/charts/{ticker}_score.html", MagicMock()
+    
+    mock_create_stock_chart.side_effect = mock_create_stock_chart_side_effect
+    mock_create_score_breakdown.side_effect = mock_create_score_breakdown_side_effect
     mock_analyze_stock.return_value = (7.0, {"rsi": 2.0, "bb": 1.5, "macd": 2.0, "ma": 1.0, "volume": 0.5}, None)
-    result = runner.invoke(app, ["chart", "AAPL", "--days", "50"])
+    result = runner.invoke(app, ["chart", "AAPL", "MSFT", "--days", "50"])
     if result.exit_code != 0:
         print("STDOUT:", result.stdout)
     assert result.exit_code == 0
-    mock_download_stock_data.assert_called_once_with("AAPL", history_days=50)
-    mock_create_stock_chart.assert_called_once()
-    stock_chart_args = mock_create_stock_chart.call_args[1]  # keyword args
-    assert 'df' in stock_chart_args
-    assert 'ticker' in stock_chart_args
-    assert 'indicators' in stock_chart_args
-    assert 'output_dir' in stock_chart_args
+    assert mock_download_stock_data.call_count == 2
+    mock_download_stock_data.assert_any_call("AAPL", history_days=50)
+    mock_download_stock_data.assert_any_call("MSFT", history_days=50)
+    assert mock_create_stock_chart.call_count == 2
+    assert mock_create_score_breakdown.call_count == 2
 
 @patch('trading_advisor.cli.load_positions', return_value={"AAPL": {"quantity": 100}})
 def test_chart_command_custom_output_dir(
@@ -374,13 +382,21 @@ def test_chart_command_custom_output_dir(
     mock_create_stock_chart,
     mock_create_score_breakdown
 ):
+    def mock_create_stock_chart_side_effect(df, ticker, indicators, output_dir, return_fig=False):
+        return f"{output_dir}/{ticker}_chart.html", MagicMock()
+    
+    def mock_create_score_breakdown_side_effect(ticker, score, indicators, output_dir, return_fig=False):
+        return f"{output_dir}/{ticker}_score.html", MagicMock()
+    
+    mock_create_stock_chart.side_effect = mock_create_stock_chart_side_effect
+    mock_create_score_breakdown.side_effect = mock_create_score_breakdown_side_effect
     mock_analyze_stock.return_value = (7.0, {"rsi": 2.0, "bb": 1.5, "macd": 2.0, "ma": 1.0, "volume": 0.5}, None)
-    result = runner.invoke(app, ["chart", "AAPL", "--output-dir", "custom/charts"])
+    result = runner.invoke(app, ["chart", "AAPL", "MSFT", "--output-dir", "custom/charts"])
     if result.exit_code != 0:
         print("STDOUT:", result.stdout)
     assert result.exit_code == 0
-    mock_create_stock_chart.assert_called_once()
-    mock_create_score_breakdown.assert_called_once()
+    assert mock_create_stock_chart.call_count == 2
+    assert mock_create_score_breakdown.call_count == 2
     stock_chart_args = mock_create_stock_chart.call_args[1]  # keyword args
     score_breakdown_args = mock_create_score_breakdown.call_args[1]  # keyword args
     assert 'df' in stock_chart_args
@@ -391,6 +407,43 @@ def test_chart_command_custom_output_dir(
     assert 'score' in score_breakdown_args
     assert 'indicators' in score_breakdown_args
     assert score_breakdown_args['output_dir'] == Path("custom/charts")
+
+@patch('trading_advisor.cli.load_positions', return_value={"AAPL": {"quantity": 100}})
+def test_chart_command_pdf(
+    mock_load_positions,
+    mock_download_stock_data,
+    mock_analyze_stock,
+    mock_create_stock_chart,
+    mock_create_score_breakdown
+):
+    def make_mock_fig(png_path):
+        fig = MagicMock()
+        def write_image(path, format=None, scale=None):
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            # Write a real 1x1 PNG
+            img = PILImage.new("RGB", (1, 1), color=(255, 255, 255))
+            img.save(path, format="PNG")
+        fig.write_image.side_effect = write_image
+        fig.update_layout.return_value = None
+        return fig
+    def mock_create_stock_chart_side_effect(df, ticker, indicators, output_dir, return_fig=False):
+        html_path = f"output/charts/{ticker}_chart.html"
+        png_path = f"output/charts/{ticker}_chart.png"
+        return html_path, make_mock_fig(png_path)
+    def mock_create_score_breakdown_side_effect(ticker, score, indicators, output_dir, return_fig=False):
+        html_path = f"output/charts/{ticker}_score.html"
+        png_path = f"output/charts/{ticker}_score.png"
+        return html_path, make_mock_fig(png_path)
+    mock_create_stock_chart.side_effect = mock_create_stock_chart_side_effect
+    mock_create_score_breakdown.side_effect = mock_create_score_breakdown_side_effect
+    mock_analyze_stock.return_value = (7.0, {"rsi": 2.0, "bb": 1.5, "macd": 2.0, "ma": 1.0, "volume": 0.5}, None)
+    result = runner.invoke(app, ["chart", "AAPL", "MSFT", "--pdf"])
+    if result.exit_code != 0:
+        print("STDOUT:", result.stdout)
+    assert result.exit_code == 0
+    assert mock_create_stock_chart.call_count == 2
+    assert mock_create_score_breakdown.call_count == 2
+    assert "PDF exported: output/charts/charts.pdf" in result.stdout
 
 def test_prompt_command():
     """Test the prompt command."""
