@@ -25,6 +25,7 @@ from trading_advisor.output import generate_report, generate_structured_data, ge
 from trading_advisor.config import SCORE_WEIGHTS
 from trading_advisor.visualization import create_stock_chart, create_score_breakdown, create_combined_visualization
 from trading_advisor.backtest import run_backtest
+from trading_advisor.bulk_analysis import get_bulk_score_histories
 
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
@@ -640,6 +641,37 @@ def backtest(
     except Exception as e:
         typer.echo(f"Error during backtest: {str(e)}", err=True)
         raise typer.Exit(1)
+
+@app.command()
+def bulk_features(
+    tickers: str = typer.Option(..., '--tickers', '-t', help="Comma-separated tickers, path to file, or 'all' for S&P 500"),
+    start_date: str = typer.Option(..., '--start-date', help="Start date (YYYY-MM-DD)"),
+    end_date: str = typer.Option(..., '--end-date', help="End date (YYYY-MM-DD)"),
+    features_dir: str = typer.Option('features', '--features-dir', help="Directory to save features parquet files")
+):
+    """Generate and cache technical indicator + score features for many tickers.
+    Usage:
+      trading-advisor bulk-features --tickers all --start-date 2022-01-01 --end-date 2023-01-01
+      trading-advisor bulk-features --tickers tickers.txt --start-date ... --end-date ...
+      trading-advisor bulk-features --tickers AAPL,MSFT,GOOG --start-date ... --end-date ...
+    """
+    import pandas as pd
+    from trading_advisor.bulk_analysis import get_bulk_score_histories
+    from trading_advisor.data import load_tickers
+    import os
+    # Parse tickers
+    if tickers == 'all':
+        ticker_list = load_tickers('all')
+    elif os.path.isfile(tickers):
+        with open(tickers) as f:
+            ticker_list = [line.strip() for line in f if line.strip()]
+    else:
+        ticker_list = [t.strip() for t in tickers.split(',') if t.strip()]
+    typer.echo(f"Processing {len(ticker_list)} tickers from {start_date} to {end_date}...")
+    features = get_bulk_score_histories(ticker_list, start_date, end_date, features_dir=features_dir)
+    typer.echo(f"Done. Processed {len(features)} tickers.")
+    for ticker, df in features.items():
+        typer.echo(f"{ticker}: {len(df)} rows")
 
 def run():
     """Run the CLI application."""
