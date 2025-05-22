@@ -512,24 +512,114 @@ def backtest(
     top_n: int = typer.Option(3, help="Number of top picks to buy each week"),
     hold_days: int = typer.Option(10, help="Max holding period in trading days"),
     stop_loss: float = typer.Option(-0.10, help="Stop-loss threshold (e.g., -0.10 for -10%)"),
-    profit_target: float = typer.Option(0.10, help="Profit target threshold (e.g., 0.10 for +10%)")
+    profit_target: float = typer.Option(0.10, help="Profit target threshold (e.g., 0.10 for +10%)"),
+    output: Path = typer.Option("output/backtest.json", "--output", "-o", help="Path to save the backtest results as JSON")
 ):
     """Backtest the strategy using weekly top-N selection and fixed holding period with stop/profit exits."""
+    import pandas as pd
+    import json
     try:
-        summary = run_backtest(
-            tickers=tickers,
-            start_date=start_date,
-            end_date=end_date,
-            top_n=top_n,
-            hold_days=hold_days,
-            stop_loss=stop_loss,
-            profit_target=profit_target
-        )
-        typer.echo(f"Backtest complete. Total closed trades: {summary['total_closed_trades']}")
-        typer.echo(f"Total return: {summary['total_return']*100:.2f}%")
-        typer.echo("Trade log:")
-        for trade in summary['trade_log']:
-            typer.echo(str(trade))
+        # Calculate week_starts for progress bar
+        start_dt = pd.to_datetime(start_date)
+        end_dt = pd.to_datetime(end_date)
+        all_dates = pd.date_range(start=start_dt, end=end_dt, freq='B')
+        week_starts = all_dates[all_dates.weekday == 0]  # Mondays
+        if len(week_starts) == 0 or week_starts[0] > start_dt:
+            week_starts = all_dates[all_dates.weekday == 0 | (all_dates == start_dt)]
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
+            task = progress.add_task("Running backtest...", total=len(week_starts))
+            trade_log = []
+            equity_curve = []
+            portfolio = []
+            cash = 100000.0
+            equity = cash
+            picks = []
+            for week_idx, week_start in enumerate(week_starts):
+                week_str = week_start.strftime('%Y-%m-%d')
+                scores = []
+                for ticker in tickers:
+                    df = download_stock_data(ticker, end_date=week_start)
+                    df = df[df.index <= week_start]
+                    if len(df) < 50:
+                        continue
+                    df = calculate_technical_indicators(df)
+                    scored = calculate_score_history(df)
+                    if scored.empty:
+                        continue
+                    last_row = scored.iloc[-1]
+                    scores.append((ticker, last_row['score'], last_row['Close']))
+                scores = sorted(scores, key=lambda x: x[1], reverse=True)
+                picks = scores[:top_n]
+                for ticker, score, price in picks:
+                    if any(p['ticker'] == ticker and not p['closed'] for p in portfolio):
+                        continue
+                    position = {
+                        'ticker': ticker,
+                        'entry_date': week_start,
+                        'entry_price': price,
+                        'max_price': price,
+                        'min_price': price,
+                        'holding_days': 0,
+                        'closed': False,
+                        'exit_date': None,
+                        'exit_price': None,
+                        'exit_reason': None
+                    }
+                    portfolio.append(position)
+                for pos in portfolio:
+                    if pos['closed']:
+                        continue
+                    df = download_stock_data(pos['ticker'], end_date=week_start + pd.Timedelta(days=hold_days*2))
+                    df = df[(df.index > pos['entry_date']) & (df.index <= pos['entry_date'] + pd.Timedelta(days=hold_days*2))]
+                    for i, (date, row) in enumerate(df.iterrows()):
+                        price = row['Close']
+                        pos['max_price'] = max(pos['max_price'], price)
+                        pos['min_price'] = min(pos['min_price'], price)
+                        ret = (price - pos['entry_price']) / pos['entry_price']
+                        pos['holding_days'] += 1
+                        if ret <= stop_loss:
+                            pos['closed'] = True
+                            pos['exit_date'] = date
+                            pos['exit_price'] = price
+                            pos['exit_reason'] = 'stop_loss'
+                            trade_log.append({**pos})
+                            break
+                        elif ret >= profit_target:
+                            pos['closed'] = True
+                            pos['exit_date'] = date
+                            pos['exit_price'] = price
+                            pos['exit_reason'] = 'profit_target'
+                            trade_log.append({**pos})
+                            break
+                        elif pos['holding_days'] >= hold_days:
+                            pos['closed'] = True
+                            pos['exit_date'] = date
+                            pos['exit_price'] = price
+                            pos['exit_reason'] = 'max_hold'
+                            trade_log.append({**pos})
+                            break
+                open_equity = sum(
+                    (p['exit_price'] if p['closed'] else p['entry_price']) for p in portfolio if p['entry_date'] <= week_start
+                )
+                equity_curve.append({'date': week_start, 'equity': open_equity})
+                progress.update(task, advance=1)
+            total_return = (
+                sum(p['exit_price'] - p['entry_price'] for p in portfolio if p['closed']) /
+                (len([p for p in portfolio if p['closed']]) * picks[0][2]) if picks else 0
+            )
+            summary = {
+                'total_closed_trades': len([p for p in portfolio if p['closed']]),
+                'total_return': total_return,
+                'trade_log': trade_log,
+                'equity_curve': equity_curve
+            }
+            # Write results to output file
+            output.parent.mkdir(parents=True, exist_ok=True)
+            with open(output, 'w') as f:
+                json.dump(summary, f, default=str, indent=2)
+            typer.echo(f"Backtest complete. Total closed trades: {summary['total_closed_trades']}")
+            typer.echo(f"Total return: {summary['total_return']*100:.2f}%")
+            typer.echo(f"Results written to {output}")
     except Exception as e:
         typer.echo(f"Error during backtest: {str(e)}", err=True)
         raise typer.Exit(1)
