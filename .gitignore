@@ -38,4 +38,10 @@ trading-advisor/
 # Project specific
 data/
 *.csv
+*.log
+
+# Ignore all output files and folders
+yarn-error.log
+output/
+logs/
 *.log 
