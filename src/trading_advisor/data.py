@@ -77,91 +77,74 @@ def normalize_ticker(ticker: str) -> str:
         return ticker.replace('.B', '-B')
     return ticker
 
-def download_stock_data(ticker: str, history_days: int = LOOKBACK_DAYS, max_retries: int = 3) -> pd.DataFrame:
-    """Download stock data for a ticker, only getting new data if available."""
-    # Normalize ticker format
+def download_stock_data(ticker: str, history_days: int = LOOKBACK_DAYS, max_retries: int = 3, end_date: datetime = None) -> pd.DataFrame:
+    """Download stock data for a ticker, only getting new data if available. Optionally specify end_date."""
+    logger.propagate = True  # Ensure logs propagate to root logger
+    logger.info(f"[LOG TEST] download_stock_data called for {ticker}")
     normalized_ticker = normalize_ticker(ticker)
-    file_path = DATA_DIR / f"{ticker}.csv"  # Keep original ticker for filename
-    end_date = get_current_date()
-    
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    file_path = DATA_DIR / f"{ticker}.csv"
+    if end_date is None:
+        end_date = get_current_date()
     # If we have existing data, read it first
     if file_path.exists():
         if not is_csv_format_valid(file_path):
             logger.error(f"The file {file_path} is not in the expected format. Please delete or fix it before running the script.")
             sys.exit(1)
-            
         try:
-            # Read existing data and filter out future dates
+            logger.info(f"Loading existing data for {ticker} from {file_path}")
             df = read_csv_with_dates(file_path, end_date)
             if not df.empty:
                 latest_date = df.index[-1].date()
-                # If we already have data up to yesterday, just return it
                 if latest_date >= end_date.date():
+                    logger.info(f"Returning cached data for {ticker} (up to {latest_date})")
                     return df
-                
-                # Otherwise, start from the day after our latest data
                 start_date = datetime.combine(latest_date, datetime.min.time())
             else:
-                # If no valid data, start from history_days ago
                 start_date = end_date - timedelta(days=history_days)
         except Exception as e:
             logger.error(f"Error reading existing data for {ticker}: {e}")
-            # If there's an error reading existing data, start fresh
             start_date = end_date - timedelta(days=history_days)
     else:
-        # If no existing data, start from history_days ago
         start_date = end_date - timedelta(days=history_days)
-    
-    # Ensure we're not trying to download future data
     if start_date.date() > end_date.date():
         return read_csv_with_dates(file_path, end_date) if file_path.exists() else pd.DataFrame()
-    
     for attempt in range(max_retries):
         try:
-            # Download new data using cached Ticker object
+            logger.info(f"Attempting to download data for {ticker} (attempt {attempt+1}) from {start_date.date()} to {end_date.date()}")
             ticker_obj = get_yf_ticker(normalized_ticker)
             df = ticker_obj.history(
                 start=start_date,
                 end=end_date,
                 auto_adjust=True
             )
-            
-            if len(df) > 0:  # Check if DataFrame has any rows
-                # Ensure index is datetime and remove timezone info
+            if len(df) > 0:
                 df.index = pd.to_datetime(df.index).tz_localize(None)
-                
-                # Filter out any future dates
                 df = df[df.index.date <= end_date.date()]
-                
                 if file_path.exists():
                     try:
-                        # Read existing data
                         existing_df = read_csv_with_dates(file_path, end_date)
-                        
-                        # Combine data
                         df = pd.concat([existing_df, df])
                         df = df[~df.index.duplicated(keep='last')]
                         df = df.sort_index()
                     except Exception as e:
                         logger.error(f"Error processing existing data for {ticker}: {e}")
-                        # If there's an error with existing data, just use the new data
                         pass
-                
                 try:
-                    # Save to CSV with explicit date format
                     df.to_csv(file_path, date_format='%Y-%m-%d')
+                    logger.info(f"Saved data for {ticker} to {file_path} ({len(df)} rows)")
                     return df
                 except Exception as e:
                     logger.error(f"Error saving data for {ticker}: {e}")
-                    return df  # Return the DataFrame even if saving fails
-                
-            time.sleep(2)  # Increased delay between attempts
+                    return df
+            else:
+                logger.warning(f"No data returned for {ticker} from yfinance.")
+            time.sleep(2)
         except Exception as e:
             if attempt == max_retries - 1:
                 logger.error(f"Failed to download {ticker} after {max_retries} attempts: {e}")
-            time.sleep(2 ** (attempt + 1))  # Exponential backoff with longer initial delay
-    
-    # If all attempts failed, try to return existing data
+            time.sleep(2 ** (attempt + 1))
+    logger.warning(f"All download attempts failed for {ticker}. Returning existing data if available.")
     return read_csv_with_dates(file_path, end_date) if file_path.exists() else pd.DataFrame()
 
 def parse_brokerage_csv(file_path: Path) -> Dict[str, Dict]:

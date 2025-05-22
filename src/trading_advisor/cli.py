@@ -8,28 +8,44 @@ import json
 from datetime import datetime
 import pandas as pd
 import os
+from logging.handlers import RotatingFileHandler
+from rich.logging import RichHandler
 
 import typer
 from rich.console import Console
-from rich.logging import RichHandler
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 import plotly.io as pio
 from fpdf import FPDF
 from PIL import Image
 
 from trading_advisor import __version__
-from trading_advisor.analysis import analyze_stock, calculate_technical_indicators, calculate_score_history
+from trading_advisor.analysis import analyze_stock, calculate_technical_indicators, calculate_score_history, calculate_score
 from trading_advisor.data import download_stock_data, ensure_data_dir, load_positions, load_tickers
 from trading_advisor.output import generate_report, generate_structured_data, generate_technical_summary, save_json_report, generate_research_prompt, generate_deep_research_prompt
 from trading_advisor.config import SCORE_WEIGHTS
 from trading_advisor.visualization import create_stock_chart, create_score_breakdown, create_combined_visualization
+from trading_advisor.backtest import run_backtest
+
+# Ensure logs directory exists
+os.makedirs("logs", exist_ok=True)
+
+# File handler with rotation
+file_handler = RotatingFileHandler(
+    "logs/trading_advisor.log",
+    maxBytes=10 * 1024 * 1024,  # 10MB
+    backupCount=5
+)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+
+# Terminal handler (RichHandler for pretty output)
+console_handler = RichHandler(rich_tracebacks=True)
+console_handler.setLevel(logging.WARNING)
 
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format="%(message)s",
-    datefmt="[%X]",
-    handlers=[RichHandler(rich_tracebacks=True)]
+    handlers=[console_handler, file_handler]
 )
 
 logger = logging.getLogger("trading_advisor")
@@ -290,8 +306,8 @@ def chart(
                     df = download_stock_data(ticker, history_days=history_days)
                 else:
                     df = download_stock_data(ticker, history_days=history_days)
-                    score, score_details, analyst_targets = analyze_stock(ticker, df)
-
+                score, score_details, analyst_targets = analyze_stock(ticker, df)
+                
                 # After downloading stock data, calculate technical indicators
                 df = calculate_technical_indicators(df)
 
@@ -499,109 +515,24 @@ def backtest(
     profit_target: float = typer.Option(0.10, help="Profit target threshold (e.g., 0.10 for +10%)")
 ):
     """Backtest the strategy using weekly top-N selection and fixed holding period with stop/profit exits."""
-    import numpy as np
-    import pandas as pd
-    from datetime import datetime, timedelta
-    from trading_advisor.analysis import calculate_technical_indicators, calculate_score_history
-    from trading_advisor.data import download_stock_data
-
-    # Prepare date range
-    start_dt = pd.to_datetime(start_date)
-    end_dt = pd.to_datetime(end_date)
-    all_dates = pd.date_range(start=start_dt, end=end_dt, freq='B')
-    week_starts = all_dates[all_dates.weekday == 0]  # Mondays
-    if len(week_starts) == 0 or week_starts[0] > start_dt:
-        week_starts = all_dates[all_dates.weekday == 0 | (all_dates == start_dt)]
-
-    trade_log = []
-    equity_curve = []
-    portfolio = []  # List of open positions: dicts with ticker, entry_date, entry_price, etc.
-    cash = 100000.0  # Start with $100k
-    equity = cash
-    for week_start in week_starts:
-        week_str = week_start.strftime('%Y-%m-%d')
-        # 1. For each ticker, get data up to this week
-        scores = []
-        for ticker in tickers:
-            df = download_stock_data(ticker)
-            df = df[df.index <= week_start]
-            if len(df) < 50:
-                continue
-            df = calculate_technical_indicators(df)
-            scored = calculate_score_history(df)
-            if scored.empty:
-                continue
-            last_row = scored.iloc[-1]
-            scores.append((ticker, last_row['score'], last_row['Close']))
-        # 2. Select top N
-        scores = sorted(scores, key=lambda x: x[1], reverse=True)
-        picks = scores[:top_n]
-        # 3. Simulate buying each pick (if not already held)
-        for ticker, score, price in picks:
-            if any(p['ticker'] == ticker and not p['closed'] for p in portfolio):
-                continue  # Already held
-            position = {
-                'ticker': ticker,
-                'entry_date': week_start,
-                'entry_price': price,
-                'max_price': price,
-                'min_price': price,
-                'holding_days': 0,
-                'closed': False,
-                'exit_date': None,
-                'exit_price': None,
-                'exit_reason': None
-            }
-            portfolio.append(position)
-        # 4. Update open positions
-        for pos in portfolio:
-            if pos['closed']:
-                continue
-            df = download_stock_data(pos['ticker'])
-            df = df[(df.index > pos['entry_date']) & (df.index <= pos['entry_date'] + pd.Timedelta(days=hold_days*2))]
-            for i, (date, row) in enumerate(df.iterrows()):
-                price = row['Close']
-                pos['max_price'] = max(pos['max_price'], price)
-                pos['min_price'] = min(pos['min_price'], price)
-                ret = (price - pos['entry_price']) / pos['entry_price']
-                pos['holding_days'] += 1
-                if ret <= stop_loss:
-                    pos['closed'] = True
-                    pos['exit_date'] = date
-                    pos['exit_price'] = price
-                    pos['exit_reason'] = 'stop_loss'
-                    trade_log.append({**pos})
-                    break
-                elif ret >= profit_target:
-                    pos['closed'] = True
-                    pos['exit_date'] = date
-                    pos['exit_price'] = price
-                    pos['exit_reason'] = 'profit_target'
-                    trade_log.append({**pos})
-                    break
-                elif pos['holding_days'] >= hold_days:
-                    pos['closed'] = True
-                    pos['exit_date'] = date
-                    pos['exit_price'] = price
-                    pos['exit_reason'] = 'max_hold'
-                    trade_log.append({**pos})
-                    break
-        # 5. Update equity
-        open_equity = sum(
-            (p['exit_price'] if p['closed'] else p['entry_price']) for p in portfolio if p['entry_date'] <= week_start
+    try:
+        summary = run_backtest(
+            tickers=tickers,
+            start_date=start_date,
+            end_date=end_date,
+            top_n=top_n,
+            hold_days=hold_days,
+            stop_loss=stop_loss,
+            profit_target=profit_target
         )
-        equity_curve.append({'date': week_start, 'equity': open_equity})
-    # Output summary
-    total_return = (
-        sum(p['exit_price'] - p['entry_price'] for p in portfolio if p['closed']) /
-        (len([p for p in portfolio if p['closed']]) * picks[0][2]) if picks else 0
-    )
-    typer.echo(f"Backtest complete. Total closed trades: {len([p for p in portfolio if p['closed']])}")
-    typer.echo(f"Total return: {total_return*100:.2f}%")
-    typer.echo("Trade log:")
-    for trade in trade_log:
-        typer.echo(trade)
-    # (Plotting and more stats can be added later)
+        typer.echo(f"Backtest complete. Total closed trades: {summary['total_closed_trades']}")
+        typer.echo(f"Total return: {summary['total_return']*100:.2f}%")
+        typer.echo("Trade log:")
+        for trade in summary['trade_log']:
+            typer.echo(str(trade))
+    except Exception as e:
+        typer.echo(f"Error during backtest: {str(e)}", err=True)
+        raise typer.Exit(1)
 
 def run():
     """Run the CLI application."""
