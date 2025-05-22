@@ -61,11 +61,11 @@ trading-advisor analyze --tickers tickers.txt --positions positions.csv
 ```
 
 Options:
-- `--tickers`, `-t`: Path to a file containing ticker symbols (required)
+- `--tickers`, `-t`: Path to a file containing ticker symbols (required unless --positions-only)
 - `--positions`, `-p`: Path to a CSV file containing positions (optional)
 - `--positions-only`: Analyze only positions (optional)
 - `--output`, `-o`: Path to the output JSON file (default: `output/analysis.json`)
-- `--history-days`, `-d`: Number of days of historical data to analyze (default: 100)
+- `--days`, `-d`: Number of days of historical data to analyze (default: 100)
 
 ### Generate Report
 
@@ -80,12 +80,15 @@ Options:
 ### Generate Interactive Charts
 
 ```bash
-trading-advisor chart AAPL --output-dir output/charts --days 100
+trading-advisor chart AAPL MSFT --output-dir output/charts --days 100
 ```
 
 Options:
+- `TICKER ...`: One or more stock ticker symbols (e.g., AAPL MSFT)
 - `--output-dir`, `-o`: Directory to save the charts (default: `output/charts`)
 - `--days`, `-d`: Number of days of historical data to include (default: 100)
+- `--pdf`: Export charts as images and combine into a single PDF (optional)
+- `--json`, `-j`: Path to analysis JSON file (optional, for charting analyzed tickers)
 
 ### Generate Research Prompt
 
@@ -99,119 +102,45 @@ Options:
 - `--deep-research`: Generate a deep research prompt with tactical swing trading format (optional)
 - `--top-n`: Number of highest-scoring new picks to include in the prompt (default: 6)
 
-The prompt command generates a ChatGPT-ready prompt for research analysis. When using the `--deep-research` flag, it creates a more detailed prompt that includes:
-- Tactical swing trading instructions
-- Integration of technical summaries, analyst targets, market context, and sentiment
-- Specific bullet format for responses (action, entry strategy, stop-loss, profit-taking, confidence, rationale)
-- Current positions with technical summaries
-- New technical picks with technical summaries (limited to top N by score)
+### Backtest Strategy
 
-Example deep research prompt format:
-```
-You are a tactical swing trader and market strategist evaluating a technical scan and open positions...
-
-Return your response in this exact bullet format for each stock:
-✅ Action (e.g. Buy Now, Hold, Adjust)
-🎯 Entry strategy (limit or breakout entry, price conditions, timing)
-🛑 Stop-loss level (specific price or %)
-💰 Profit-taking strategy (target price, resistance level, or trailing stop)
-🔍 Confidence level (High / Medium / Low)
-🧠 Rationale (1–2 lines)
+```bash
+trading-advisor backtest AAPL MSFT --start-date 2024-01-01 --end-date 2024-02-01 --top-n 2 --hold-days 5 --stop-loss -0.05 --profit-target 0.05
 ```
 
-### JSON Output Structure
+Options:
+- `TICKER ...`: One or more stock ticker symbols to backtest (e.g., AAPL MSFT)
+- `--start-date`: Backtest start date (YYYY-MM-DD, required)
+- `--end-date`: Backtest end date (YYYY-MM-DD, required)
+- `--top-n`: Number of top picks to buy each week (default: 3)
+- `--hold-days`: Max holding period in trading days (default: 10)
+- `--stop-loss`: Stop-loss threshold (e.g., -0.10 for -10%, default: -0.10)
+- `--profit-target`: Profit target threshold (e.g., 0.10 for +10%, default: 0.10)
 
-The `analyze` command outputs a JSON file with the following structure:
+The backtest command simulates a weekly top-N strategy with fixed holding periods and stop/profit exits, reporting total return and trade log.
 
-```json
-{
-  "timestamp": "2023-10-01T12:00:00",
-  "positions": [
-    {
-      "ticker": "AAPL",
-      "score": {
-        "total": 8,
-        "details": {
-          "rsi": 70,
-          "macd": 1.5
-        }
-      },
-      "price_data": [
-        {
-          "Date": "2023-10-01",
-          "Open": 150.0,
-          "High": 155.0,
-          "Low": 148.0,
-          "Close": 152.0,
-          "Volume": 1000000
-        }
-      ]
-    }
-  ],
-  "new_picks": [
-    {
-      "ticker": "MSFT",
-      "score": {
-        "total": 6,
-        "details": {
-          "rsi": 60,
-          "macd": 0.5
-        }
-      },
-      "price_data": [
-        {
-          "Date": "2023-10-01",
-          "Open": 200.0,
-          "High": 205.0,
-          "Low": 198.0,
-          "Close": 202.0,
-          "Volume": 2000000
-        }
-      ]
-    }
-  ]
-}
-```
+---
 
-### Report Output
+## Logging
 
-The `report` command generates a markdown report with the following sections:
+Trading Advisor logs all activity to both the terminal and a log file:
 
-- **Current Positions**: Details for each position, including:
-  - A concise summary line combining technical indicators and position details
-  - Price and volume information
-  - Technical indicators (RSI, MACD, Bollinger Bands, Moving Averages)
-  - Analyst targets and technical score
-  - Actionable recommendations (action, entry strategy, stop-loss, profit-taking, confidence, rationale)
+- **Terminal:** Pretty, colorized logs using Rich for easy reading.
+- **File:** All logs are saved to `logs/trading_advisor.log` with automatic rotation (max 10MB per file, up to 5 backup files).
+- The `logs/` folder is created automatically if it does not exist.
 
-- **New Technical Picks**: Details for each new pick, including:
-  - A concise summary line combining technical indicators and price information
-  - Volume information
-  - Technical indicators (RSI, MACD, Bollinger Bands, Moving Averages)
-  - Analyst targets and technical score
-  - Actionable recommendations (action, entry strategy, stop-loss, profit-taking, confidence, rationale)
+This ensures you always have a persistent record of all analysis, errors, and activity for debugging or audit purposes.
 
-Example output format:
-```
-📊 $TSLA — Current Position
-💡 TSLA: Bullish MACD, RSI neutral, near upper band ($362.47), above 20d MA, volume spike 📈 Position: 7 shares @ $1983.80 | +21.3% | 6.8% of account
-Price: $343.82 (5d: +0.5%)
-📈 Volume: +47.3% vs prev day — unusual activity
-RSI: 68.4 — neutral
-MACD: Bullish (Hist: +5.87) 📈
-BB: Near upper band ($362.47)
-MA Trend: Bullish (20d) 📈
-Median analyst target: $296 → -14.5% upside (range: $115–$465)
-➡️ Technical Score: 4.5/10
-```
+---
 
-### Test Coverage
+## Test Coverage
 
-The CLI is now fully tested. See `tests/test_analyze_command.py` and `tests/test_report_command.py` for details.
+- The CLI is fully tested with robust coverage for all commands and error cases.
+- See `tests/test_cli.py` for comprehensive CLI tests, including analyze, chart, report, prompt, backtest, and error handling scenarios.
 
 ## Requirements
 
-- Python 3.8 or higher
+- Python 3.9 or higher
 - pandas >= 2.0.0
 - numpy >= 1.24.0
 - yfinance >= 0.2.36
