@@ -27,7 +27,6 @@ from trading_advisor.output import generate_report, generate_structured_data, ge
 from trading_advisor.config import SCORE_WEIGHTS
 from trading_advisor.visualization import create_stock_chart, create_score_breakdown, create_combined_visualization
 from trading_advisor.backtest import run_backtest
-from trading_advisor.bulk_analysis import get_bulk_score_histories
 
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
@@ -83,187 +82,6 @@ def main(
         # Show help menu if no arguments provided
         typer.echo(ctx.get_help())
         raise typer.Exit()
-
-@app.command()
-def analyze(
-    tickers: Optional[Path] = typer.Option(
-        None,
-        "--tickers", "-t",
-        help="Path to file containing ticker symbols (required unless --positions-only is specified)"
-    ),
-    positions: Optional[Path] = typer.Option(
-        None,
-        "--positions", "-p",
-        help="Path to positions CSV file"
-    ),
-    positions_only: bool = typer.Option(
-        False,
-        "--positions-only",
-        help="Only analyze positions, skip new picks"
-    ),
-    output: Path = typer.Option(
-        "output/analysis.json",
-        "--output", "-o",
-        help="Path to output JSON file"
-    ),
-    history_days: int = typer.Option(
-        100,
-        "--days", "-d",
-        help="Number of days of historical data to analyze (ignored if --start-date is provided)"
-    ),
-    start_date: Optional[str] = typer.Option(
-        None,
-        "--start-date",
-        help="Start date (YYYY-MM-DD) for historical data (overrides --days)"
-    ),
-    end_date: Optional[str] = typer.Option(
-        None,
-        "--end-date",
-        help="End date (YYYY-MM-DD) for historical data (default: today)"
-    )
-):
-    """Analyze stocks and output structured JSON data."""
-    try:
-        # Validate inputs
-        if not positions_only and not tickers:
-            typer.echo("Error: --tickers is required unless --positions-only is specified", err=True)
-            raise typer.Exit(1)
-        
-        # Validate positions file if specified
-        if positions:
-            if not positions.exists():
-                typer.echo(f"Error: Positions file '{positions}' does not exist.", err=True)
-                raise typer.Exit(1)
-        
-        # Create output directory if it doesn't exist
-        output.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Load tickers and positions
-        ticker_list = load_tickers(tickers) if tickers else []
-        positions_data = load_positions(positions) if positions else {}
-        
-        # If positions_only and no positions loaded, warn and exit
-        if positions_only and not positions_data:
-            typer.echo(f"Warning: No positions loaded from '{positions}'. Check the file path and format.", err=True)
-            raise typer.Exit(1)
-        
-        # Initialize results
-        results = {
-            "timestamp": datetime.now().isoformat(),
-            "positions": [],
-            "new_picks": []
-        }
-        
-        # Analyze positions with progress bar
-        if positions_data:
-            with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
-                task = progress.add_task("Analyzing positions...", total=len(positions_data))
-                for symbol, position in positions_data.items():
-                    ticker = symbol
-                    if end_date is not None:
-                        end_date_dt = pd.to_datetime(end_date)
-                    else:
-                        end_date_dt = pd.to_datetime('today')
-                    if start_date is not None:
-                        start_date_dt = pd.to_datetime(start_date)
-                    else:
-                        start_date_dt = end_date_dt - pd.Timedelta(days=history_days)
-                    df = download_stock_data(ticker, start_date=start_date_dt, end_date=end_date_dt)
-                    score, score_details, analyst_targets = analyze_stock(ticker, df)
-                    
-                    # Generate structured data for position
-                    position_data = generate_structured_data(
-                        ticker,
-                        df,
-                        score,
-                        score_details,
-                        analyst_targets,
-                        position=position
-                    )
-                    results["positions"].append(position_data)
-                    progress.update(task, advance=1)
-        else:
-            for symbol, position in positions_data.items():
-                ticker = symbol
-                if end_date is not None:
-                    end_date_dt = pd.to_datetime(end_date)
-                else:
-                    end_date_dt = pd.to_datetime('today')
-                if start_date is not None:
-                    start_date_dt = pd.to_datetime(start_date)
-                else:
-                    start_date_dt = end_date_dt - pd.Timedelta(days=history_days)
-                df = download_stock_data(ticker, start_date=start_date_dt, end_date=end_date_dt)
-                score, score_details, analyst_targets = analyze_stock(ticker, df)
-                position_data = generate_structured_data(
-                    ticker,
-                    df,
-                    score,
-                    score_details,
-                    analyst_targets,
-                    position=position
-                )
-                results["positions"].append(position_data)
-        
-        # Analyze new picks with progress bar
-        new_picks = [ticker for ticker in ticker_list if not any(p["ticker"] == ticker for p in results["positions"])]
-        if not positions_only and new_picks:
-            with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
-                task = progress.add_task("Analyzing new picks...", total=len(new_picks))
-                for ticker in new_picks:
-                    if end_date is not None:
-                        end_date_dt = pd.to_datetime(end_date)
-                    else:
-                        end_date_dt = pd.to_datetime('today')
-                    if start_date is not None:
-                        start_date_dt = pd.to_datetime(start_date)
-                    else:
-                        start_date_dt = end_date_dt - pd.Timedelta(days=history_days)
-                    df = download_stock_data(ticker, start_date=start_date_dt, end_date=end_date_dt)
-                    score, score_details, analyst_targets = analyze_stock(ticker, df)
-                    pick_data = generate_structured_data(
-                        ticker,
-                        df,
-                        score,
-                        score_details,
-                        analyst_targets
-                    )
-                    results["new_picks"].append(pick_data)
-                    progress.update(task, advance=1)
-        elif not positions_only:
-            for ticker in new_picks:
-                if end_date is not None:
-                    end_date_dt = pd.to_datetime(end_date)
-                else:
-                    end_date_dt = pd.to_datetime('today')
-                if start_date is not None:
-                    start_date_dt = pd.to_datetime(start_date)
-                else:
-                    start_date_dt = end_date_dt - pd.Timedelta(days=history_days)
-                df = download_stock_data(ticker, start_date=start_date_dt, end_date=end_date_dt)
-                score, score_details, analyst_targets = analyze_stock(ticker, df)
-                pick_data = generate_structured_data(
-                    ticker,
-                    df,
-                    score,
-                    score_details,
-                    analyst_targets
-                )
-                results["new_picks"].append(pick_data)
-        
-        # Sort positions and new_picks by score['total'] descending
-        results['positions'].sort(key=lambda x: x.get('score', {}).get('total', 0), reverse=True)
-        results['new_picks'].sort(key=lambda x: x.get('score', {}).get('total', 0), reverse=True)
-        # Write results to JSON file
-        with open(output, "w") as f:
-            json.dump(to_serializable(results), f, indent=2)
-            
-        typer.echo(f"Analysis complete. Results written to {output}")
-        
-    except Exception as e:
-        print(f"DEBUG ERROR: {e}")
-        typer.echo(f"Error during analysis: {str(e)}", err=True)
-        raise typer.Exit(1)
 
 @app.command()
 def chart(
@@ -565,174 +383,6 @@ def prompt(
         raise typer.Exit(1)
 
 @app.command()
-def backtest(
-    tickers: list[str] = typer.Argument(..., help="Stock ticker symbols (can specify multiple)"),
-    start_date: str = typer.Option(..., help="Backtest start date (YYYY-MM-DD)"),
-    end_date: str = typer.Option(..., help="Backtest end date (YYYY-MM-DD)"),
-    top_n: int = typer.Option(3, help="Number of top picks to buy each week"),
-    hold_days: int = typer.Option(10, help="Max holding period in trading days"),
-    stop_loss: float = typer.Option(-0.10, help="Stop-loss threshold (e.g., -0.10 for -10%)"),
-    profit_target: float = typer.Option(0.10, help="Profit target threshold (e.g., 0.10 for +10%)"),
-    output: Path = typer.Option("output/backtest.json", "--output", "-o", help="Path to save the backtest results as JSON"),
-    picks_file: Path = typer.Option(None, "--picks-file", help="Optional JSON file mapping week (YYYY-MM-DD) to list of tickers to buy. Overrides scoring logic for those weeks.")
-):
-    """Backtest the strategy using weekly top-N selection and fixed holding period with stop/profit exits.
-    If --picks-file is provided, use those picks for each week (format: {"YYYY-MM-DD": ["AAPL", "MSFT", ...], ...})."""
-    import pandas as pd
-    import json
-    try:
-        # Load picks file if provided
-        picks_by_week = None
-        if picks_file is not None:
-            with open(picks_file, 'r') as f:
-                picks_by_week = json.load(f)
-        # Calculate week_starts for progress bar
-        start_dt = pd.to_datetime(start_date)
-        end_dt = pd.to_datetime(end_date)
-        all_dates = pd.date_range(start=start_dt, end=end_dt, freq='B')
-        week_starts = all_dates[all_dates.weekday == 0]  # Mondays
-        if len(week_starts) == 0 or week_starts[0] > start_dt:
-            week_starts = all_dates[all_dates.weekday == 0 | (all_dates == start_dt)]
-        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
-            task = progress.add_task("Running backtest...", total=len(week_starts))
-            trade_log = []
-            equity_curve = []
-            portfolio = []
-            cash = 100000.0
-            equity = cash
-            picks = []
-            for week_idx, week_start in enumerate(week_starts):
-                week_str = week_start.strftime('%Y-%m-%d')
-                # Use picks from file if available for this week
-                if picks_by_week and week_str in picks_by_week:
-                    picks = [(ticker, None, None) for ticker in picks_by_week[week_str]]
-                else:
-                    scores = []
-                    for ticker in tickers:
-                        df = download_stock_data(ticker, end_date=week_start)
-                        df = df[df.index <= week_start]
-                        if len(df) < 50:
-                            continue
-                        df = calculate_technical_indicators(df)
-                        scored = calculate_score(df)
-                        if scored.empty:
-                            continue
-                        last_row = scored.iloc[-1]
-                        scores.append((ticker, last_row['score'], last_row['Close']))
-                    scores = sorted(scores, key=lambda x: x[1], reverse=True)
-                    picks = scores[:top_n]
-                for ticker, score, price in picks:
-                    if any(p['ticker'] == ticker and not p['closed'] for p in portfolio):
-                        continue
-                    # If using picks file, need to get price for entry
-                    if price is None:
-                        df = download_stock_data(ticker, end_date=week_start)
-                        df = df[df.index <= week_start]
-                        if len(df) == 0:
-                            continue
-                        price = df.iloc[-1]['Close']
-                    position = {
-                        'ticker': ticker,
-                        'entry_date': week_start,
-                        'entry_price': price,
-                        'max_price': price,
-                        'min_price': price,
-                        'holding_days': 0,
-                        'closed': False,
-                        'exit_date': None,
-                        'exit_price': None,
-                        'exit_reason': None
-                    }
-                    portfolio.append(position)
-                for pos in portfolio:
-                    if pos['closed']:
-                        continue
-                    df = download_stock_data(pos['ticker'], end_date=week_start + pd.Timedelta(days=hold_days*2))
-                    df = df[(df.index > pos['entry_date']) & (df.index <= pos['entry_date'] + pd.Timedelta(days=hold_days*2))]
-                    for i, (date, row) in enumerate(df.iterrows()):
-                        price = row['Close']
-                        pos['max_price'] = max(pos['max_price'], price)
-                        pos['min_price'] = min(pos['min_price'], price)
-                        ret = (price - pos['entry_price']) / pos['entry_price']
-                        pos['holding_days'] += 1
-                        if ret <= stop_loss:
-                            pos['closed'] = True
-                            pos['exit_date'] = date
-                            pos['exit_price'] = price
-                            pos['exit_reason'] = 'stop_loss'
-                            trade_log.append({**pos})
-                            break
-                        elif ret >= profit_target:
-                            pos['closed'] = True
-                            pos['exit_date'] = date
-                            pos['exit_price'] = price
-                            pos['exit_reason'] = 'profit_target'
-                            trade_log.append({**pos})
-                            break
-                        elif pos['holding_days'] >= hold_days:
-                            pos['closed'] = True
-                            pos['exit_date'] = date
-                            pos['exit_price'] = price
-                            pos['exit_reason'] = 'max_hold'
-                            trade_log.append({**pos})
-                            break
-                open_equity = sum(
-                    (p['exit_price'] if p['closed'] else p['entry_price']) for p in portfolio if p['entry_date'] <= week_start
-                )
-                equity_curve.append({'date': week_start, 'equity': open_equity})
-                progress.update(task, advance=1)
-            total_return = (
-                sum(p['exit_price'] - p['entry_price'] for p in portfolio if p['closed']) /
-                (len([p for p in portfolio if p['closed']]) * (picks[0][2] if picks and picks[0][2] is not None else 1)) if picks else 0
-            )
-            summary = {
-                'total_closed_trades': len([p for p in portfolio if p['closed']]),
-                'total_return': total_return,
-                'trade_log': trade_log,
-                'equity_curve': equity_curve
-            }
-            output.parent.mkdir(parents=True, exist_ok=True)
-            with open(output, 'w') as f:
-                json.dump(summary, f, default=str, indent=2)
-            typer.echo(f"Backtest complete. Total closed trades: {summary['total_closed_trades']}")
-            typer.echo(f"Total return: {summary['total_return']*100:.2f}%")
-            typer.echo(f"Results written to {output}")
-    except Exception as e:
-        typer.echo(f"Error during backtest: {str(e)}", err=True)
-        raise typer.Exit(1)
-
-@app.command()
-def bulk_features(
-    tickers: str = typer.Option(..., '--tickers', '-t', help="Comma-separated tickers, path to file, or 'all' for S&P 500"),
-    start_date: str = typer.Option(..., '--start-date', help="Start date (YYYY-MM-DD)"),
-    end_date: str = typer.Option(..., '--end-date', help="End date (YYYY-MM-DD)"),
-    features_dir: str = typer.Option('features', '--features-dir', help="Directory to save features parquet files")
-):
-    """Generate and cache technical indicator + score features for many tickers.
-    Usage:
-      trading-advisor bulk-features --tickers all --start-date 2022-01-01 --end-date 2023-01-01
-      trading-advisor bulk-features --tickers tickers.txt --start-date ... --end-date ...
-      trading-advisor bulk-features --tickers AAPL,MSFT,GOOG --start-date ... --end-date ...
-    """
-    import pandas as pd
-    from trading_advisor.bulk_analysis import get_bulk_score_histories
-    from trading_advisor.data import load_tickers
-    import os
-    # Parse tickers
-    if tickers == 'all':
-        ticker_list = load_tickers('all')
-    elif os.path.isfile(tickers):
-        with open(tickers) as f:
-            ticker_list = [line.strip() for line in f if line.strip()]
-    else:
-        ticker_list = [t.strip() for t in tickers.split(',') if t.strip()]
-    typer.echo(f"Processing {len(ticker_list)} tickers from {start_date} to {end_date}...")
-    features = get_bulk_score_histories(ticker_list, start_date, end_date, features_dir=features_dir)
-    typer.echo(f"Done. Processed {len(features)} tickers.")
-    for ticker, df in features.items():
-        typer.echo(f"{ticker}: {len(df)} rows")
-
-@app.command()
 def init_features(
     tickers: Optional[Path] = typer.Option(
         None,
@@ -879,6 +529,325 @@ def run_model(
     
     logger.info(f"Model run complete. Results saved to {model_output_dir}/")
     typer.echo(f"Model run complete. Results saved to {model_output_dir}/")
+
+@app.command()
+def report_daily(
+    model_name: str = typer.Option("TechnicalScorer", help="Model to report on (e.g., 'TechnicalScorer')"),
+    tickers: str = typer.Option("all", help="Comma-separated tickers, path to file, or 'all' for all tickers"),
+    date: str = typer.Option(..., help="Generate report for this date (YYYY-MM-DD)"),
+    top_n: int = typer.Option(6, help="Number of top tickers to include in the report"),
+    model_outputs_dir: str = typer.Option("model_outputs", help="Directory with model output Parquet files"),
+    reports_dir: str = typer.Option("reports", help="Directory to save report files and Parquet table"),
+    force: bool = typer.Option(False, help="Overwrite existing report if it exists"),
+    positions_csv: str = typer.Option(None, help="CSV file of current positions to always include in the report")
+):
+    """
+    Generate a Markdown report for the top-N tickers by score for a given date and model, including OHLC and technical/analyst info.
+    Save as both a Markdown file and a row in a Parquet table for historical tracking.
+    Optionally, always include tickers from a positions CSV, marked as current positions.
+    """
+    import os
+    import pandas as pd
+    from trading_advisor.data import load_tickers
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+    import json
+
+    logger = logging.getLogger("trading_advisor.report_daily")
+
+    # Parse tickers
+    if tickers == "all":
+        ticker_list = load_tickers("all")
+    elif os.path.isfile(tickers):
+        with open(tickers) as f:
+            ticker_list = [line.strip() for line in f if line.strip()]
+    else:
+        ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
+
+    # Parse positions CSV if provided
+    positions_set = set()
+    if positions_csv:
+        try:
+            pos_df = pd.read_csv(positions_csv, skiprows=2)
+            if "Symbol" in pos_df.columns:
+                # Only keep rows where Symbol looks like a ticker (A-Z, 0-9, no spaces)
+                valid = pos_df["Symbol"].astype(str).str.match(r"^[A-Z0-9\.\-]+$")
+                positions_set = set(pos_df.loc[valid, "Symbol"].dropna().astype(str).str.strip())
+                print(f"[DEBUG] Parsed positions_set: {positions_set}")
+            else:
+                print("[DEBUG] 'Symbol' column not found in positions CSV.")
+        except Exception as e:
+            typer.echo(f"Error reading positions CSV: {e}", err=True)
+            raise typer.Exit(1)
+
+    # Create reports directory
+    os.makedirs(reports_dir, exist_ok=True)
+    report_md_path = os.path.join(reports_dir, f"{model_name}_{date}.md")
+    report_parquet_path = os.path.join(reports_dir, f"{model_name}.parquet")
+    model_output_dir = os.path.join(model_outputs_dir, model_name)
+
+    # Check if report already exists
+    if os.path.exists(report_md_path) and not force:
+        typer.echo(f"Report already exists: {report_md_path}. Use --force to overwrite.", err=True)
+        raise typer.Exit(1)
+
+    # Load existing report table if it exists
+    if os.path.exists(report_parquet_path):
+        report_df = pd.read_parquet(report_parquet_path)
+    else:
+        report_df = pd.DataFrame()
+
+    # Collect data for the report
+    rows = []
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
+        task = progress.add_task(f"Gathering data for {model_name} on {date}...", total=len(ticker_list))
+        for ticker in ticker_list:
+            out_path = os.path.join(model_output_dir, f"{ticker}.parquet")
+            if not os.path.exists(out_path):
+                logger.warning(f"Model output not found for {ticker}: {out_path}")
+                progress.update(task, advance=1)
+                continue
+            try:
+                df = pd.read_parquet(out_path)
+                if date not in df.index:
+                    logger.warning(f"No data for {ticker} on {date}")
+                    progress.update(task, advance=1)
+                    continue
+                row = df.loc[date]
+                # If row is a DataFrame (multi-index), take the first
+                if isinstance(row, pd.DataFrame):
+                    row = row.iloc[0]
+                rows.append({
+                    "ticker": ticker,
+                    "score": row.get("score", None),
+                    "Open": row.get("Open", None),
+                    "High": row.get("High", None),
+                    "Low": row.get("Low", None),
+                    "Close": row.get("Close", None),
+                    "RSI": row.get("RSI", None),
+                    "MACD": row.get("MACD", None),
+                    "MACD_Signal": row.get("MACD_Signal", None),
+                    "MACD_Hist": row.get("MACD_Hist", None),
+                    "BB_Upper": row.get("BB_Upper", None),
+                    "BB_Middle": row.get("BB_Middle", None),
+                    "BB_Lower": row.get("BB_Lower", None),
+                    "SMA_20": row.get("SMA_20", None),
+                    "analyst_targets": row.get("analyst_targets", None),
+                    "is_position": ticker in positions_set
+                })
+            except Exception as e:
+                logger.error(f"Error processing {ticker}: {e}")
+            progress.update(task, advance=1)
+
+    # Rank by score and select top N (positions do not count toward top_n)
+    rows = [r for r in rows if r["score"] is not None]
+    # Separate positions and non-positions
+    positions_rows = [r for r in rows if r["is_position"]]
+    non_position_rows = [r for r in rows if not r["is_position"]]
+    # Sort non-positions by score and take top_n
+    top_non_positions = sorted(non_position_rows, key=lambda x: x["score"], reverse=True)[:top_n]
+    # Add all positions not already in top_n
+    top_rows = top_non_positions.copy()
+    top_tickers_set = {r["ticker"] for r in top_rows}
+    for r in positions_rows:
+        if r["ticker"] not in top_tickers_set:
+            top_rows.append(r)
+    # If a position is also in top_n, it will appear only once, marked as a position
+    # Round all numeric values to the hundredth place
+    def round_val(val):
+        if isinstance(val, (int, float)):
+            return round(val, 2)
+        return val
+    for r in top_rows:
+        for k in ["score", "Open", "High", "Low", "Close", "RSI", "MACD", "MACD_Signal", "MACD_Hist", "BB_Upper", "BB_Middle", "BB_Lower", "SMA_20"]:
+            if k in r and r[k] is not None:
+                r[k] = round_val(r[k])
+        # Analyst targets (if present and parseable)
+        at = r.get("analyst_targets")
+        if at:
+            try:
+                at_obj = json.loads(at) if isinstance(at, str) else at
+                for key in ["median_target", "low_target", "high_target"]:
+                    if key in at_obj and at_obj[key] is not None:
+                        at_obj[key] = round_val(at_obj[key])
+                r["analyst_targets"] = at_obj
+            except Exception:
+                pass
+
+    # Generate Markdown report
+    from datetime import datetime as dt
+    md_lines = [
+        f"# Trading Advisor Report\n",
+        f"Generated on: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    ]
+    # Current Positions section
+    if positions_rows:
+        md_lines.append(f"## Current Positions\n")
+        for r in positions_rows:
+            md_lines.append(f"### {r['ticker']}")
+            md_lines.append(f"**Technical Score:** {r['score']:.2f}/10")
+            md_lines.append(f"**OHLC:** Open: {r['Open']}, High: {r['High']}, Low: {r['Low']}, Close: {r['Close']}")
+            md_lines.append(f"**Current Position**")
+            md_lines.append(f"**Technical Indicators:**")
+            md_lines.append(f"- RSI: {r['RSI']}")
+            md_lines.append(f"- MACD value: {r['MACD']}")
+            md_lines.append(f"- MACD signal: {r['MACD_Signal']}")
+            md_lines.append(f"- MACD histogram: {r['MACD_Hist']}")
+            md_lines.append(f"- BOLLINGER_BANDS upper: {r['BB_Upper']}")
+            md_lines.append(f"- BOLLINGER_BANDS middle: {r['BB_Middle']}")
+            md_lines.append(f"- BOLLINGER_BANDS lower: {r['BB_Lower']}")
+            md_lines.append(f"- MOVING_AVERAGES sma_20: {r['SMA_20']}")
+            analyst_targets = r.get("analyst_targets")
+            if analyst_targets:
+                try:
+                    at = analyst_targets
+                    md_lines.append(f"**Analyst Targets:**")
+                    if "median_target" in at:
+                        md_lines.append(f"- Median: ${at['median_target']}")
+                    if "low_target" in at and "high_target" in at:
+                        md_lines.append(f"- Range: ${at['low_target']} - ${at['high_target']}")
+                except Exception:
+                    md_lines.append(f"**Analyst Targets:** {analyst_targets}")
+            md_lines.append("")
+    # New Technical Picks section
+    if top_non_positions:
+        md_lines.append(f"## New Technical Picks (Top {top_n}) for {date} ({model_name})\n")
+        for r in top_non_positions:
+            md_lines.append(f"### {r['ticker']}")
+            md_lines.append(f"**Technical Score:** {r['score']:.2f}/10")
+            md_lines.append(f"**OHLC:** Open: {r['Open']}, High: {r['High']}, Low: {r['Low']}, Close: {r['Close']}")
+            md_lines.append(f"**Technical Indicators:**")
+            md_lines.append(f"- RSI: {r['RSI']}")
+            md_lines.append(f"- MACD value: {r['MACD']}")
+            md_lines.append(f"- MACD signal: {r['MACD_Signal']}")
+            md_lines.append(f"- MACD histogram: {r['MACD_Hist']}")
+            md_lines.append(f"- BOLLINGER_BANDS upper: {r['BB_Upper']}")
+            md_lines.append(f"- BOLLINGER_BANDS middle: {r['BB_Middle']}")
+            md_lines.append(f"- BOLLINGER_BANDS lower: {r['BB_Lower']}")
+            md_lines.append(f"- MOVING_AVERAGES sma_20: {r['SMA_20']}")
+            analyst_targets = r.get("analyst_targets")
+            if analyst_targets:
+                try:
+                    at = analyst_targets
+                    md_lines.append(f"**Analyst Targets:**")
+                    if "median_target" in at:
+                        md_lines.append(f"- Median: ${at['median_target']}")
+                    if "low_target" in at and "high_target" in at:
+                        md_lines.append(f"- Range: ${at['low_target']} - ${at['high_target']}")
+                except Exception:
+                    md_lines.append(f"**Analyst Targets:** {analyst_targets}")
+            md_lines.append("")
+
+    # Write Markdown report
+    with open(report_md_path, "w") as f:
+        f.write("\n".join(md_lines))
+    typer.echo(f"Markdown report written to {report_md_path}")
+
+    # Save to Parquet table for historical tracking
+    # Store the report text and the top-N tickers/scores as a row
+    new_row = {
+        "date": date,
+        "model": model_name,
+        "top_tickers": [r["ticker"] for r in top_rows],
+        "scores": [r["score"] for r in top_rows],
+        "report_md": "\n".join(md_lines)
+    }
+    if not report_df.empty:
+        # Remove any existing row for this date/model
+        report_df = report_df[~((report_df["date"] == date) & (report_df["model"] == model_name))]
+        report_df = pd.concat([report_df, pd.DataFrame([new_row])], ignore_index=True)
+    else:
+        report_df = pd.DataFrame([new_row])
+    report_df = report_df.sort_values(["date", "model"]).reset_index(drop=True)
+    report_df.to_parquet(report_parquet_path)
+    typer.echo(f"Report row saved to {report_parquet_path}")
+
+@app.command()
+def prompt_daily(
+    model_name: str = typer.Option("TechnicalScorer", help="Model to prompt for (e.g., 'TechnicalScorer')"),
+    date: str = typer.Option(..., help="Generate prompt for this date (YYYY-MM-DD)"),
+    reports_dir: str = typer.Option("reports", help="Directory with report files and Parquet table"),
+    prompts_dir: str = typer.Option("prompts", help="Directory to save prompt files and Parquet table"),
+    top_n: int = typer.Option(6, help="Number of top tickers to include in the prompt"),
+    force: bool = typer.Option(False, help="Overwrite existing prompt if it exists")
+):
+    """
+    Generate a daily LLM-ready prompt for a model and date, based on the daily report. Save as both a text file and a row in a Parquet table.
+    """
+    import os
+    import pandas as pd
+    import json
+
+    # Paths
+    os.makedirs(prompts_dir, exist_ok=True)
+    prompt_txt_path = os.path.join(prompts_dir, f"{model_name}_{date}.txt")
+    prompt_parquet_path = os.path.join(prompts_dir, f"{model_name}.parquet")
+    report_parquet_path = os.path.join(reports_dir, f"{model_name}.parquet")
+
+    # Check if prompt already exists
+    if os.path.exists(prompt_txt_path) and not force:
+        typer.echo(f"Prompt already exists: {prompt_txt_path}. Use --force to overwrite.", err=True)
+        raise typer.Exit(1)
+
+    # Load the report table
+    if not os.path.exists(report_parquet_path):
+        typer.echo(f"Report table not found: {report_parquet_path}", err=True)
+        raise typer.Exit(1)
+    report_df = pd.read_parquet(report_parquet_path)
+    row = report_df[(report_df["date"] == date) & (report_df["model"] == model_name)]
+    if row.empty:
+        typer.echo(f"No report found for {model_name} on {date}", err=True)
+        raise typer.Exit(1)
+    row = row.iloc[0]
+    top_tickers = row["top_tickers"][:top_n]
+    scores = row["scores"][:top_n]
+    # Parse the report Markdown for ticker blocks
+    report_md = row["report_md"]
+    # Simple parse: split by '### ' and extract blocks for top tickers
+    ticker_blocks = []
+    for ticker in top_tickers:
+        block = None
+        for section in report_md.split("\n### "):
+            if section.startswith(ticker):
+                block = section if section.startswith("###") else f"### {section}"
+                break
+        if block:
+            ticker_blocks.append(block.strip())
+    ticker_blocks_str = "\n\n".join(ticker_blocks)
+
+    # Default prompt template
+    prompt = (
+        f"You are an expert trading assistant. Here are the top {top_n} stocks for {date} according to the {model_name} model:\n\n"
+        f"{ticker_blocks_str}\n\n"
+        f"For each, provide a brief rationale for why it is a strong setup today."
+    )
+
+    # Write prompt to text file
+    with open(prompt_txt_path, "w") as f:
+        f.write(prompt)
+    typer.echo(f"Prompt written to {prompt_txt_path}")
+
+    # Save to Parquet table for historical tracking
+    # Store the prompt text and the top-N tickers/scores as a row
+    if os.path.exists(prompt_parquet_path):
+        prompt_df = pd.read_parquet(prompt_parquet_path)
+    else:
+        prompt_df = pd.DataFrame()
+    new_row = {
+        "date": date,
+        "model": model_name,
+        "top_tickers": top_tickers,
+        "scores": scores,
+        "prompt_txt": prompt
+    }
+    if not prompt_df.empty:
+        # Remove any existing row for this date/model
+        prompt_df = prompt_df[~((prompt_df["date"] == date) & (prompt_df["model"] == model_name))]
+        prompt_df = pd.concat([prompt_df, pd.DataFrame([new_row])], ignore_index=True)
+    else:
+        prompt_df = pd.DataFrame([new_row])
+    prompt_df = prompt_df.sort_values(["date", "model"]).reset_index(drop=True)
+    prompt_df.to_parquet(prompt_parquet_path)
+    typer.echo(f"Prompt row saved to {prompt_parquet_path}")
 
 def to_serializable(val):
     if isinstance(val, (np.integer, np.int64, np.int32)):
