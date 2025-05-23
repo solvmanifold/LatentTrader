@@ -87,7 +87,9 @@ def download_stock_data(
     ticker: str,
     history_days: int = LOOKBACK_DAYS,
     max_retries: int = 3,
-    features_dir: str = "features"
+    features_dir: str = "features",
+    start_date: pd.Timestamp = None,
+    end_date: pd.Timestamp = None
 ) -> pd.DataFrame:
     """Parquet-first: Check for up-to-date Parquet, else download/append missing data and update features."""
     features_dir = Path(features_dir)
@@ -105,13 +107,18 @@ def download_stock_data(
             logger.warning(f"Error reading {features_path}: {e}")
     
     # Calculate date range for new data
-    end_date = pd.Timestamp.today().normalize()
+    if end_date is not None:
+        fetch_end = pd.to_datetime(end_date).normalize()
+    else:
+        fetch_end = pd.Timestamp.today().normalize()
     if not df.empty:
         last_date = df.index.max().normalize()
         fetch_start = last_date + pd.Timedelta(days=1)
     else:
-        fetch_start = end_date - pd.Timedelta(days=history_days)
-    fetch_end = end_date
+        if start_date is not None:
+            fetch_start = pd.to_datetime(start_date).normalize()
+        else:
+            fetch_start = fetch_end - pd.Timedelta(days=history_days)
     
     # If we have data and it's up to date, return it
     if not df.empty and fetch_start > fetch_end:

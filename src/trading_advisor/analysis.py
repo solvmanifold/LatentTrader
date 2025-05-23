@@ -6,6 +6,7 @@ from typing import Dict, Optional, Tuple
 import pandas as pd
 import ta
 import yfinance as yf
+import json
 
 from trading_advisor.config import SCORE_WEIGHTS, MAX_RAW_SCORE, MACD_STRONG_DIVERGENCE, MACD_WEAK_DIVERGENCE
 
@@ -35,6 +36,10 @@ def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     # Moving Averages
     df['SMA_20'] = ta.trend.sma_indicator(df['Close'], window=20)
     df['SMA_50'] = ta.trend.sma_indicator(df['Close'], window=50)
+    df['SMA_100'] = ta.trend.sma_indicator(df['Close'], window=100)
+    df['SMA_200'] = ta.trend.sma_indicator(df['Close'], window=200)
+    df['EMA_100'] = ta.trend.ema_indicator(df['Close'], window=100)
+    df['EMA_200'] = ta.trend.ema_indicator(df['Close'], window=200)
     
     return df
 
@@ -190,20 +195,24 @@ def calculate_score_history(df: pd.DataFrame, analyst_targets: Optional[Dict] = 
     """Calculate technical scores for all rows in the DataFrame."""
     df = df.copy()
     df['Prev_Volume'] = df['Volume'].shift(1)
-    results = df.apply(lambda row: calculate_score(row, analyst_targets, window=1), axis=1)
+    def get_row_analyst_targets(row):
+        val = row.get('analyst_targets')
+        if isinstance(val, str):
+            try:
+                return json.loads(val)
+            except Exception:
+                return None
+        return None
+    results = df.apply(lambda row: calculate_score(row, get_row_analyst_targets(row), window=1), axis=1)
     df['score'] = results.apply(lambda x: x[0])
     df['score_details'] = results.apply(lambda x: x[1])
     return df
 
 def analyze_stock(ticker: str, df: pd.DataFrame) -> Tuple[float, Dict, Optional[Dict]]:
     """Analyze a stock and return its score and details."""
-    # Calculate technical indicators
-    df = calculate_technical_indicators(df)
-    
+    # No need to calculate technical indicators here; already done in download_stock_data
     # Get analyst targets
     analyst_targets = get_analyst_targets(ticker)
-    
     # Calculate score
     score, score_details = calculate_score(df, analyst_targets)
-    
     return score, score_details, analyst_targets 

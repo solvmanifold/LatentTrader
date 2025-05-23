@@ -10,6 +10,7 @@ import pandas as pd
 import os
 from logging.handlers import RotatingFileHandler
 from rich.logging import RichHandler
+import numpy as np
 
 import typer
 from rich.console import Console
@@ -256,7 +257,7 @@ def analyze(
         results['new_picks'].sort(key=lambda x: x.get('score', {}).get('total', 0), reverse=True)
         # Write results to JSON file
         with open(output, "w") as f:
-            json.dump(results, f, indent=2)
+            json.dump(to_serializable(results), f, indent=2)
             
         typer.echo(f"Analysis complete. Results written to {output}")
         
@@ -379,17 +380,6 @@ def chart(
                     df = download_stock_data(ticker, start_date=start_date_dt, end_date=end_date_dt)
                 score, score_details, analyst_targets = analyze_stock(ticker, df)
                 
-                # After downloading stock data, calculate technical indicators
-                df = calculate_technical_indicators(df)
-
-                # Ensure DataFrame has expected columns for overlays
-                if 'SMA_20' in df.columns:
-                    df['MA20'] = df['SMA_20']
-                if 'SMA_50' in df.columns:
-                    df['MA50'] = df['SMA_50']
-                # BB columns are already named as expected in most cases, but add mapping if needed
-                # (If your data source uses different names, add more mappings here)
-
                 # Extract latest values for richer indicators
                 latest = df.iloc[-1]
                 prev = df.iloc[-2] if len(df) > 1 else latest
@@ -794,6 +784,22 @@ def init_features(
             else:
                 logger.info(f"No new rows downloaded for {ticker}")
             logger.info(f"Computed features for {ticker} and saved to {features_dir}/{ticker}_features.parquet")
+
+def to_serializable(val):
+    if isinstance(val, (np.integer, np.int64, np.int32)):
+        return int(val)
+    elif isinstance(val, (np.floating, np.float64, np.float32)):
+        return float(val)
+    elif isinstance(val, (np.ndarray,)):
+        return val.tolist()
+    elif isinstance(val, (pd.Timestamp, pd.Timedelta)):
+        return str(val)
+    elif isinstance(val, dict):
+        return {k: to_serializable(v) for k, v in val.items()}
+    elif isinstance(val, list):
+        return [to_serializable(v) for v in val]
+    else:
+        return val
 
 def run():
     """Run the CLI application."""
