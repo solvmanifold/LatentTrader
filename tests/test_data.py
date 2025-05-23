@@ -19,6 +19,7 @@ from trading_advisor.data import (
     load_tickers,
     get_yf_ticker
 )
+from trading_advisor.analysis import calculate_technical_indicators, get_analyst_targets
 
 @pytest.fixture
 def sample_csv_data(tmp_path):
@@ -157,9 +158,14 @@ def test_download_stock_data(tmp_path):
     features_dir.mkdir()
     features_path = features_dir / "AAPL_features_test.parquet"
 
+    def mock_calculate_technical_indicators(df, *args, **kwargs):
+        # Add all expected indicator columns with dummy values
+        for col in ["RSI", "MACD", "MACD_Signal", "MACD_Hist", "BB_Upper", "BB_Lower", "BB_Middle", "BB_Pband", "SMA_20", "SMA_50", "SMA_100", "SMA_200", "EMA_100", "EMA_200"]:
+            df[col] = 0.0
+        return df
+
     with patch('trading_advisor.data.get_yf_ticker') as mock_get_ticker, \
-         patch('trading_advisor.data.calculate_technical_indicators', side_effect=lambda df, *args, **kwargs: df), \
-         patch('trading_advisor.data.calculate_score_history', side_effect=lambda df, analyst_targets=None: df), \
+         patch('trading_advisor.data.calculate_technical_indicators', side_effect=mock_calculate_technical_indicators), \
          patch('trading_advisor.data.get_analyst_targets', return_value={"target": 200}):
         mock_ticker = MagicMock()
         mock_ticker.history.return_value = sample_df.copy()
@@ -170,6 +176,13 @@ def test_download_stock_data(tmp_path):
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 50
         assert features_path.exists()
+
+        # After running download_stock_data, check that 'score' and 'score_details' are NOT in the columns
+        assert 'score' not in df.columns
+        assert 'score_details' not in df.columns
+        # Check that technical indicators and price/volume columns are present
+        for col in ["Close", "High", "Low", "Open", "Volume", "RSI", "MACD", "MACD_Signal", "MACD_Hist", "BB_Upper", "BB_Lower", "BB_Middle", "BB_Pband", "SMA_20", "SMA_50", "SMA_100", "SMA_200", "EMA_100", "EMA_200"]:
+            assert col in df.columns
 
         # Overwrite Parquet with up-to-date data (last date is today)
         sample_df.to_parquet(features_path)

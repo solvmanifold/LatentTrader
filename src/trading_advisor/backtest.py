@@ -1,6 +1,6 @@
 import pandas as pd
 from datetime import datetime
-from trading_advisor.analysis import calculate_technical_indicators, calculate_score_history
+from trading_advisor.analysis import calculate_technical_indicators
 from trading_advisor.data import download_stock_data
 
 def run_backtest(
@@ -31,7 +31,7 @@ def run_backtest(
         # 1. For each ticker, get data up to this week
         scores = []
         for ticker in tickers:
-            df = download_stock_data(ticker, end_date=week_start)
+            df = download_stock_data(ticker, start_date=start_dt, end_date=week_start)
             df = df[df.index <= week_start]
             if len(df) < 50:
                 continue
@@ -39,8 +39,13 @@ def run_backtest(
             scored = calculate_score_history(df)
             if scored.empty:
                 continue
-            last_row = scored.iloc[-1]
-            scores.append((ticker, last_row['score'], last_row['Close']))
+            # Use analyst_targets from the features DataFrame if available for this date
+            analyst_targets = None
+            if 'analyst_targets' in scored.columns and week_start in scored.index:
+                analyst_targets = scored.at[week_start, 'analyst_targets']
+            last_row = scored.loc[scored.index == week_start].iloc[-1] if week_start in scored.index else scored.iloc[-1]
+            score, score_details = calculate_score(last_row, analyst_targets)
+            scores.append((ticker, score, last_row['Close']))
         # 2. Select top N
         scores = sorted(scores, key=lambda x: x[1], reverse=True)
         picks = scores[:top_n]
@@ -65,7 +70,7 @@ def run_backtest(
         for pos in portfolio:
             if pos['closed']:
                 continue
-            df = download_stock_data(pos['ticker'], end_date=week_start + pd.Timedelta(days=hold_days*2))
+            df = download_stock_data(pos['ticker'], start_date=pos['entry_date'], end_date=pos['entry_date'] + pd.Timedelta(days=hold_days*2))
             df = df[(df.index > pos['entry_date']) & (df.index <= pos['entry_date'] + pd.Timedelta(days=hold_days*2))]
             for i, (date, row) in enumerate(df.iterrows()):
                 price = row['Close']

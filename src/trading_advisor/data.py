@@ -14,7 +14,7 @@ import os
 import json
 
 from trading_advisor.config import DATA_DIR, LOOKBACK_DAYS, REQUIRED_COLUMNS
-from trading_advisor.analysis import calculate_technical_indicators, calculate_score_history, get_analyst_targets
+from trading_advisor.analysis import calculate_technical_indicators, get_analyst_targets
 
 logger = logging.getLogger(__name__)
 
@@ -156,10 +156,8 @@ def download_stock_data(
                 logger.info(f"Appended {len(new_rows)} new rows for {ticker} (now {len(merged_df)} total rows).")
                 # Recalculate technical indicators for all (or just new rows if you want to optimize)
                 merged_df = calculate_technical_indicators(merged_df)
-                # Get analyst targets before calculating score history
+                # Get analyst targets before saving
                 analyst_targets = get_analyst_targets(ticker)
-                # Calculate score history with analyst targets
-                merged_df = calculate_score_history(merged_df, analyst_targets)
                 # --- Analyst targets propagation fix ---
                 if 'analyst_targets' not in merged_df.columns:
                     merged_df['analyst_targets'] = None

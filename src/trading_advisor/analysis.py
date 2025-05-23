@@ -191,23 +191,6 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
     else:
         raise ValueError("Input must be a pandas DataFrame or Series")
 
-def calculate_score_history(df: pd.DataFrame, analyst_targets: Optional[Dict] = None) -> pd.DataFrame:
-    """Calculate technical scores for all rows in the DataFrame."""
-    df = df.copy()
-    df['Prev_Volume'] = df['Volume'].shift(1)
-    def get_row_analyst_targets(row):
-        val = row.get('analyst_targets')
-        if isinstance(val, str):
-            try:
-                return json.loads(val)
-            except Exception:
-                return None
-        return None
-    results = df.apply(lambda row: calculate_score(row, get_row_analyst_targets(row), window=1), axis=1)
-    df['score'] = results.apply(lambda x: x[0])
-    df['score_details'] = results.apply(lambda x: x[1])
-    return df
-
 def analyze_stock(ticker: str, df: pd.DataFrame) -> Tuple[float, Dict, Optional[Dict]]:
     """Analyze a stock and return its score and details."""
     # No need to calculate technical indicators here; already done in download_stock_data

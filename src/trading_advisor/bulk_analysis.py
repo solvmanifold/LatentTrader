@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 from tqdm import tqdm
 from trading_advisor.data import download_stock_data
-from trading_advisor.analysis import calculate_score_history, get_analyst_targets
+from trading_advisor.analysis import calculate_technical_indicators, get_analyst_targets
 import json
 
 FEATURES_DIR = Path("features")
@@ -59,7 +59,7 @@ def get_bulk_score_histories(tickers, start_date, end_date, features_dir="featur
                 raw_df = raw_df[~raw_df.index.duplicated(keep='last')]
                 raw_df = raw_df.sort_index()
             try:
-                df = calculate_score_history(raw_df)
+                df = calculate_technical_indicators(raw_df)
                 # Log current analyst targets in the latest row
                 analyst_targets = get_analyst_targets(ticker)
                 if analyst_targets and not df.empty:

@@ -21,7 +21,7 @@ from PIL import Image
 import pandas_market_calendars as mcal
 
 from trading_advisor import __version__
-from trading_advisor.analysis import analyze_stock, calculate_technical_indicators, calculate_score_history, calculate_score, get_analyst_targets
+from trading_advisor.analysis import analyze_stock, calculate_technical_indicators, calculate_score, get_analyst_targets
 from trading_advisor.data import download_stock_data, ensure_data_dir, load_positions, load_tickers
 from trading_advisor.output import generate_report, generate_structured_data, generate_technical_summary, save_json_report, generate_research_prompt, generate_deep_research_prompt
 from trading_advisor.config import SCORE_WEIGHTS
@@ -615,7 +615,7 @@ def backtest(
                         if len(df) < 50:
                             continue
                         df = calculate_technical_indicators(df)
-                        scored = calculate_score_history(df)
+                        scored = calculate_score(df)
                         if scored.empty:
                             continue
                         last_row = scored.iloc[-1]
