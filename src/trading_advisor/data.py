@@ -10,8 +10,11 @@ from typing import Dict, Optional
 import pandas as pd
 import yfinance as yf
 from functools import lru_cache
+import os
+import json
 
 from trading_advisor.config import DATA_DIR, LOOKBACK_DAYS, REQUIRED_COLUMNS
+from trading_advisor.analysis import calculate_technical_indicators, calculate_score_history, get_analyst_targets
 
 logger = logging.getLogger(__name__)
 
@@ -77,87 +80,85 @@ def normalize_ticker(ticker: str) -> str:
         return ticker.replace('.B', '-B')
     return ticker
 
-def download_stock_data(ticker: str, history_days: int = LOOKBACK_DAYS, max_retries: int = 3, end_date: datetime = None) -> pd.DataFrame:
-    """Download stock data for a ticker, only getting new data if available. Optionally specify end_date.
-    The on-disk CSV will always contain all available data (including future data), and only missing data is filled in."""
-    logger.propagate = True  # Ensure logs propagate to root logger
-    logger.info(f"[LOG TEST] download_stock_data called for {ticker}")
-    normalized_ticker = normalize_ticker(ticker)
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    file_path = DATA_DIR / f"{ticker}.csv"
-    if end_date is None:
-        end_date = get_current_date()
-    # Load all existing data (not just up to end_date)
-    if file_path.exists():
-        if not is_csv_format_valid(file_path):
-            logger.error(f"The file {file_path} is not in the expected format. Please delete or fix it before running the script.")
-            sys.exit(1)
+def get_features_path(ticker, features_dir="features"):
+    return Path(features_dir) / f"{ticker}_features.parquet"
+
+def download_stock_data(
+    ticker: str,
+    history_days: int = LOOKBACK_DAYS,
+    max_retries: int = 3,
+    features_dir: str = "features"
+) -> pd.DataFrame:
+    """Parquet-first: Check for up-to-date Parquet, else download/append missing data and update features."""
+    features_dir = Path(features_dir)
+    features_dir.mkdir(exist_ok=True)
+    features_path = features_dir / f"{ticker}_features.parquet"
+    
+    # Try to load existing data first
+    df = pd.DataFrame()
+    if features_path.exists():
         try:
-            logger.info(f"Loading all existing data for {ticker} from {file_path}")
-            existing_df = pd.read_csv(file_path, parse_dates=True, index_col=0)
-            existing_df.index = pd.to_datetime(existing_df.index).tz_localize(None)
+            df = pd.read_parquet(features_path)
+            if not df.empty:
+                df.index = pd.to_datetime(df.index)
         except Exception as e:
-            logger.error(f"Error reading existing data for {ticker}: {e}")
-            existing_df = pd.DataFrame()
+            logger.warning(f"Error reading {features_path}: {e}")
+    
+    # Calculate date range for new data
+    end_date = pd.Timestamp.today()
+    if not df.empty:
+        fetch_start = df.index.max() + pd.Timedelta(days=1)
     else:
-        existing_df = pd.DataFrame()
-    # Determine what dates are missing (up to end_date)
-    if not existing_df.empty:
-        all_dates = pd.date_range(existing_df.index.min(), end_date, freq='B')
-        missing_dates = [d for d in all_dates if d not in existing_df.index]
-        if missing_dates:
-            start_date = min(missing_dates)
-        else:
-            start_date = end_date  # No missing dates
-    else:
-        start_date = end_date - timedelta(days=history_days)
-    if start_date.date() > end_date.date():
-        # No missing data to fetch
-        logger.info(f"No missing data to fetch for {ticker} up to {end_date.date()}")
-        # Save (to ensure file exists) and return filtered DataFrame
-        if not existing_df.empty:
-            existing_df.to_csv(file_path, date_format='%Y-%m-%d')
-            return existing_df[existing_df.index.date <= end_date.date()]
-        else:
-            return pd.DataFrame()
+        fetch_start = end_date - pd.Timedelta(days=history_days)
+    fetch_end = end_date
+    
+    # If we have data and it's up to date, return it
+    if not df.empty and fetch_start > fetch_end:
+        return df
+    
+    # Download new data with retries
     for attempt in range(max_retries):
         try:
-            logger.info(f"Attempting to download data for {ticker} (attempt {attempt+1}) from {start_date.date()} to {end_date.date()}")
-            ticker_obj = get_yf_ticker(normalized_ticker)
-            df = ticker_obj.history(
-                start=start_date,
-                end=end_date,
+            logger.info(f"Attempting to download data for {ticker} (attempt {attempt+1}) from {fetch_start.date()} to {fetch_end.date()}")
+            ticker_obj = get_yf_ticker(ticker)
+            new_df = ticker_obj.history(
+                start=fetch_start,
+                end=fetch_end + pd.Timedelta(days=1),
                 auto_adjust=True
             )
-            if len(df) > 0:
-                df.index = pd.to_datetime(df.index).tz_localize(None)
-                # Merge with all existing data (including future data)
-                if not existing_df.empty:
-                    merged_df = pd.concat([existing_df, df])
+            if len(new_df) > 0:
+                new_df.index = pd.to_datetime(new_df.index).tz_localize(None)
+                # Merge with existing data
+                if not df.empty:
+                    merged_df = pd.concat([df, new_df])
                     merged_df = merged_df[~merged_df.index.duplicated(keep='last')]
                     merged_df = merged_df.sort_index()
                 else:
-                    merged_df = df
-                try:
-                    merged_df.to_csv(file_path, date_format='%Y-%m-%d')
-                    logger.info(f"Saved merged data for {ticker} to {file_path} ({len(merged_df)} rows)")
-                    return merged_df[merged_df.index.date <= end_date.date()]
-                except Exception as e:
-                    logger.error(f"Error saving data for {ticker}: {e}")
-                    return merged_df[merged_df.index.date <= end_date.date()]
+                    merged_df = new_df
+                # Recalculate technical indicators for all (or just new rows if you want to optimize)
+                merged_df = calculate_technical_indicators(merged_df)
+                # Get analyst targets before calculating score history
+                analyst_targets = get_analyst_targets(ticker)
+                # Calculate score history with analyst targets
+                merged_df = calculate_score_history(merged_df, analyst_targets)
+                # Remove any existing analyst_targets column if it exists
+                if 'analyst_targets' in merged_df.columns:
+                    merged_df = merged_df.drop(columns=['analyst_targets'])
+                # Add analyst_targets column: None for all rows except last
+                merged_df['analyst_targets'] = None
+                if analyst_targets and not merged_df.empty:
+                    merged_df.at[merged_df.index[-1], 'analyst_targets'] = json.dumps(analyst_targets)
+                merged_df.to_parquet(features_path)
+                return merged_df
             else:
                 logger.warning(f"No data returned for {ticker} from yfinance.")
-            time.sleep(2)
+            import time; time.sleep(2)
         except Exception as e:
             if attempt == max_retries - 1:
                 logger.error(f"Failed to download {ticker} after {max_retries} attempts: {e}")
-            time.sleep(2 ** (attempt + 1))
+            import time; time.sleep(2 ** (attempt + 1))
     logger.warning(f"All download attempts failed for {ticker}. Returning existing data if available.")
-    if not existing_df.empty:
-        existing_df.to_csv(file_path, date_format='%Y-%m-%d')
-        return existing_df[existing_df.index.date <= end_date.date()]
-    else:
-        return pd.DataFrame()
+    return df
 
 def parse_brokerage_csv(file_path: Path) -> Dict[str, Dict]:
     """Parse the brokerage CSV file and return a dictionary of positions."""
