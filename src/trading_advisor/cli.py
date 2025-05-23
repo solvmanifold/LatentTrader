@@ -17,9 +17,10 @@ from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskPr
 import plotly.io as pio
 from fpdf import FPDF
 from PIL import Image
+import pandas_market_calendars as mcal
 
 from trading_advisor import __version__
-from trading_advisor.analysis import analyze_stock, calculate_technical_indicators, calculate_score_history, calculate_score
+from trading_advisor.analysis import analyze_stock, calculate_technical_indicators, calculate_score_history, calculate_score, get_analyst_targets
 from trading_advisor.data import download_stock_data, ensure_data_dir, load_positions, load_tickers
 from trading_advisor.output import generate_report, generate_structured_data, generate_technical_summary, save_json_report, generate_research_prompt, generate_deep_research_prompt
 from trading_advisor.config import SCORE_WEIGHTS
@@ -77,6 +78,7 @@ def main(
     )
 ):
     """Trading Advisor - A tool for generating trading advice based on technical indicators."""
+    logger.info("Trading Advisor started.")
     if len(sys.argv) == 1:
         # Show help menu if no arguments provided
         typer.echo(ctx.get_help())
@@ -107,7 +109,17 @@ def analyze(
     history_days: int = typer.Option(
         100,
         "--days", "-d",
-        help="Number of days of historical data to analyze"
+        help="Number of days of historical data to analyze (ignored if --start-date is provided)"
+    ),
+    start_date: Optional[str] = typer.Option(
+        None,
+        "--start-date",
+        help="Start date (YYYY-MM-DD) for historical data (overrides --days)"
+    ),
+    end_date: Optional[str] = typer.Option(
+        None,
+        "--end-date",
+        help="End date (YYYY-MM-DD) for historical data (default: today)"
     )
 ):
     """Analyze stocks and output structured JSON data."""
@@ -148,7 +160,15 @@ def analyze(
                 task = progress.add_task("Analyzing positions...", total=len(positions_data))
                 for symbol, position in positions_data.items():
                     ticker = symbol
-                    df = download_stock_data(ticker, history_days=history_days)
+                    if end_date is not None:
+                        end_date_dt = pd.to_datetime(end_date)
+                    else:
+                        end_date_dt = pd.to_datetime('today')
+                    if start_date is not None:
+                        start_date_dt = pd.to_datetime(start_date)
+                    else:
+                        start_date_dt = end_date_dt - pd.Timedelta(days=history_days)
+                    df = download_stock_data(ticker, start_date=start_date_dt, end_date=end_date_dt)
                     score, score_details, analyst_targets = analyze_stock(ticker, df)
                     
                     # Generate structured data for position
@@ -165,7 +185,15 @@ def analyze(
         else:
             for symbol, position in positions_data.items():
                 ticker = symbol
-                df = download_stock_data(ticker, history_days=history_days)
+                if end_date is not None:
+                    end_date_dt = pd.to_datetime(end_date)
+                else:
+                    end_date_dt = pd.to_datetime('today')
+                if start_date is not None:
+                    start_date_dt = pd.to_datetime(start_date)
+                else:
+                    start_date_dt = end_date_dt - pd.Timedelta(days=history_days)
+                df = download_stock_data(ticker, start_date=start_date_dt, end_date=end_date_dt)
                 score, score_details, analyst_targets = analyze_stock(ticker, df)
                 position_data = generate_structured_data(
                     ticker,
@@ -183,7 +211,15 @@ def analyze(
             with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
                 task = progress.add_task("Analyzing new picks...", total=len(new_picks))
                 for ticker in new_picks:
-                    df = download_stock_data(ticker, history_days=history_days)
+                    if end_date is not None:
+                        end_date_dt = pd.to_datetime(end_date)
+                    else:
+                        end_date_dt = pd.to_datetime('today')
+                    if start_date is not None:
+                        start_date_dt = pd.to_datetime(start_date)
+                    else:
+                        start_date_dt = end_date_dt - pd.Timedelta(days=history_days)
+                    df = download_stock_data(ticker, start_date=start_date_dt, end_date=end_date_dt)
                     score, score_details, analyst_targets = analyze_stock(ticker, df)
                     pick_data = generate_structured_data(
                         ticker,
@@ -196,7 +232,15 @@ def analyze(
                     progress.update(task, advance=1)
         elif not positions_only:
             for ticker in new_picks:
-                df = download_stock_data(ticker, history_days=history_days)
+                if end_date is not None:
+                    end_date_dt = pd.to_datetime(end_date)
+                else:
+                    end_date_dt = pd.to_datetime('today')
+                if start_date is not None:
+                    start_date_dt = pd.to_datetime(start_date)
+                else:
+                    start_date_dt = end_date_dt - pd.Timedelta(days=history_days)
+                df = download_stock_data(ticker, start_date=start_date_dt, end_date=end_date_dt)
                 score, score_details, analyst_targets = analyze_stock(ticker, df)
                 pick_data = generate_structured_data(
                     ticker,
@@ -232,7 +276,7 @@ def chart(
     history_days: int = typer.Option(
         100,
         "--days", "-d",
-        help="Number of days of historical data to include"
+        help="Number of days of historical data to include (ignored if --start-date is provided)"
     ),
     pdf: bool = typer.Option(
         False,
@@ -243,6 +287,16 @@ def chart(
         None,
         "--json", "-j",
         help="Path to analysis JSON file (from analyze command)"
+    ),
+    start_date: Optional[str] = typer.Option(
+        None,
+        "--start-date",
+        help="Start date (YYYY-MM-DD) for historical data (overrides --days)"
+    ),
+    end_date: Optional[str] = typer.Option(
+        None,
+        "--end-date",
+        help="End date (YYYY-MM-DD) for historical data (default: today)"
     )
 ):
     """Generate interactive charts for one or more stocks, optionally using an analysis JSON file."""
@@ -304,9 +358,25 @@ def chart(
                     score_details = p.get("score", {}).get("details", {})
                     analyst_targets = p.get("analyst_targets", None)
                     # Download data for charting (could be optimized to store full df in JSON)
-                    df = download_stock_data(ticker, history_days=history_days)
+                    if end_date is not None:
+                        end_date_dt = pd.to_datetime(end_date)
+                    else:
+                        end_date_dt = pd.to_datetime('today')
+                    if start_date is not None:
+                        start_date_dt = pd.to_datetime(start_date)
+                    else:
+                        start_date_dt = end_date_dt - pd.Timedelta(days=history_days)
+                    df = download_stock_data(ticker, start_date=start_date_dt, end_date=end_date_dt)
                 else:
-                    df = download_stock_data(ticker, history_days=history_days)
+                    if end_date is not None:
+                        end_date_dt = pd.to_datetime(end_date)
+                    else:
+                        end_date_dt = pd.to_datetime('today')
+                    if start_date is not None:
+                        start_date_dt = pd.to_datetime(start_date)
+                    else:
+                        start_date_dt = end_date_dt - pd.Timedelta(days=history_days)
+                    df = download_stock_data(ticker, start_date=start_date_dt, end_date=end_date_dt)
                 score, score_details, analyst_targets = analyze_stock(ticker, df)
                 
                 # After downloading stock data, calculate technical indicators
@@ -672,6 +742,58 @@ def bulk_features(
     typer.echo(f"Done. Processed {len(features)} tickers.")
     for ticker, df in features.items():
         typer.echo(f"{ticker}: {len(df)} rows")
+
+@app.command()
+def init_features(
+    tickers: Optional[Path] = typer.Option(
+        None,
+        "--tickers", "-t",
+        help="Path to file containing ticker symbols (default: all S&P 500)"
+    ),
+    all_tickers: bool = typer.Option(
+        False,
+        "--all",
+        help="Download and process all S&P 500 tickers"
+    ),
+    years: int = typer.Option(
+        3,
+        "--years",
+        help="Number of years of historical data to download (default: 3)"
+    ),
+    features_dir: Path = typer.Option(
+        "features",
+        "--features-dir",
+        help="Directory to save feature Parquet files"
+    )
+):
+    """Initialize features for all S&P 500 tickers or a provided list, downloading and processing up to today."""
+    from trading_advisor.data import download_stock_data, load_tickers
+    from tqdm import tqdm
+
+    logger = logging.getLogger("trading_advisor.init_features")
+
+    if all_tickers:
+        ticker_list = load_tickers("all")
+    elif tickers is not None:
+        ticker_list = load_tickers(tickers)
+    else:
+        typer.echo("You must specify either --all or --tickers.", err=True)
+        raise typer.Exit(1)
+
+    features_dir.mkdir(exist_ok=True)
+    for ticker in tqdm(ticker_list, desc="Initializing features"):
+        features_path = features_dir / f"{ticker}_features.parquet"
+        df_before = pd.read_parquet(features_path) if features_path.exists() else pd.DataFrame()
+        df_after = download_stock_data(ticker, history_days=years * 365, features_dir=str(features_dir))
+        num_new_rows = len(df_after) - len(df_before)
+        if df_after.empty:
+            logger.warning(f"No data for {ticker}")
+        else:
+            if num_new_rows > 0:
+                logger.info(f"Downloaded {num_new_rows} rows for {ticker}")
+            else:
+                logger.info(f"No new rows downloaded for {ticker}")
+            logger.info(f"Computed features for {ticker} and saved to {features_dir}/{ticker}_features.parquet")
 
 def run():
     """Run the CLI application."""

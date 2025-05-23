@@ -100,20 +100,22 @@ def download_stock_data(
         try:
             df = pd.read_parquet(features_path)
             if not df.empty:
-                df.index = pd.to_datetime(df.index)
+                df.index = pd.to_datetime(df.index).normalize()
         except Exception as e:
             logger.warning(f"Error reading {features_path}: {e}")
     
     # Calculate date range for new data
-    end_date = pd.Timestamp.today()
+    end_date = pd.Timestamp.today().normalize()
     if not df.empty:
-        fetch_start = df.index.max() + pd.Timedelta(days=1)
+        last_date = df.index.max().normalize()
+        fetch_start = last_date + pd.Timedelta(days=1)
     else:
         fetch_start = end_date - pd.Timedelta(days=history_days)
     fetch_end = end_date
     
     # If we have data and it's up to date, return it
     if not df.empty and fetch_start > fetch_end:
+        logger.info(f"No new data to download for {ticker}. Data is up to date through {df.index.max().date()}.")
         return df
     
     # Download new data with retries
@@ -127,14 +129,20 @@ def download_stock_data(
                 auto_adjust=True
             )
             if len(new_df) > 0:
-                new_df.index = pd.to_datetime(new_df.index).tz_localize(None)
-                # Merge with existing data
+                new_df.index = pd.to_datetime(new_df.index).tz_localize(None).normalize()
+                # Only keep truly new rows
                 if not df.empty:
-                    merged_df = pd.concat([df, new_df])
-                    merged_df = merged_df[~merged_df.index.duplicated(keep='last')]
-                    merged_df = merged_df.sort_index()
+                    new_rows = new_df[~new_df.index.isin(df.index)]
                 else:
-                    merged_df = new_df
+                    new_rows = new_df
+                if new_rows.empty:
+                    logger.info(f"No new rows to append for {ticker}. Data is already up to date.")
+                    return df
+                # Merge with existing data
+                merged_df = pd.concat([df, new_rows])
+                merged_df = merged_df[~merged_df.index.duplicated(keep='last')]
+                merged_df = merged_df.sort_index()
+                logger.info(f"Appended {len(new_rows)} new rows for {ticker} (now {len(merged_df)} total rows).")
                 # Recalculate technical indicators for all (or just new rows if you want to optimize)
                 merged_df = calculate_technical_indicators(merged_df)
                 # Get analyst targets before calculating score history
@@ -151,7 +159,7 @@ def download_stock_data(
                 merged_df.to_parquet(features_path)
                 return merged_df
             else:
-                logger.warning(f"No data returned for {ticker} from yfinance.")
+                logger.info(f"No data returned for {ticker} from yfinance.")
             import time; time.sleep(2)
         except Exception as e:
             if attempt == max_retries - 1:
