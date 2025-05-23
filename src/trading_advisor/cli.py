@@ -79,7 +79,6 @@ def main(
     )
 ):
     """Trading Advisor - A tool for generating trading advice based on technical indicators."""
-    logger.info("Trading Advisor started.")
     if len(sys.argv) == 1:
         # Show help menu if no arguments provided
         typer.echo(ctx.get_help())
@@ -806,6 +805,8 @@ def run_model(
     from trading_advisor.data import load_tickers
     from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
+    logger = logging.getLogger("trading_advisor.run_model")
+
     # Dynamically import the model class
     try:
         models_module = importlib.import_module("trading_advisor.models")
@@ -823,34 +824,61 @@ def run_model(
     else:
         ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
 
-    os.makedirs(output_dir, exist_ok=True)
+    # Create model-specific output directory
+    model_output_dir = os.path.join(output_dir, model_name)
+    os.makedirs(model_output_dir, exist_ok=True)
     model = ModelClass()
+    logger.info(f"Running {model_name} on {len(ticker_list)} tickers")
 
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
         task = progress.add_task(f"Running {model_name}...", total=len(ticker_list))
         for ticker in ticker_list:
             features_path = os.path.join(features_dir, f"{ticker}_features.parquet")
             if not os.path.exists(features_path):
-                typer.echo(f"Features file not found for {ticker}: {features_path}")
+                logger.warning(f"Features file not found for {ticker}: {features_path}")
                 progress.update(task, advance=1)
                 continue
-            df = pd.read_parquet(features_path)
-            if date:
-                df = df[df['date'] == date]
-                if df.empty:
-                    typer.echo(f"No data for {ticker} on {date}")
-                    progress.update(task, advance=1)
-                    continue
+            
             try:
+                df = pd.read_parquet(features_path)
+                if date:
+                    try:
+                        df = df.loc[[date]]
+                    except KeyError:
+                        logger.warning(f"No data for {ticker} on {date}")
+                        progress.update(task, advance=1)
+                        continue
+                    if df.empty:
+                        logger.warning(f"No data for {ticker} on {date}")
+                        progress.update(task, advance=1)
+                        continue
+
                 results = model.predict(df)
-                out_df = df.copy()
-                out_df['score'] = results['score']
-                out_path = os.path.join(output_dir, f"{model_name}_{ticker}.parquet")
+                new_df = df.copy()
+                new_df['score'] = results['score']
+                out_path = os.path.join(model_output_dir, f"{ticker}.parquet")
+                
+                # Read existing file if it exists
+                if os.path.exists(out_path):
+                    existing_df = pd.read_parquet(out_path)
+                    # Find which rows are actually new
+                    new_rows = new_df[~new_df.index.isin(existing_df.index)]
+                    # Concatenate old and new data
+                    out_df = pd.concat([existing_df, new_rows])
+                    # Sort by index to maintain chronological order
+                    out_df = out_df.sort_index()
+                    logger.info(f"Processed {ticker}: {len(out_df)} rows (new: {len(new_rows)}, existing: {len(existing_df)})")
+                else:
+                    out_df = new_df
+                    logger.info(f"Processed {ticker}: {len(out_df)} rows (new: {len(out_df)}, existing: 0)")
+                
                 out_df.to_parquet(out_path)
-                typer.echo(f"Saved model output for {ticker} to {out_path}")
             except Exception as e:
-                typer.echo(f"Error running model for {ticker}: {e}")
+                logger.error(f"Error processing {ticker}: {e}")
             progress.update(task, advance=1)
+    
+    logger.info(f"Model run complete. Results saved to {model_output_dir}/")
+    typer.echo(f"Model run complete. Results saved to {model_output_dir}/")
 
 def to_serializable(val):
     if isinstance(val, (np.integer, np.int64, np.int32)):

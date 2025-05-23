@@ -1,125 +1,35 @@
-You're a Python engineer tasked with building a lightweight CLI tool called `weekly_trading_advisor.py`.
+# LatentTrader: Vision and Architecture
 
-The goal is to help a user generate a prompt for ChatGPT Deep Research, based on technical indicators for S&P 500 stocks.
+## Project Vision
+LatentTrader aims to be a trading assistant that generates actionable, short-term trading playbooks designed to beat the market. The system will leverage both classic technical analysis and machine learning (ML) models to create, test, and iterate on predictive scoring models. The ultimate goal is to support robust experimentation, backtesting, and rapid iteration to discover and deploy the most effective trading strategies.
 
----
+## Architecture Overview
 
-**Functionality:**
+### 1. Data Layer (Features)
+- **Source of Truth:** All raw and engineered features (technical indicators, price/volume, etc.) are stored in Parquet files, one per ticker (e.g., `features/AAPL_features.parquet`).
+- **Update Process:** Features are updated daily (or as needed) via a dedicated command (`init-features` or `update-features`).
+- **No Model Scores:** These files contain only features, not model outputs.
 
-1. **Pull historical stock data** for all S&P 500 tickers.
-   - Use `yfinance` to download OHLCV data.
-   - Only download missing or new data:
-     - If a local CSV file already exists for a ticker, load it, find the most recent date, and only append new data (`yfinance.download(start=last_date + 1)`).
-     - Otherwise, download ~100 trading days of history.
-   - Store data in a local folder like `data/`.
-   - Use a hardcoded list of S&P 500 tickers, or load from `tickers.csv`.
+### 2. Model Layer (Outputs)
+- **Model Registry:** Each model (classic, ML, ensemble, etc.) is a Python class/function with a standard interface (e.g., `score(df)` or `generate_playbook(df)`).
+- **Model Runner:** A command or function loads features, runs one or more models, and outputs scores/playbooks for each ticker/date.
+- **Model Outputs:** Model scores and playbooks are stored in a separate folder (e.g., `model_outputs/`), with one file per model (e.g., `model_outputs/classic.parquet`, `model_outputs/ml_v1.parquet`). These files are keyed by ticker and date.
+- **Experimentation:** Easy to add, swap, or update models and compare their outputs.
 
-2. **Include current user-held positions** from a separate input CSV (e.g. `positions.csv`):
-   - Format: one stock ticker per row (or include optional quantity/cost basis).
-   - These stocks should always be included in the final Deep Research output, even if their technical score is low.
-   - Mark them clearly as "Current Position – Seeking Advice (Buy/Hold/Sell/Trailing Stop/etc.)"
+### 3. Reporting/Analysis Layer
+- **Analyze:** Purely reads model outputs, sorts, and generates JSON for reporting. No downloads or recomputation.
+- **Report/Prompt:** Consumes the JSON, generates human/LLM-readable outputs.
+- **Backtest/Experiment:** CLI or notebook tools to run models on historical data and compare performance.
 
-3. **Compute technical indicators** for each stock:
-   - Bollinger Bands (20-day window, 2 std dev)
-   - RSI (14-day window)
-   - MACD and signal line
-   - 20-day and 50-day moving averages
-   - Detect MACD crossovers and moving average crossovers
-   - Flag volume spikes (e.g., 2× average volume)
-
-4. **Score and rank each stock**:
-   - Assign scores based on indicator combinations:
-     - RSI < 30 (oversold): +2
-     - RSI > 70 (overbought): +1
-     - Price > upper BB: +2
-     - Price < lower BB: +2
-     - MACD crossover (bullish or bearish): +2
-     - Volume spike: +1
-
-5. **Select the top 5–10 new candidates** based on the highest score (excluding already-held positions).
-
-6. **Output a markdown-formatted summary** of all selected stocks:
-   - Always include all stocks from `positions.csv` under a separate "Current Holdings" section.
-   - Include the top 5–10 newly flagged stocks under "New Technical Picks".
-   - Each stock entry should include symbol, key indicator values, and a plain-English interpretation.
-
-7. **Generate a ChatGPT-ready Deep Research prompt**, e.g.:
-
-'''
-You are an equity analyst. Here is the technical summary for several S&P 500 stocks.
-
-The first section contains current positions. Please advise whether to hold, sell, or adjust (e.g. trailing stop).
-The second section contains new picks flagged by our model this week. Please assess each for trade viability.
-CURRENT POSITIONS:
-$AAPL: RSI = 32, MACD neutral, volume surge. Recent pullback after earnings miss.
-
-NEW TECHNICAL PICKS:
-$NVDA: Price above upper BB, RSI = 74, MACD bullish 2d ago, high volume.
-$DIS: RSI = 28, touching lower BB, MACD bearish crossover, but diverging volume.
-...
-'''
-
-8. **Optional CLI args**:
-   - `--top_n`: Number of new tickers to include (default = 5)
-   - `--output`: Path to write the markdown file (default = stdout)
-   - `--positions`: Path to `positions.csv` (optional but recommended)
+## Next Steps
+- **First Refactor:**
+  - Move the current scoring logic (currently `analysis.calculate_score` and the `score` column in features Parquet files) out of the features layer.
+  - Implement a model runner that writes model outputs (scores, playbooks) to a dedicated `model_outputs/` folder.
+  - Update all downstream analysis and reporting to read from model outputs, not features.
+- **Iterate:**
+  - Add support for multiple models and easy experimentation.
+  - Enable historical backtesting and model comparison.
 
 ---
 
-**Requirements**:
-- Python 3.8+
-- Use `pandas`, `numpy`, `yfinance`, and optionally `ta` (technical analysis library)
-- Use `argparse` or `typer` for CLI
-- Output must be modular, readable, and suitable for pasting into ChatGPT manually
-
-This tool should not query any LLM itself—it prepares structured prompts and summaries for the user to paste into ChatGPT with Deep Research enabled.
-
-## Future Ideas
-
-### 1. Create Graphics & Summary for Top Picks
-- **Goal:** Automatically generate visual summaries for the top trading picks.
-- **Formats:** PDF, PNG/JPG, or interactive HTML.
-- **Content:** Charts (price, indicators), score breakdown, summary text, and a "playbook" section.
-- **Tools:** Consider using matplotlib, Plotly, ReportLab, or browser-based rendering (e.g., HTML to PDF/image).
-- **Questions:**
-  - Should this be CLI-triggered, or also available via API?
-  - Do you want a single summary for all picks, or one per pick?
-
-### 2. API Integrations
-#### a. Integrate with OpenAI to Run Automatically
-- **Goal:** Use OpenAI (or other LLMs) to generate playbooks, summaries, or even automate analysis.
-- **Options:** Scheduled runs, or on-demand via API.
-- **Questions:**
-  - Should this be a background service, or user-triggered?
-  - What's the desired workflow (e.g., daily summary emailed, or Slack/Discord integration)?
-
-#### b. Integrate with Pushover for Push Notifications
-- **Goal:** Send push notifications for new picks, alerts, or trade signals.
-- **Questions:**
-  - What events should trigger a push? (e.g., new top pick, stop-loss hit, etc.)
-
-#### c. Integrate with Charles Schwab to Auto-Pull Positions
-- **Goal:** Automatically fetch current positions from Schwab.
-- **Notes:** Schwab has an API, but may require OAuth and developer access.
-- **Questions:**
-  - Should this run on a schedule, or on-demand?
-
-#### d. Integrate with thinkorswim to Paper Trade
-- **Goal:** Automatically place paper trades for top picks.
-- **Notes:** TDAmeritrade/thinkorswim has an API for paper trading.
-- **Questions:**
-  - Should this be fully automated, or require user confirmation?
-
-### 3. Backtest Using Historical Data
-- **Goal:** Simulate the strategy on past data to evaluate performance.
-- **Features:** Customizable parameters, performance metrics, visualizations.
-- **Questions:**
-  - What metrics are most important (e.g., Sharpe, max drawdown, win rate)?
-  - Should this be CLI-only, or also have a web interface?
-
-### 4. Learn Scores (ML)
-- **Goal:** Use machine learning to optimize or learn the scoring system based on historical outcomes.
-- **Approach:** Supervised learning (e.g., regression, classification), reinforcement learning, or even meta-learning.
-- **Questions:**
-  - What data will be used for training (e.g., price action after signal, actual trades)?
-  - Should the model be interpretable, or is black-box OK?
+*This architecture will enable rapid iteration, robust experimentation, and a clear separation of concerns between data, modeling, and reporting. The first step is to refactor the scoring model and output storage as described above.*
