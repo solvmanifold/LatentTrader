@@ -775,7 +775,7 @@ def prompt_daily(
     """
     import os
     import pandas as pd
-    import json
+    import re
 
     # Paths
     os.makedirs(prompts_dir, exist_ok=True)
@@ -798,27 +798,76 @@ def prompt_daily(
         typer.echo(f"No report found for {model_name} on {date}", err=True)
         raise typer.Exit(1)
     row = row.iloc[0]
-    top_tickers = row["top_tickers"][:top_n]
-    scores = row["scores"][:top_n]
-    # Parse the report Markdown for ticker blocks
     report_md = row["report_md"]
-    # Simple parse: split by '### ' and extract blocks for top tickers
-    ticker_blocks = []
-    for ticker in top_tickers:
-        block = None
-        for section in report_md.split("\n### "):
-            if section.startswith(ticker):
-                block = section if section.startswith("###") else f"### {section}"
-                break
-        if block:
-            ticker_blocks.append(block.strip())
-    ticker_blocks_str = "\n\n".join(ticker_blocks)
 
-    # Default prompt template
+    # Parse the report Markdown for sections
+    # Extract Current Positions and New Technical Picks blocks
+    current_positions_blocks = []
+    new_picks_blocks = []
+    in_current = False
+    in_new = False
+    for line in report_md.splitlines():
+        if line.strip().startswith("## Current Positions"):
+            in_current = True
+            in_new = False
+            continue
+        if line.strip().startswith("## New Technical Picks"):
+            in_current = False
+            in_new = True
+            continue
+        if line.strip().startswith("## "):
+            in_current = False
+            in_new = False
+            continue
+        if in_current:
+            current_positions_blocks.append(line)
+        if in_new:
+            new_picks_blocks.append(line)
+    # Split into ticker blocks (by '### ')
+    def split_ticker_blocks(block_lines):
+        blocks = []
+        current = []
+        for l in block_lines:
+            if l.strip().startswith("### ") and current:
+                blocks.append("\n".join(current).strip())
+                current = [l]
+            else:
+                current.append(l)
+        if current:
+            blocks.append("\n".join(current).strip())
+        return [b for b in blocks if b.strip()]
+    current_blocks = split_ticker_blocks(current_positions_blocks)
+    new_blocks = split_ticker_blocks(new_picks_blocks)
+    # Only include top_n new picks
+    new_blocks = new_blocks[:top_n]
+
+    # Prompt template
     prompt = (
-        f"You are an expert trading assistant. Here are the top {top_n} stocks for {date} according to the {model_name} model:\n\n"
-        f"{ticker_blocks_str}\n\n"
-        f"For each, provide a brief rationale for why it is a strong setup today."
+        "You are a tactical swing trader managing a technical scan and open positions.\n"
+        "Your task is to return an actionable 1–2 week trading playbook for each stock listed below.\n\n"
+        "For each Current Position:\n"
+        "- Recommend Hold, Sell, or Adjust\n"
+        "- If \"Adjust\", provide a tactical move: e.g., raise stop, set trailing stop, scale out\n"
+        "- Include a recommended stop-loss level and optional profit-taking level\n"
+        "- Keep risk in mind—prioritize capital preservation if signals are weakening\n\n"
+        "For each New Technical Pick:\n"
+        "- Decide if it's a viable trade this week\n"
+        "- If yes, provide:\n"
+        "  - Entry strategy: buy now, wait for pullback, wait for breakout, etc.\n"
+        "  - Stop-loss: price level or % below\n"
+        "  - Profit target: based on analyst target, momentum, or resistance\n"
+        "  - Confidence level: High / Medium / Low\n\n"
+        "Assume:\n"
+        "- A 1–2 week swing trade horizon\n"
+        "- Technicals and analyst targets are the primary inputs\n"
+        "- The investor is risk-aware but willing to act on strong short-term setups\n\n"
+        "Be concise, tactical, and make clear, justified recommendations.\n\n"
+        "Focus most attention on the 💡 summary line. Use the structured data only to support or refine the thesis.\n\n"
+        "---\n\n"
+        "## Current Positions\n\n"
+        f"{chr(10).join(current_blocks)}\n\n"
+        f"## New Technical Picks\n\n"
+        f"{chr(10).join(new_blocks)}\n"
     )
 
     # Write prompt to text file
@@ -835,8 +884,6 @@ def prompt_daily(
     new_row = {
         "date": date,
         "model": model_name,
-        "top_tickers": top_tickers,
-        "scores": scores,
         "prompt_txt": prompt
     }
     if not prompt_df.empty:
