@@ -785,6 +785,73 @@ def init_features(
                 logger.info(f"No new rows downloaded for {ticker}")
             logger.info(f"Computed features for {ticker} and saved to {features_dir}/{ticker}_features.parquet")
 
+@app.command()
+def run_model(
+    model_name: str = typer.Option("TechnicalScorer", help="Model to run (e.g., 'TechnicalScorer')"),
+    tickers: str = typer.Option("all", help="Comma-separated tickers, path to file, or 'all' for all tickers"),
+    date: Optional[str] = typer.Option(None, help="Only score for this date (YYYY-MM-DD)"),
+    features_dir: str = typer.Option("features", help="Directory with feature Parquet files"),
+    output_dir: str = typer.Option("model_outputs", help="Directory to save model outputs")
+):
+    """
+    Run a model for a set of tickers (or all), optionally for a specific day, and save results to model_outputs/.
+    Example usage:
+      trading-advisor run-model --model-name TechnicalScorer --tickers all
+      trading-advisor run-model --model-name TechnicalScorer --tickers AAPL,MSFT
+      trading-advisor run-model --model-name TechnicalScorer --tickers tickers.txt --date 2024-06-01
+    """
+    import importlib
+    import os
+    import pandas as pd
+    from trading_advisor.data import load_tickers
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+
+    # Dynamically import the model class
+    try:
+        models_module = importlib.import_module("trading_advisor.models")
+        ModelClass = getattr(models_module, model_name)
+    except (ImportError, AttributeError):
+        typer.echo(f"Model '{model_name}' not found in trading_advisor.models.", err=True)
+        raise typer.Exit(1)
+
+    # Parse tickers
+    if tickers == "all":
+        ticker_list = load_tickers("all")
+    elif os.path.isfile(tickers):
+        with open(tickers) as f:
+            ticker_list = [line.strip() for line in f if line.strip()]
+    else:
+        ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
+
+    os.makedirs(output_dir, exist_ok=True)
+    model = ModelClass()
+
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
+        task = progress.add_task(f"Running {model_name}...", total=len(ticker_list))
+        for ticker in ticker_list:
+            features_path = os.path.join(features_dir, f"{ticker}_features.parquet")
+            if not os.path.exists(features_path):
+                typer.echo(f"Features file not found for {ticker}: {features_path}")
+                progress.update(task, advance=1)
+                continue
+            df = pd.read_parquet(features_path)
+            if date:
+                df = df[df['date'] == date]
+                if df.empty:
+                    typer.echo(f"No data for {ticker} on {date}")
+                    progress.update(task, advance=1)
+                    continue
+            try:
+                results = model.predict(df)
+                out_df = df.copy()
+                out_df['score'] = results['score']
+                out_path = os.path.join(output_dir, f"{model_name}_{ticker}.parquet")
+                out_df.to_parquet(out_path)
+                typer.echo(f"Saved model output for {ticker} to {out_path}")
+            except Exception as e:
+                typer.echo(f"Error running model for {ticker}: {e}")
+            progress.update(task, advance=1)
+
 def to_serializable(val):
     if isinstance(val, (np.integer, np.int64, np.int32)):
         return int(val)
