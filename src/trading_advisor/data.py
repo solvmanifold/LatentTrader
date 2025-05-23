@@ -89,12 +89,16 @@ def download_stock_data(
     max_retries: int = 3,
     features_dir: str = "features",
     start_date: pd.Timestamp = None,
-    end_date: pd.Timestamp = None
+    end_date: pd.Timestamp = None,
+    features_filename: str = None  # New argument for test isolation
 ) -> pd.DataFrame:
     """Parquet-first: Check for up-to-date Parquet, else download/append missing data and update features."""
     features_dir = Path(features_dir)
     features_dir.mkdir(exist_ok=True)
-    features_path = features_dir / f"{ticker}_features.parquet"
+    if features_filename:
+        features_path = features_dir / features_filename
+    else:
+        features_path = features_dir / f"{ticker}_features.parquet"
     
     # Try to load existing data first
     df = pd.DataFrame()
@@ -156,11 +160,18 @@ def download_stock_data(
                 analyst_targets = get_analyst_targets(ticker)
                 # Calculate score history with analyst targets
                 merged_df = calculate_score_history(merged_df, analyst_targets)
-                # Remove any existing analyst_targets column if it exists
-                if 'analyst_targets' in merged_df.columns:
-                    merged_df = merged_df.drop(columns=['analyst_targets'])
-                # Add analyst_targets column: None for all rows except last
-                merged_df['analyst_targets'] = None
+                # --- Analyst targets propagation fix ---
+                if 'analyst_targets' not in merged_df.columns:
+                    merged_df['analyst_targets'] = None
+                # Only set None for new rows, preserve existing values
+                if not df.empty and 'analyst_targets' in df.columns:
+                    # Copy over old values for existing rows
+                    for idx in df.index:
+                        if idx in merged_df.index:
+                            merged_df.at[idx, 'analyst_targets'] = df.at[idx, 'analyst_targets']
+                # Set None for new rows except last, set analyst_targets for last row
+                for idx in new_rows.index:
+                    merged_df.at[idx, 'analyst_targets'] = None
                 if analyst_targets and not merged_df.empty:
                     merged_df.at[merged_df.index[-1], 'analyst_targets'] = json.dumps(analyst_targets)
                 merged_df.to_parquet(features_path)

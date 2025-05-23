@@ -155,7 +155,7 @@ def test_download_stock_data(tmp_path):
     }, index=sample_dates)
     features_dir = tmp_path / "features"
     features_dir.mkdir()
-    features_path = features_dir / "AAPL_features.parquet"
+    features_path = features_dir / "AAPL_features_test.parquet"
 
     with patch('trading_advisor.data.get_yf_ticker') as mock_get_ticker, \
          patch('trading_advisor.data.calculate_technical_indicators', side_effect=lambda df, *args, **kwargs: df), \
@@ -166,7 +166,7 @@ def test_download_stock_data(tmp_path):
         mock_get_ticker.return_value = mock_ticker
 
         # First call: no file exists, should download and write
-        df = download_stock_data('AAPL', history_days=50, features_dir=str(features_dir))
+        df = download_stock_data('AAPL', history_days=50, features_dir=str(features_dir), features_filename="AAPL_features_test.parquet")
         assert isinstance(df, pd.DataFrame)
         assert len(df) == 50
         assert features_path.exists()
@@ -176,7 +176,7 @@ def test_download_stock_data(tmp_path):
 
         # Second call: file exists and is up-to-date, should not call history
         mock_ticker.history.reset_mock()
-        df2 = download_stock_data('AAPL', history_days=50, features_dir=str(features_dir))
+        df2 = download_stock_data('AAPL', history_days=50, features_dir=str(features_dir), features_filename="AAPL_features_test.parquet")
         assert isinstance(df2, pd.DataFrame)
         assert len(df2) == 50
         mock_ticker.history.assert_not_called()
@@ -187,7 +187,7 @@ def test_download_stock_data(tmp_path):
 
         # Third call: file exists but is missing the last 5 rows, should redownload and fill in
         mock_ticker.history.reset_mock()
-        df3 = download_stock_data('AAPL', history_days=50, features_dir=str(features_dir))
+        df3 = download_stock_data('AAPL', history_days=50, features_dir=str(features_dir), features_filename="AAPL_features_test.parquet")
         assert isinstance(df3, pd.DataFrame)
         assert len(df3) == 50
         mock_ticker.history.assert_called_once()
