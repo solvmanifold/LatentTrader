@@ -36,12 +36,32 @@ def calculate_market_breadth(
     dates = None
     breadth_data = []
     
+    # Required columns
+    required_columns = {
+        'price': ['Close'],
+        'moving_averages': ['MA20', 'MA50', 'MA200'],
+        'rsi': ['RSI'],
+        'macd': ['MACD', 'MACD_Signal'],
+        'volume': ['Volume', 'Volume_MA20']
+    }
+    
     # Process each ticker
     for ticker in tqdm(tickers, desc="Calculating market breadth"):
         try:
             # Load features for this ticker
             df = load_features(ticker, features_dir)
             if df.empty:
+                continue
+                
+            # Check for required columns
+            missing_columns = []
+            for category, cols in required_columns.items():
+                for col in cols:
+                    if col not in df.columns:
+                        missing_columns.append(col)
+            
+            if missing_columns:
+                logger.warning(f"Skipping {ticker}: Missing columns {missing_columns}")
                 continue
                 
             # Get dates if not set
