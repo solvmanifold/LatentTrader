@@ -156,6 +156,14 @@ def download_stock_data(
                 logger.info(f"Appended {len(new_rows)} new rows for {ticker} (now {len(merged_df)} total rows).")
                 # Recalculate technical indicators for all (or just new rows if you want to optimize)
                 merged_df = calculate_technical_indicators(merged_df)
+                # Add Volume_Prev, using last known volume for holidays/gaps
+                merged_df['Volume_Prev'] = merged_df['Volume'].shift(1).ffill()
+                # Reorder columns to place Volume_Prev right after Volume
+                cols = merged_df.columns.tolist()
+                volume_idx = cols.index('Volume')
+                cols.remove('Volume_Prev')
+                cols.insert(volume_idx + 1, 'Volume_Prev')
+                merged_df = merged_df[cols]
                 # Get analyst targets before saving
                 analyst_targets = get_analyst_targets(ticker)
                 # --- Analyst targets propagation fix ---
