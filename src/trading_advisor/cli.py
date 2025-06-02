@@ -27,7 +27,7 @@ from trading_advisor.output import generate_report, generate_structured_data, ge
 from trading_advisor.config import SCORE_WEIGHTS
 from trading_advisor.visualization import create_stock_chart, create_score_breakdown, create_combined_visualization
 from trading_advisor.backtest import run_backtest
-from trading_advisor.features import update_features
+from trading_advisor.features import update_features as update_stock_features
 from trading_advisor.market_breadth import calculate_market_breadth
 from trading_advisor.sector_performance import calculate_sector_performance
 
