@@ -13,7 +13,7 @@ import numpy as np
 from pathlib import Path
 from typing import Optional, Dict, List
 import logging
-from .sentiment.gdelt import GDELTClient
+from .gdelt import GDELTClient
 
 logger = logging.getLogger(__name__)
 
