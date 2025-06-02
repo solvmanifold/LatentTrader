@@ -705,6 +705,58 @@ def prompt_daily(
     prompt_df.to_parquet(prompt_parquet_path)
     typer.echo(f"Prompt row saved to {prompt_parquet_path}")
 
+@app.command()
+def init_features(
+    tickers: Optional[Path] = typer.Option(
+        None,
+        "--tickers", "-t",
+        help="Path to file containing ticker symbols (default: all S&P 500)"
+    ),
+    all_tickers: bool = typer.Option(
+        False,
+        "--all",
+        help="Download and process all S&P 500 tickers"
+    ),
+    years: int = typer.Option(
+        3,
+        "--years",
+        help="Number of years of historical data to download (default: 3)"
+    ),
+    features_dir: Path = typer.Option(
+        "features",
+        "--features-dir",
+        help="Directory to save feature Parquet files"
+    )
+):
+    """Initialize features for all S&P 500 tickers or a provided list, downloading and processing up to today."""
+    from trading_advisor.data import download_stock_data, load_tickers
+    from tqdm import tqdm
+
+    logger = logging.getLogger("trading_advisor.init_features")
+
+    if all_tickers:
+        ticker_list = load_tickers("all")
+    elif tickers is not None:
+        ticker_list = load_tickers(tickers)
+    else:
+        typer.echo("You must specify either --all or --tickers.", err=True)
+        raise typer.Exit(1)
+
+    features_dir.mkdir(exist_ok=True)
+    for ticker in tqdm(ticker_list, desc="Initializing features"):
+        features_path = features_dir / f"{ticker}_features.parquet"
+        df_before = pd.read_parquet(features_path) if features_path.exists() else pd.DataFrame()
+        df_after = download_stock_data(ticker, history_days=years * 365, features_dir=str(features_dir))
+        num_new_rows = len(df_after) - len(df_before)
+        if df_after.empty:
+            logger.warning(f"No data for {ticker}")
+        else:
+            if num_new_rows > 0:
+                logger.info(f"Downloaded {num_new_rows} rows for {ticker}")
+            else:
+                logger.info(f"No new rows downloaded for {ticker}")
+            logger.info(f"Computed features for {ticker} and saved to {features_dir}/{ticker}_features.parquet")
+
 def to_serializable(val):
     if isinstance(val, (np.integer, np.int64, np.int32)):
         return int(val)
