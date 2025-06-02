@@ -1,0 +1,171 @@
+# Trading Advisor Report
+
+Generated on: 2025-05-23 17:50:46
+
+## Current Positions
+
+### CRL
+**Technical Score:** 3.64/10
+**OHLC:** Open: 134.21, High: 135.62, Low: 133.85, Close: 134.79
+**Current Position**
+**Technical Indicators:**
+- RSI: 51.68
+- MACD value: 2.77
+- MACD signal: 2.03
+- MACD histogram: 0.74
+- BOLLINGER_BANDS upper: 153.53
+- BOLLINGER_BANDS middle: 131.72
+- BOLLINGER_BANDS lower: 109.92
+- MOVING_AVERAGES sma_20: 131.72
+**Analyst Targets:**
+- Median: $159.28
+- Range: $70.0 - $215.0
+
+### CPAY
+**Technical Score:** 2.73/10
+**OHLC:** Open: 319.87, High: 323.46, Low: 321.35, Close: 322.78
+**Current Position**
+**Technical Indicators:**
+- RSI: 43.45
+- MACD value: 2.13
+- MACD signal: 3.71
+- MACD histogram: -1.58
+- BOLLINGER_BANDS upper: 357.23
+- BOLLINGER_BANDS middle: 333.69
+- BOLLINGER_BANDS lower: 310.15
+- MOVING_AVERAGES sma_20: 333.69
+**Analyst Targets:**
+- Median: $393.63
+- Range: $330.0 - $445.0
+
+### FSLR
+**Technical Score:** 2.73/10
+**OHLC:** Open: 154.0, High: 160.2, Low: 152.66, Close: 159.44
+**Current Position**
+**Technical Indicators:**
+- RSI: 54.44
+- MACD value: 8.79
+- MACD signal: 8.99
+- MACD histogram: -0.2
+- BOLLINGER_BANDS upper: 196.69
+- BOLLINGER_BANDS middle: 151.79
+- BOLLINGER_BANDS lower: 106.89
+- MOVING_AVERAGES sma_20: 151.79
+**Analyst Targets:**
+- Median: $200.05
+- Range: $100.0 - $304.0
+
+### REGN
+**Technical Score:** 2.73/10
+**OHLC:** Open: 586.85, High: 588.51, Low: 582.37, Close: 587.14
+**Current Position**
+**Technical Indicators:**
+- RSI: 49.53
+- MACD value: 0.33
+- MACD signal: -4.21
+- MACD histogram: 4.54
+- BOLLINGER_BANDS upper: 627.57
+- BOLLINGER_BANDS middle: 582.97
+- BOLLINGER_BANDS lower: 538.36
+- MOVING_AVERAGES sma_20: 582.97
+**Analyst Targets:**
+- Median: $797.21
+- Range: $535.0 - $958.0
+
+## New Technical Picks (Top 6) for 2025-05-23 (TechnicalScorer)
+
+### CPRT
+**Technical Score:** 6.36/10
+**OHLC:** Open: 57.98, High: 58.07, Low: 54.44, Close: 54.53
+**Technical Indicators:**
+- RSI: 28.19
+- MACD value: 0.18
+- MACD signal: 0.92
+- MACD histogram: -0.74
+- BOLLINGER_BANDS upper: 64.9
+- BOLLINGER_BANDS middle: 61.23
+- BOLLINGER_BANDS lower: 57.56
+- MOVING_AVERAGES sma_20: 61.23
+**Analyst Targets:**
+- Median: $61.51
+- Range: $56.0 - $67.0
+
+### KHC
+**Technical Score:** 6.36/10
+**OHLC:** Open: 26.48, High: 26.52, Low: 26.03, Close: 26.23
+**Technical Indicators:**
+- RSI: 29.7
+- MACD value: -0.68
+- MACD signal: -0.53
+- MACD histogram: -0.14
+- BOLLINGER_BANDS upper: 29.53
+- BOLLINGER_BANDS middle: 27.95
+- BOLLINGER_BANDS lower: 26.36
+- MOVING_AVERAGES sma_20: 27.95
+**Analyst Targets:**
+- Median: $31.56
+- Range: $26.0 - $53.34
+
+### AFL
+**Technical Score:** 4.55/10
+**OHLC:** Open: 102.0, High: 102.48, Low: 101.73, Close: 101.84
+**Technical Indicators:**
+- RSI: 38.11
+- MACD value: -0.85
+- MACD signal: -0.54
+- MACD histogram: -0.31
+- BOLLINGER_BANDS upper: 108.53
+- BOLLINGER_BANDS middle: 105.14
+- BOLLINGER_BANDS lower: 101.75
+- MOVING_AVERAGES sma_20: 105.14
+**Analyst Targets:**
+- Median: $106.0
+- Range: $94.0 - $120.0
+
+### ARE
+**Technical Score:** 4.55/10
+**OHLC:** Open: 67.8, High: 68.48, Low: 67.8, Close: 68.2
+**Technical Indicators:**
+- RSI: 32.39
+- MACD value: -2.86
+- MACD signal: -2.93
+- MACD histogram: 0.07
+- BOLLINGER_BANDS upper: 76.64
+- BOLLINGER_BANDS middle: 72.43
+- BOLLINGER_BANDS lower: 68.21
+- MOVING_AVERAGES sma_20: 72.43
+**Analyst Targets:**
+- Median: $104.46
+- Range: $76.0 - $144.0
+
+### AMCR
+**Technical Score:** 4.55/10
+**OHLC:** Open: 8.95, High: 8.98, Low: 8.92, Close: 8.93
+**Technical Indicators:**
+- RSI: 39.01
+- MACD value: -0.08
+- MACD signal: -0.06
+- MACD histogram: -0.02
+- BOLLINGER_BANDS upper: 9.55
+- BOLLINGER_BANDS middle: 9.24
+- BOLLINGER_BANDS lower: 8.92
+- MOVING_AVERAGES sma_20: 9.24
+**Analyst Targets:**
+- Median: $11.59
+- Range: $10.83 - $13.0
+
+### AVB
+**Technical Score:** 4.55/10
+**OHLC:** Open: 199.4, High: 199.41, Low: 197.69, Close: 198.42
+**Technical Indicators:**
+- RSI: 39.48
+- MACD value: -1.08
+- MACD signal: -0.25
+- MACD histogram: -0.83
+- BOLLINGER_BANDS upper: 213.46
+- BOLLINGER_BANDS middle: 206.39
+- BOLLINGER_BANDS lower: 199.31
+- MOVING_AVERAGES sma_20: 206.39
+**Analyst Targets:**
+- Median: $234.0
+- Range: $220.0 - $255.0

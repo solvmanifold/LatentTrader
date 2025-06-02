@@ -300,237 +300,6 @@ def version():
     console.print("Trading Advisor v1.0.0")
 
 @app.command()
-def report(
-    json_file: Path = typer.Option(
-        ...,
-        "--json", "-j",
-        help="Path to the JSON output file from the analyze command"
-    ),
-    output: Path = typer.Option(
-        "output/report.md",
-        "--output", "-o",
-        help="Path to save the markdown report"
-    )
-):
-    """Generate a markdown report from the JSON output of the analyze command."""
-    try:
-        # Load JSON data
-        with open(json_file, "r") as f:
-            data = json.load(f)
-
-        # Generate markdown report
-        report_content = generate_report(data)
-
-        # Save report to file
-        output.parent.mkdir(parents=True, exist_ok=True)
-        with open(output, "w") as f:
-            f.write(report_content)
-
-        typer.echo(report_content)
-
-    except json.JSONDecodeError:
-        typer.echo("Error loading JSON data", err=True)
-        raise typer.Exit(1)
-    except Exception as e:
-        typer.echo(f"Error generating report: {str(e)}", err=True)
-        raise typer.Exit(1)
-
-@app.command()
-def prompt(
-    json_file: str = typer.Option(..., help='Path to analysis JSON file'),
-    output: str = typer.Option(..., help='Path to output prompt file'),
-    deep_research: bool = typer.Option(
-        False,
-        "--deep-research",
-        help="Generate a deep research prompt with tactical swing trading format"
-    ),
-    top_n: int = typer.Option(
-        6,
-        "--top-n",
-        help="Number of highest-scoring new picks to include in the prompt"
-    )
-):
-    """Generate a research prompt from analysis data."""
-    try:
-        # Ensure output directory exists
-        output_path = Path(output)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # Load JSON data
-        with open(json_file, 'r') as f:
-            data = json.load(f)
-        
-        # Generate prompt
-        if deep_research:
-            prompt_text = generate_deep_research_prompt(data, top_n=top_n)
-        else:
-            prompt_text = generate_research_prompt(data, top_n=top_n)
-        
-        # Save prompt to file
-        with open(output_path, 'w') as f:
-            f.write(prompt_text)
-        
-        if deep_research:
-            typer.echo(f"Deep research prompt written to {output}")
-        else:
-            typer.echo(f"Prompt written to {output}")
-        
-    except Exception as e:
-        import traceback
-        print('PROMPT DEBUG ERROR:', e)
-        traceback.print_exc()
-        typer.echo(f"Error generating research prompt: {str(e)}", err=True)
-        raise typer.Exit(1)
-
-@app.command()
-def init_features(
-    tickers: Optional[Path] = typer.Option(
-        None,
-        "--tickers", "-t",
-        help="Path to file containing ticker symbols (default: all S&P 500)"
-    ),
-    all_tickers: bool = typer.Option(
-        False,
-        "--all",
-        help="Download and process all S&P 500 tickers"
-    ),
-    years: int = typer.Option(
-        3,
-        "--years",
-        help="Number of years of historical data to download (default: 3)"
-    ),
-    features_dir: Path = typer.Option(
-        "features",
-        "--features-dir",
-        help="Directory to save feature Parquet files"
-    )
-):
-    """Initialize features for all S&P 500 tickers or a provided list, downloading and processing up to today."""
-    from trading_advisor.data import download_stock_data, load_tickers
-    from tqdm import tqdm
-
-    logger = logging.getLogger("trading_advisor.init_features")
-
-    if all_tickers:
-        ticker_list = load_tickers("all")
-    elif tickers is not None:
-        ticker_list = load_tickers(tickers)
-    else:
-        typer.echo("You must specify either --all or --tickers.", err=True)
-        raise typer.Exit(1)
-
-    features_dir.mkdir(exist_ok=True)
-    for ticker in tqdm(ticker_list, desc="Initializing features"):
-        features_path = features_dir / f"{ticker}_features.parquet"
-        df_before = pd.read_parquet(features_path) if features_path.exists() else pd.DataFrame()
-        df_after = download_stock_data(ticker, history_days=years * 365, features_dir=str(features_dir))
-        num_new_rows = len(df_after) - len(df_before)
-        if df_after.empty:
-            logger.warning(f"No data for {ticker}")
-        else:
-            if num_new_rows > 0:
-                logger.info(f"Downloaded {num_new_rows} rows for {ticker}")
-            else:
-                logger.info(f"No new rows downloaded for {ticker}")
-            logger.info(f"Computed features for {ticker} and saved to {features_dir}/{ticker}_features.parquet")
-
-@app.command()
-def run_model(
-    model_name: str = typer.Option("TechnicalScorer", help="Model to run (e.g., 'TechnicalScorer')"),
-    tickers: str = typer.Option("all", help="Comma-separated tickers, path to file, or 'all' for all tickers"),
-    date: Optional[str] = typer.Option(None, help="Only score for this date (YYYY-MM-DD)"),
-    features_dir: str = typer.Option("features", help="Directory with feature Parquet files"),
-    output_dir: str = typer.Option("model_outputs", help="Directory to save model outputs")
-):
-    """
-    Run a model for a set of tickers (or all), optionally for a specific day, and save results to model_outputs/.
-    Example usage:
-      trading-advisor run-model --model-name TechnicalScorer --tickers all
-      trading-advisor run-model --model-name TechnicalScorer --tickers AAPL,MSFT
-      trading-advisor run-model --model-name TechnicalScorer --tickers tickers.txt --date 2024-06-01
-    """
-    import importlib
-    import os
-    import pandas as pd
-    from trading_advisor.data import load_tickers
-    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
-
-    logger = logging.getLogger("trading_advisor.run_model")
-
-    # Dynamically import the model class
-    try:
-        models_module = importlib.import_module("trading_advisor.models")
-        ModelClass = getattr(models_module, model_name)
-    except (ImportError, AttributeError):
-        typer.echo(f"Model '{model_name}' not found in trading_advisor.models.", err=True)
-        raise typer.Exit(1)
-
-    # Parse tickers
-    if tickers == "all":
-        ticker_list = load_tickers("all")
-    elif os.path.isfile(tickers):
-        with open(tickers) as f:
-            ticker_list = [line.strip() for line in f if line.strip()]
-    else:
-        ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
-
-    # Create model-specific output directory
-    model_output_dir = os.path.join(output_dir, model_name)
-    os.makedirs(model_output_dir, exist_ok=True)
-    model = ModelClass()
-    logger.info(f"Running {model_name} on {len(ticker_list)} tickers")
-
-    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
-        task = progress.add_task(f"Running {model_name}...", total=len(ticker_list))
-        for ticker in ticker_list:
-            features_path = os.path.join(features_dir, f"{ticker}_features.parquet")
-            if not os.path.exists(features_path):
-                logger.warning(f"Features file not found for {ticker}: {features_path}")
-                progress.update(task, advance=1)
-                continue
-            
-            try:
-                df = pd.read_parquet(features_path)
-                if date:
-                    try:
-                        df = df.loc[[date]]
-                    except KeyError:
-                        logger.warning(f"No data for {ticker} on {date}")
-                        progress.update(task, advance=1)
-                        continue
-                    if df.empty:
-                        logger.warning(f"No data for {ticker} on {date}")
-                        progress.update(task, advance=1)
-                        continue
-
-                results = model.predict(df)
-                new_df = df.copy()
-                new_df['score'] = results['score']
-                out_path = os.path.join(model_output_dir, f"{ticker}.parquet")
-                
-                # Read existing file if it exists
-                if os.path.exists(out_path):
-                    existing_df = pd.read_parquet(out_path)
-                    # Find which rows are actually new
-                    new_rows = new_df[~new_df.index.isin(existing_df.index)]
-                    # Concatenate old and new data
-                    out_df = pd.concat([existing_df, new_rows])
-                    # Sort by index to maintain chronological order
-                    out_df = out_df.sort_index()
-                    logger.info(f"Processed {ticker}: {len(out_df)} rows (new: {len(new_rows)}, existing: {len(existing_df)})")
-                else:
-                    out_df = new_df
-                    logger.info(f"Processed {ticker}: {len(out_df)} rows (new: {len(out_df)}, existing: 0)")
-                
-                out_df.to_parquet(out_path)
-            except Exception as e:
-                logger.error(f"Error processing {ticker}: {e}")
-            progress.update(task, advance=1)
-    
-    logger.info(f"Model run complete. Results saved to {model_output_dir}/")
-    typer.echo(f"Model run complete. Results saved to {model_output_dir}/")
-
-@app.command()
 def report_daily(
     model_name: str = typer.Option("TechnicalScorer", help="Model to report on (e.g., 'TechnicalScorer')"),
     tickers: str = typer.Option("all", help="Comma-separated tickers, path to file, or 'all' for all tickers"),
@@ -768,10 +537,12 @@ def prompt_daily(
     reports_dir: str = typer.Option("reports", help="Directory with report files and Parquet table"),
     prompts_dir: str = typer.Option("prompts", help="Directory to save prompt files and Parquet table"),
     top_n: int = typer.Option(6, help="Number of top tickers to include in the prompt"),
-    force: bool = typer.Option(False, help="Overwrite existing prompt if it exists")
+    force: bool = typer.Option(False, help="Overwrite existing prompt if it exists"),
+    deep_research: bool = typer.Option(False, help="Generate a deep research prompt with tactical swing trading format")
 ):
     """
     Generate a daily LLM-ready prompt for a model and date, based on the daily report. Save as both a text file and a row in a Parquet table.
+    Use --deep-research for a more detailed, research-oriented prompt format.
     """
     import os
     import pandas as pd
@@ -779,7 +550,8 @@ def prompt_daily(
 
     # Paths
     os.makedirs(prompts_dir, exist_ok=True)
-    prompt_txt_path = os.path.join(prompts_dir, f"{model_name}_{date}.txt")
+    prompt_suffix = "_DR" if deep_research else ""
+    prompt_txt_path = os.path.join(prompts_dir, f"{model_name}_{date}{prompt_suffix}.txt")
     prompt_parquet_path = os.path.join(prompts_dir, f"{model_name}.parquet")
     report_parquet_path = os.path.join(reports_dir, f"{model_name}.parquet")
 
@@ -801,7 +573,6 @@ def prompt_daily(
     report_md = row["report_md"]
 
     # Parse the report Markdown for sections
-    # Extract Current Positions and New Technical Picks blocks
     current_positions_blocks = []
     new_picks_blocks = []
     in_current = False
@@ -823,7 +594,6 @@ def prompt_daily(
             current_positions_blocks.append(line)
         if in_new:
             new_picks_blocks.append(line)
-    # Split into ticker blocks (by '### ')
     def split_ticker_blocks(block_lines):
         blocks = []
         current = []
@@ -835,40 +605,76 @@ def prompt_daily(
                 current.append(l)
         if current:
             blocks.append("\n".join(current).strip())
-        return [b for b in blocks if b.strip()]
+        return [b.strip() for b in blocks if b.strip()]
     current_blocks = split_ticker_blocks(current_positions_blocks)
     new_blocks = split_ticker_blocks(new_picks_blocks)
-    # Only include top_n new picks
     new_blocks = new_blocks[:top_n]
 
-    # Prompt template
-    prompt = (
-        "You are a tactical swing trader managing a technical scan and open positions.\n"
-        "Your task is to return an actionable 1–2 week trading playbook for each stock listed below.\n\n"
-        "For each Current Position:\n"
-        "- Recommend Hold, Sell, or Adjust\n"
-        "- If \"Adjust\", provide a tactical move: e.g., raise stop, set trailing stop, scale out\n"
-        "- Include a recommended stop-loss level and optional profit-taking level\n"
-        "- Keep risk in mind—prioritize capital preservation if signals are weakening\n\n"
-        "For each New Technical Pick:\n"
-        "- Decide if it's a viable trade this week\n"
-        "- If yes, provide:\n"
-        "  - Entry strategy: buy now, wait for pullback, wait for breakout, etc.\n"
-        "  - Stop-loss: price level or % below\n"
-        "  - Profit target: based on analyst target, momentum, or resistance\n"
-        "  - Confidence level: High / Medium / Low\n\n"
-        "Assume:\n"
-        "- A 1–2 week swing trade horizon\n"
-        "- Technicals and analyst targets are the primary inputs\n"
-        "- The investor is risk-aware but willing to act on strong short-term setups\n\n"
-        "Be concise, tactical, and make clear, justified recommendations.\n\n"
-        "Focus most attention on the 💡 summary line. Use the structured data only to support or refine the thesis.\n\n"
-        "---\n\n"
-        "## Current Positions\n\n"
-        f"{chr(10).join(current_blocks)}\n\n"
-        f"## New Technical Picks\n\n"
-        f"{chr(10).join(new_blocks)}\n"
-    )
+    def join_blocks_with_leading_blank(blocks):
+        # For each block except the first, prefix with two blank lines
+        if not blocks:
+            return ""
+        result = [blocks[0].strip()]
+        for b in blocks[1:]:
+            result.append("\n\n" + b.strip())
+        return "".join(result)
+
+    if deep_research:
+        # Deep research prompt template
+        prompt = (
+            "You are a tactical swing trader and market strategist evaluating a technical scan and open positions. Your task is to develop an actionable 1–2 week trading playbook for each stock listed below.\n\n"
+            "In addition to the provided technical summaries and analyst targets, use current market context, news events, earnings calendars, and public sentiment to support or override your recommendations.\n\n"
+            "When helpful, include macro events (e.g. Fed, CPI), earnings dates, or notable sentiment drivers (Reddit, upgrades/downgrades, insider activity).\n\n"
+            "Use real-time information from search, Reddit (e.g., r/stocks, r/wallstreetbets), financial media (e.g., CNBC, Bloomberg), and social sentiment tools if relevant.\n\n"
+            "Return your response in this exact bullet format for each stock:\n\n"
+            "✅ Action (e.g. Buy Now, Hold, Adjust)  \n"
+            "🎯 Entry strategy (limit or breakout entry, price conditions, timing)  \n"
+            "🛑 Stop-loss level (specific price or %)  \n"
+            "💰 Profit-taking strategy (target price, resistance level, or trailing stop)  \n"
+            "🔍 Confidence level (High / Medium / Low)  \n"
+            "🧠 Rationale (1–2 lines)\n\n"
+            "Begin each ticker with a 💡 summary that integrates both technical and real-time context.\n\n"
+            "If a setup is weak or conflicting, say 'No trade this week' and explain why.\n\n"
+            "Assume:\n"
+            "- A 1–2 week swing trade horizon\n"
+            "- Technicals are important, but can be overridden by breaking news, macro conditions, or earnings catalysts\n"
+            "- The investor is risk-aware but ready to act decisively on high-conviction short-term setups\n\n"
+            "Prioritize quality over quantity. Be specific and tactical in your recommendations.\n\n"
+            "---\n\n"
+            "📊 Current Positions:\n\n"
+            + (join_blocks_with_leading_blank(current_blocks) + "\n\n" if current_blocks else "")
+            + "📊 New Technical Picks:\n\n"
+            + (join_blocks_with_leading_blank(new_blocks) + "\n" if new_blocks else "")
+        )
+    else:
+        # Standard prompt template
+        prompt = (
+            "You are a tactical swing trader managing a technical scan and open positions.\n"
+            "Your task is to return an actionable 1–2 week trading playbook for each stock listed below.\n\n"
+            "For each Current Position:\n"
+            "- Recommend Hold, Sell, or Adjust\n"
+            "- If \"Adjust\", provide a tactical move: e.g., raise stop, set trailing stop, scale out\n"
+            "- Include a recommended stop-loss level and optional profit-taking level\n"
+            "- Keep risk in mind—prioritize capital preservation if signals are weakening\n\n"
+            "For each New Technical Pick:\n"
+            "- Decide if it's a viable trade this week\n"
+            "- If yes, provide:\n"
+            "  - Entry strategy: buy now, wait for pullback, wait for breakout, etc.\n"
+            "  - Stop-loss: price level or % below\n"
+            "  - Profit target: based on analyst target, momentum, or resistance\n"
+            "  - Confidence level: High / Medium / Low\n\n"
+            "Assume:\n"
+            "- A 1–2 week swing trade horizon\n"
+            "- Technicals and analyst targets are the primary inputs\n"
+            "- The investor is risk-aware but willing to act on strong short-term setups\n\n"
+            "Be concise, tactical, and make clear, justified recommendations.\n\n"
+            "Focus most attention on the 💡 summary line. Use the structured data only to support or refine the thesis.\n\n"
+            "---\n\n"
+            "## Current Positions\n\n"
+            + (join_blocks_with_leading_blank(current_blocks) + "\n\n" if current_blocks else "")
+            + "## New Technical Picks\n\n"
+            + (join_blocks_with_leading_blank(new_blocks) + "\n" if new_blocks else "")
+        )
 
     # Write prompt to text file
     with open(prompt_txt_path, "w") as f:
@@ -879,20 +685,23 @@ def prompt_daily(
     # Store the prompt text and the top-N tickers/scores as a row
     if os.path.exists(prompt_parquet_path):
         prompt_df = pd.read_parquet(prompt_parquet_path)
+        if 'deep_research' not in prompt_df.columns:
+            prompt_df['deep_research'] = False
     else:
         prompt_df = pd.DataFrame()
     new_row = {
         "date": date,
         "model": model_name,
+        "deep_research": deep_research,
         "prompt_txt": prompt
     }
     if not prompt_df.empty:
-        # Remove any existing row for this date/model
-        prompt_df = prompt_df[~((prompt_df["date"] == date) & (prompt_df["model"] == model_name))]
+        # Remove any existing row for this date/model/deep_research
+        prompt_df = prompt_df[~((prompt_df["date"] == date) & (prompt_df["model"] == model_name) & (prompt_df["deep_research"] == deep_research))]
         prompt_df = pd.concat([prompt_df, pd.DataFrame([new_row])], ignore_index=True)
     else:
         prompt_df = pd.DataFrame([new_row])
-    prompt_df = prompt_df.sort_values(["date", "model"]).reset_index(drop=True)
+    prompt_df = prompt_df.sort_values(["date", "model", "deep_research"]).reset_index(drop=True)
     prompt_df.to_parquet(prompt_parquet_path)
     typer.echo(f"Prompt row saved to {prompt_parquet_path}")
 
