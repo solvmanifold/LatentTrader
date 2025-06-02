@@ -7,7 +7,7 @@ from typing import List, Optional
 import pandas as pd
 from tqdm import tqdm
 
-from trading_advisor.data import load_tickers
+from trading_advisor.data import load_tickers, normalize_ticker
 from trading_advisor.features import load_features
 
 logger = logging.getLogger(__name__)
@@ -49,8 +49,11 @@ def calculate_market_breadth(
     # Process each ticker
     for ticker in tqdm(tickers, desc="Calculating market breadth"):
         try:
+            # Normalize ticker name
+            norm_ticker = normalize_ticker(ticker)
+            
             # Load features for this ticker
-            df = load_features(ticker, features_dir)
+            df = load_features(norm_ticker, features_dir)
             if df.empty:
                 continue
                 

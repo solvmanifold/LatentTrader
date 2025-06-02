@@ -27,6 +27,9 @@ from trading_advisor.output import generate_report, generate_structured_data, ge
 from trading_advisor.config import SCORE_WEIGHTS
 from trading_advisor.visualization import create_stock_chart, create_score_breakdown, create_combined_visualization
 from trading_advisor.backtest import run_backtest
+from trading_advisor.features import update_features
+from trading_advisor.market_breadth import calculate_market_breadth
+from trading_advisor.sector_performance import calculate_sector_performance
 
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
@@ -749,6 +752,20 @@ def update_sectors(
     ticker_list = load_tickers(tickers_input)
     update_sector_mapping(ticker_list, features_dir)
     logger.info(f"Updated sector mapping for {len(ticker_list)} tickers")
+
+@app.command()
+def update_breadth(
+    tickers_input: Optional[str] = typer.Argument(None, help="Path to file with tickers, or 'all' for S&P 500"),
+    features_dir: str = typer.Option("features", help="Directory containing feature files"),
+    output_dir: str = typer.Option("market_features/breadth", help="Directory to store market breadth data")
+):
+    """Calculate market breadth indicators."""
+    from trading_advisor.data import load_tickers
+    from trading_advisor.market_breadth import calculate_market_breadth
+    
+    ticker_list = load_tickers(tickers_input)
+    market_breadth = calculate_market_breadth(ticker_list, features_dir, output_dir)
+    logger.info(f"Calculated market breadth for {len(ticker_list)} tickers")
 
 def to_serializable(val):
     if isinstance(val, (np.integer, np.int64, np.int32)):
