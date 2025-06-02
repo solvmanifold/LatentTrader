@@ -741,7 +741,7 @@ def init_features(
             print(f"  - {t}")
 
 @app.command()
-def update_sectors(
+def update_sector_mapping(
     tickers_input: Optional[str] = typer.Argument(None, help="Path to file with tickers, or 'all' for S&P 500"),
     features_dir: str = typer.Option("market_features", help="Directory to store market feature files")
 ):
@@ -752,6 +752,21 @@ def update_sectors(
     ticker_list = load_tickers(tickers_input)
     update_sector_mapping(ticker_list, features_dir)
     logger.info(f"Updated sector mapping for {len(ticker_list)} tickers")
+
+@app.command()
+def update_sector_performance(
+    tickers_input: Optional[str] = typer.Argument(None, help="Path to file with tickers, or 'all' for S&P 500"),
+    features_dir: str = typer.Option("features", help="Directory containing feature files"),
+    market_features_dir: str = typer.Option("market_features", help="Directory containing market feature files"),
+    output_dir: str = typer.Option("market_features/sectors", help="Directory to store sector performance data")
+):
+    """Calculate sector performance metrics and save to parquet."""
+    from trading_advisor.data import load_tickers
+    from trading_advisor.sector_performance import calculate_sector_performance
+    
+    ticker_list = load_tickers(tickers_input)
+    sector_performance = calculate_sector_performance(ticker_list, features_dir, market_features_dir, output_dir)
+    logger.info(f"Calculated sector performance for {len(ticker_list)} tickers")
 
 @app.command()
 def update_breadth(
