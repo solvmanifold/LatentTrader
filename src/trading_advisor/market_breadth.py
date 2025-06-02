@@ -39,10 +39,11 @@ def calculate_market_breadth(
     # Required columns
     required_columns = {
         'price': ['Close'],
-        'moving_averages': ['MA20', 'MA50', 'MA200'],
+        'moving_averages': ['SMA_20', 'SMA_50', 'SMA_200'],
         'rsi': ['RSI'],
         'macd': ['MACD', 'MACD_Signal'],
-        'volume': ['Volume', 'Volume_MA20']
+        'volume': ['Volume', 'Volume_Prev'],
+        'bollinger': ['BB_Upper', 'BB_Lower', 'BB_Middle']
     }
     
     # Process each ticker
@@ -72,9 +73,9 @@ def calculate_market_breadth(
             ticker_data = pd.DataFrame(index=dates)
             
             # Moving averages
-            ticker_data['above_ma20'] = df['Close'] > df['MA20']
-            ticker_data['above_ma50'] = df['Close'] > df['MA50']
-            ticker_data['above_ma200'] = df['Close'] > df['MA200']
+            ticker_data['above_sma20'] = df['Close'] > df['SMA_20']
+            ticker_data['above_sma50'] = df['Close'] > df['SMA_50']
+            ticker_data['above_sma200'] = df['Close'] > df['SMA_200']
             
             # RSI conditions
             ticker_data['oversold'] = df['RSI'] < 30
@@ -85,7 +86,12 @@ def calculate_market_breadth(
             ticker_data['macd_bearish'] = (df['MACD'] < df['MACD_Signal']) & (df['MACD'].shift(1) >= df['MACD_Signal'].shift(1))
             
             # Volume trends
-            ticker_data['volume_above_avg'] = df['Volume'] > df['Volume_MA20']
+            ticker_data['volume_increasing'] = df['Volume'] > df['Volume_Prev']
+            
+            # Bollinger Bands
+            ticker_data['above_bb_upper'] = df['Close'] > df['BB_Upper']
+            ticker_data['below_bb_lower'] = df['Close'] < df['BB_Lower']
+            ticker_data['bb_squeeze'] = (df['BB_Upper'] - df['BB_Lower']) / df['BB_Middle'] < 0.1  # Less than 10% bandwidth
             
             breadth_data.append(ticker_data)
             
@@ -104,9 +110,9 @@ def calculate_market_breadth(
     market_breadth = pd.DataFrame(index=dates)
     
     # Moving average breadth
-    market_breadth['pct_above_ma20'] = combined['above_ma20'].mean(axis=1) * 100
-    market_breadth['pct_above_ma50'] = combined['above_ma50'].mean(axis=1) * 100
-    market_breadth['pct_above_ma200'] = combined['above_ma200'].mean(axis=1) * 100
+    market_breadth['pct_above_sma20'] = combined['above_sma20'].mean(axis=1) * 100
+    market_breadth['pct_above_sma50'] = combined['above_sma50'].mean(axis=1) * 100
+    market_breadth['pct_above_sma200'] = combined['above_sma200'].mean(axis=1) * 100
     
     # RSI breadth
     market_breadth['pct_oversold'] = combined['oversold'].mean(axis=1) * 100
@@ -117,7 +123,12 @@ def calculate_market_breadth(
     market_breadth['pct_macd_bearish'] = combined['macd_bearish'].mean(axis=1) * 100
     
     # Volume breadth
-    market_breadth['pct_volume_above_avg'] = combined['volume_above_avg'].mean(axis=1) * 100
+    market_breadth['pct_volume_increasing'] = combined['volume_increasing'].mean(axis=1) * 100
+    
+    # Bollinger Bands breadth
+    market_breadth['pct_above_bb_upper'] = combined['above_bb_upper'].mean(axis=1) * 100
+    market_breadth['pct_below_bb_lower'] = combined['below_bb_lower'].mean(axis=1) * 100
+    market_breadth['pct_bb_squeeze'] = combined['bb_squeeze'].mean(axis=1) * 100
     
     # Save to parquet
     output_path = Path(output_dir) / "daily_breadth.parquet"
