@@ -52,20 +52,20 @@ def calculate_market_breadth(
             ticker_data = pd.DataFrame(index=dates)
             
             # Moving averages
-            ticker_data['above_ma20'] = df['close'] > df['ma20']
-            ticker_data['above_ma50'] = df['close'] > df['ma50']
-            ticker_data['above_ma200'] = df['close'] > df['ma200']
+            ticker_data['above_ma20'] = df['Close'] > df['MA20']
+            ticker_data['above_ma50'] = df['Close'] > df['MA50']
+            ticker_data['above_ma200'] = df['Close'] > df['MA200']
             
             # RSI conditions
-            ticker_data['oversold'] = df['rsi'] < 30
-            ticker_data['overbought'] = df['rsi'] > 70
+            ticker_data['oversold'] = df['RSI'] < 30
+            ticker_data['overbought'] = df['RSI'] > 70
             
             # MACD crossovers
-            ticker_data['macd_bullish'] = (df['macd'] > df['macd_signal']) & (df['macd'].shift(1) <= df['macd_signal'].shift(1))
-            ticker_data['macd_bearish'] = (df['macd'] < df['macd_signal']) & (df['macd'].shift(1) >= df['macd_signal'].shift(1))
+            ticker_data['macd_bullish'] = (df['MACD'] > df['MACD_Signal']) & (df['MACD'].shift(1) <= df['MACD_Signal'].shift(1))
+            ticker_data['macd_bearish'] = (df['MACD'] < df['MACD_Signal']) & (df['MACD'].shift(1) >= df['MACD_Signal'].shift(1))
             
             # Volume trends
-            ticker_data['volume_above_avg'] = df['volume'] > df['volume_ma20']
+            ticker_data['volume_above_avg'] = df['Volume'] > df['Volume_MA20']
             
             breadth_data.append(ticker_data)
             
