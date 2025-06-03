@@ -54,6 +54,23 @@ pip install trading-advisor
 
 ## Usage
 
+### Update Data
+
+```bash
+trading-advisor update-data --tickers tickers.txt --days 60
+```
+
+*Note: If you omit the `--tickers` argument, only tickers with existing feature files will be updated. To update all S&P 500 tickers, use `--tickers all`.*
+
+Options:
+- `--tickers`, `-t`: Path to a file containing ticker symbols (required unless you want to update only existing tickers). Use `all` for S&P 500. If omitted, only tickers with existing feature files will be updated.
+- `--days`, `-d`: Number of days of historical data to download (default: 60)
+- `--features-dir`: Directory to store feature files (default: data/features)
+- `--start-date`: Start date for data collection (optional)
+- `--update-sector-mapping`: Force update sector mapping (default: false)
+- `--update-tickers/--no-update-tickers`: Update individual ticker features (default: true)
+- `--update-market/--no-update-market`: Update market-wide features (default: true)
+
 ### Analyze Stocks
 
 ```bash

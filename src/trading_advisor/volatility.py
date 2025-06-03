@@ -6,6 +6,7 @@ from typing import Optional, Dict
 import pandas as pd
 import numpy as np
 import yfinance as yf
+from trading_advisor.data import fill_missing_trading_days
 
 logger = logging.getLogger(__name__)
 
@@ -51,15 +52,30 @@ def calculate_market_volatility(combined_df: pd.DataFrame) -> pd.DataFrame:
         lambda x: x.pct_change().std() * np.sqrt(252)  # Annualized
     )
     volatility_df['cross_sectional_vol'] = daily_returns
-    
-    # Correlation matrix (using 20-day rolling window)
-    def calculate_correlation(group):
-        if len(group) < 2:  # Need at least 2 stocks for correlation
-            return np.nan
-        returns = group.pct_change()
-        return returns.corr().mean().mean()  # Average correlation
-    
-    volatility_df['avg_correlation'] = combined_df.groupby(level=0)['Close'].apply(calculate_correlation)
+
+    # --- Average correlation calculation (refactored, manual rolling) ---
+    # Pivot to get a matrix of Close prices: rows=Date, columns=Ticker
+    close_matrix = combined_df.reset_index().pivot(index='Date', columns='ticker', values='Close')
+    returns_matrix = close_matrix.pct_change()
+    window = 20
+    min_periods = 2
+    avg_corr = []
+    idx = returns_matrix.index
+    for i in range(len(returns_matrix)):
+        if i < window - 1:
+            avg_corr.append(np.nan)
+            continue
+        window_df = returns_matrix.iloc[i - window + 1:i + 1]
+        if window_df.shape[1] < 2 or window_df.dropna(axis=1, how='all').shape[1] < 2:
+            avg_corr.append(np.nan)
+            continue
+        corr_matrix = window_df.corr()
+        if corr_matrix.shape[0] < 2:
+            avg_corr.append(np.nan)
+            continue
+        upper_triangle = np.triu_indices_from(corr_matrix, k=1)
+        avg_corr.append(corr_matrix.values[upper_triangle].mean())
+    volatility_df['avg_correlation'] = pd.Series(avg_corr, index=idx)
     
     return volatility_df
 
@@ -135,6 +151,9 @@ class MarketVolatility:
             
         # Calculate volatility features
         volatility_df = calculate_market_volatility(update_df)
+        
+        # Fill in missing trading days
+        volatility_df = fill_missing_trading_days(volatility_df, combined_df)
         
         # Merge with existing volatility data
         volatility_path = self.market_features_dir / "market_volatility.parquet"

@@ -5,7 +5,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 import pandas as pd
 import yfinance as yf
@@ -82,6 +82,37 @@ def normalize_ticker(ticker: str) -> str:
 
 def get_features_path(ticker, features_dir="features"):
     return Path(features_dir) / f"{ticker}_features.parquet"
+
+def fill_missing_trading_days(df: pd.DataFrame, reference_df: pd.DataFrame) -> pd.DataFrame:
+    """Fill in missing trading days in the DataFrame based on the reference DataFrame.
+    
+    Args:
+        df: DataFrame to fill missing trading days in.
+        reference_df: Reference DataFrame with the set of trading days.
+        
+    Returns:
+        DataFrame with missing trading days filled in.
+    """
+    if df.empty or reference_df.empty:
+        return df
+    
+    # Extract the set of trading days from the reference DataFrame
+    trading_days = reference_df.index.unique()
+    
+    # Identify missing trading days in the target DataFrame
+    missing_days = trading_days.difference(df.index)
+    
+    if missing_days.empty:
+        return df
+    
+    # Create a DataFrame for missing days with NaN values
+    missing_df = pd.DataFrame(index=missing_days, columns=df.columns)
+    
+    # Combine the original DataFrame with the missing days DataFrame
+    filled_df = pd.concat([df, missing_df])
+    filled_df = filled_df.sort_index()
+    
+    return filled_df
 
 def download_stock_data(
     ticker: str,

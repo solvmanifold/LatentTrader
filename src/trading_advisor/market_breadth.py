@@ -7,7 +7,7 @@ from typing import List, Optional
 import pandas as pd
 from tqdm import tqdm
 
-from trading_advisor.data import load_tickers, normalize_ticker
+from trading_advisor.data import load_tickers, normalize_ticker, fill_missing_trading_days
 from trading_advisor.features import load_features
 
 logger = logging.getLogger(__name__)
@@ -64,5 +64,8 @@ def calculate_market_breadth(combined_df: pd.DataFrame) -> pd.DataFrame:
     breadth_df['macd_bullish'] = combined_df.groupby(level=0)['MACD'].apply(
         lambda x: (x > 0).mean() * 100
     )
+    
+    # Fill in missing trading days
+    breadth_df = fill_missing_trading_days(breadth_df, combined_df)
     
     return breadth_df 

@@ -6,20 +6,21 @@ This module handles the mapping of tickers to sectors and sector-related utiliti
 
 import pandas as pd
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 import logging
 import yfinance as yf
 from tqdm import tqdm
+import json
 from trading_advisor.data import normalize_ticker
 
 logger = logging.getLogger(__name__)
 
-def get_sector_mapping(tickers: list[str]) -> pd.DataFrame:
+def get_sector_mapping(tickers: list[str]) -> Dict[str, str]:
     """
     Get sector mapping for a list of tickers.
-    Returns a DataFrame with columns: [ticker, sector, subsector, last_updated]
+    Returns a dictionary mapping tickers to their sectors.
     """
-    sector_data = []
+    sector_mapping = {}
     
     for ticker in tqdm(tickers, desc="Getting sector info"):
         try:
@@ -28,41 +29,30 @@ def get_sector_mapping(tickers: list[str]) -> pd.DataFrame:
             info = ticker_obj.info
             
             sector = info.get('sector', 'Unknown')
-            industry = info.get('industry', 'Unknown')
-            
-            sector_data.append({
-                'ticker': normalize_ticker(ticker),
-                'sector': sector,
-                'subsector': industry,
-                'last_updated': pd.Timestamp.now().normalize()
-            })
+            sector_mapping[normalize_ticker(ticker)] = sector
             
         except Exception as e:
             logger.warning(f"Failed to get sector info for {ticker}: {e}")
-            sector_data.append({
-                'ticker': normalize_ticker(ticker),
-                'sector': 'Unknown',
-                'subsector': 'Unknown',
-                'last_updated': pd.Timestamp.now().normalize()
-            })
+            sector_mapping[normalize_ticker(ticker)] = 'Unknown'
     
-    return pd.DataFrame(sector_data)
+    return sector_mapping
 
-def load_sector_mapping(market_features_dir: str = "data/market_features") -> pd.DataFrame:
-    """Load sector mapping from parquet file.
+def load_sector_mapping(market_features_dir: str = "data/market_features") -> Dict[str, str]:
+    """Load sector mapping from JSON file.
     
     Args:
         market_features_dir: Directory containing market feature files
         
     Returns:
-        DataFrame with ticker to sector mapping
+        Dictionary mapping tickers to sectors
     """
-    mapping_file = Path(market_features_dir) / "sector_mapping.parquet"
+    mapping_file = Path(market_features_dir) / "sector_mapping.json"
     if mapping_file.exists():
-        return pd.read_parquet(mapping_file)
-    return pd.DataFrame()
+        with open(mapping_file, 'r') as f:
+            return json.load(f)
+    return {}
 
-def update_sector_mapping(tickers: List[str], market_features_dir: str = "data/market_features") -> pd.DataFrame:
+def update_sector_mapping(tickers: List[str], market_features_dir: str = "data/market_features") -> Dict[str, str]:
     """
     Update sector mapping for the given tickers.
     
@@ -71,7 +61,7 @@ def update_sector_mapping(tickers: List[str], market_features_dir: str = "data/m
         market_features_dir: Directory to save market feature files
         
     Returns:
-        DataFrame with updated sector mapping
+        Dictionary mapping tickers to sectors
     """
     # Get sector mapping
     sector_mapping = get_sector_mapping(tickers)
@@ -81,14 +71,15 @@ def update_sector_mapping(tickers: List[str], market_features_dir: str = "data/m
     
     return sector_mapping
 
-def save_sector_mapping(mapping: pd.DataFrame, market_features_dir: str = "data/market_features") -> None:
+def save_sector_mapping(mapping: Dict[str, str], market_features_dir: str = "data/market_features") -> None:
     """
-    Save sector mapping to parquet file.
+    Save sector mapping to JSON file.
     
     Args:
-        mapping: DataFrame with sector mapping
+        mapping: Dictionary mapping tickers to sectors
         market_features_dir: Directory to save market feature files
     """
-    output_path = Path(market_features_dir) / "sector_mapping.parquet"
+    output_path = Path(market_features_dir) / "sector_mapping.json"
     output_path.parent.mkdir(exist_ok=True)
-    mapping.to_parquet(output_path) 
+    with open(output_path, 'w') as f:
+        json.dump(mapping, f, indent=2) 

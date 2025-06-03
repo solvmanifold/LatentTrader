@@ -1,1 +1,3 @@
-CB
+AAPL
+TSLA
+MSFT

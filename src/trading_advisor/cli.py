@@ -713,56 +713,65 @@ def prompt_daily(
     typer.echo(f"Prompt row saved to {prompt_parquet_path}")
 
 @app.command()
-def init_features(
-    tickers_input: Optional[Path] = typer.Argument(None, help="Path to file with tickers, or 'all' for S&P 500"),
-    years: int = typer.Option(5, help="Number of years of historical data to download"),
-    features_dir: str = typer.Option("data/features", help="Directory to store feature files")
-):
-    """Initialize features for the given tickers."""
-    ticker_list = load_tickers(tickers_input)
-    features_dir = Path(features_dir)
-    features_dir.mkdir(exist_ok=True)
-    from trading_advisor.data import normalize_ticker
-    failed_tickers = []
-    for ticker in tqdm(ticker_list, desc="Initializing features"):
-        norm_ticker = normalize_ticker(ticker)
-        features_path = features_dir / f"{ticker}_features.parquet"
-        df_before = pd.read_parquet(features_path) if features_path.exists() else pd.DataFrame()
-        df_after = download_stock_data(norm_ticker, history_days=years * 365, features_dir=str(features_dir))
-        num_new_rows = len(df_after) - len(df_before)
-        if df_after.empty:
-            logger.warning(f"No data for {ticker}")
-            failed_tickers.append(ticker)
-        else:
-            if num_new_rows > 0:
-                logger.info(f"Downloaded {num_new_rows} rows for {ticker}")
-            else:
-                logger.info(f"No new rows downloaded for {ticker}")
-            logger.info(f"Computed features for {ticker} and saved to {features_dir}/{ticker}_features.parquet")
-    if failed_tickers:
-        print("\nThe following tickers failed to download data:")
-        for t in failed_tickers:
-            print(f"  - {t}")
-
-@app.command()
-def generate_market_features(
-    tickers_input: Optional[Path] = typer.Argument(None, help="Path to file with tickers, or 'all' for S&P 500"),
+def update_data(
+    tickers_input: Optional[Path] = typer.Argument(
+        None,
+        help="Path to file with tickers, or 'all' for S&P 500. If omitted, only tickers with existing feature files will be updated."
+    ),
     days: int = typer.Option(60, help="Number of days of historical data to download"),
     features_dir: str = typer.Option("data/features", help="Directory to store feature files"),
     start_date: Optional[str] = typer.Option(None, help="Start date for data collection"),
+    update_tickers: bool = typer.Option(
+        True,
+        "--update-tickers/--no-update-tickers",
+        help="Update individual ticker features"
+    ),
+    update_market: bool = typer.Option(
+        True,
+        "--update-market/--no-update-market",
+        help="Update market-wide features"
+    ),
     update_sector_mapping: bool = typer.Option(
         False,
-        "--update-sector-mapping",
-        help="Force update sector mapping"
+        "--update-sector-mapping/--no-update-sector-mapping",
+        help="Force update sector mapping (default: false)"
     )
 ):
-    """Generate market features."""
+    """Update ticker and market features.\n\nTICKERS_INPUT can be a path to a file with tickers (one per line), or 'all' for S&P 500. If omitted, only tickers with existing feature files will be updated."""
     ticker_list = load_tickers(tickers_input)
     features_dir = Path(features_dir)
     features_dir.mkdir(exist_ok=True)
     data_path = Path("data")
-    market_features = MarketFeatures(data_path)
-    market_features.generate_market_features(start_date, update_sector_mapping, days)
+    
+    # Update ticker features if requested
+    if update_tickers:
+        logger.info("Updating ticker features...")
+        failed_tickers = []
+        for ticker in tqdm(ticker_list, desc="Updating ticker features"):
+            norm_ticker = normalize_ticker(ticker)
+            features_path = features_dir / f"{ticker}_features.parquet"
+            df_before = pd.read_parquet(features_path) if features_path.exists() else pd.DataFrame()
+            df_after = download_stock_data(norm_ticker, history_days=days, features_dir=str(features_dir))
+            num_new_rows = len(df_after) - len(df_before)
+            if df_after.empty:
+                logger.warning(f"No data for {ticker}")
+                failed_tickers.append(ticker)
+            else:
+                if num_new_rows > 0:
+                    logger.info(f"Downloaded {num_new_rows} rows for {ticker}")
+                else:
+                    logger.info(f"No new rows downloaded for {ticker}")
+                logger.info(f"Computed features for {ticker} and saved to {features_dir}/{ticker}_features.parquet")
+        if failed_tickers:
+            print("\nThe following tickers failed to download data:")
+            for t in failed_tickers:
+                print(f"  - {t}")
+    
+    # Update market features if requested
+    if update_market:
+        logger.info("Updating market features...")
+        market_features = MarketFeatures(data_path)
+        market_features.generate_market_features(start_date, days, update_sector_mapping)
 
 def to_serializable(val):
     if isinstance(val, (np.integer, np.int64, np.int32)):

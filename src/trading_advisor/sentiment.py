@@ -15,6 +15,7 @@ from typing import Optional, Dict, List
 import logging
 from datetime import datetime
 from .sentiment.gdelt import GDELTClient
+from trading_advisor.data import fill_missing_trading_days
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ class MarketSentiment:
         self.sentiment_dir = data_dir / "market_features"
         self.sentiment_dir.mkdir(parents=True, exist_ok=True)
         
-        # Initialize GDELT client
+        # Initialize GDELT client with the base data_dir
         self.gdelt_client = GDELTClient(data_dir)
         
     def get_latest_sentiment_date(self) -> Optional[datetime]:
@@ -175,6 +176,9 @@ class MarketSentiment:
             
         # Calculate sentiment features
         sentiment_features = self.calculate_sentiment_features(gdelt_data)
+        
+        # Fill in missing trading days
+        sentiment_features = fill_missing_trading_days(sentiment_features, gdelt_data)
         
         # Merge with existing sentiment data
         sentiment_path = self.sentiment_dir / "market_sentiment.parquet"
