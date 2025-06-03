@@ -13,7 +13,7 @@ import numpy as np
 from pathlib import Path
 from typing import Optional, Dict, List
 import logging
-from .gdelt import GDELTClient
+# from .sentiment.gdelt import GDELTClient
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +27,9 @@ class MarketSentiment:
             data_dir: Base directory for data storage
         """
         self.data_dir = data_dir
-        # Removed sentiment_dir and its directory creation
+        
         # Initialize GDELT client
-        self.gdelt_client = GDELTClient(data_dir)
+        # self.gdelt_client = GDELTClient(data_dir)
         
     def collect_put_call_ratios(self, start_date: Optional[str] = None) -> pd.DataFrame:
         """Collect and process put/call ratio data.
@@ -77,7 +77,8 @@ class MarketSentiment:
         Returns:
             DataFrame with news sentiment metrics
         """
-        return self.gdelt_client.collect_sentiment_data(start_date, years)
+        # return self.gdelt_client.collect_sentiment_data(start_date, years)
+        return pd.DataFrame()
         
     def calculate_sentiment_features(self, gdelt_data: pd.DataFrame) -> pd.DataFrame:
         """Calculate sentiment features from GDELT data.
@@ -125,9 +126,9 @@ class MarketSentiment:
             DataFrame with sentiment features
         """
         # Get GDELT data
-        gdelt_data = self.gdelt_client.collect_sentiment_data(start_date, days)
+        # gdelt_data = self.gdelt_client.collect_sentiment_data(start_date, days)
         
         # Calculate sentiment features
-        sentiment_features = self.calculate_sentiment_features(gdelt_data)
+        # sentiment_features = self.calculate_sentiment_features(gdelt_data)
         
-        return sentiment_features 
+        return pd.DataFrame() 

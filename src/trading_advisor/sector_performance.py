@@ -1,148 +1,132 @@
-"""Sector performance calculation."""
+"""
+Sector performance calculation module.
+
+This module handles the calculation of sector performance metrics including:
+- Price levels
+- Returns
+- Volatility
+- Volume
+- Momentum
+"""
 
 import logging
 from pathlib import Path
-from typing import List, Optional, Dict
-
+from typing import Dict, Optional, List, Tuple
 import pandas as pd
+import numpy as np
+from .sector_mapping import load_sector_mapping
 from tqdm import tqdm
-
-from trading_advisor.data import load_tickers, normalize_ticker
-from trading_advisor.features import load_features
-from trading_advisor.market_features import load_sector_mapping
 
 logger = logging.getLogger(__name__)
 
-def calculate_sector_performance(
-    tickers: Optional[List[str]] = None,
-    features_dir: str = "features",
-    market_features_dir: str = "market_features",
-    output_dir: str = "market_features/sectors"
-) -> pd.DataFrame:
+def calculate_sector_performance(ticker_df: pd.DataFrame, features_dir: str) -> Dict[str, pd.DataFrame]:
     """
     Calculate sector performance metrics.
     
     Args:
-        tickers: List of tickers to analyze. If None, uses all tickers in features_dir
+        ticker_df: DataFrame with ticker data, must have 'ticker' column
         features_dir: Directory containing feature files
-        market_features_dir: Directory containing market feature files (for sector mapping)
-        output_dir: Directory to save sector performance data
         
     Returns:
-        DataFrame with sector performance metrics, one row per date
+        Dictionary containing:
+        - Individual sector DataFrames (e.g., 'Technology', 'Healthcare', etc.)
+        - 'all_sectors': Wide-format DataFrame with all sector metrics
     """
-    # Load tickers if not provided
-    if tickers is None:
-        tickers = [f.stem.replace('_features', '') for f in Path(features_dir).glob('*_features.parquet')]
-    logger.info(f"Processing {len(tickers)} tickers")
+    if ticker_df.empty:
+        logger.warning("Empty ticker DataFrame provided")
+        return {'all_sectors': pd.DataFrame()}
+    
+    # Ensure DataFrame is indexed by date
+    if not isinstance(ticker_df.index, pd.DatetimeIndex):
+        if 'Date' in ticker_df.columns:
+            ticker_df = ticker_df.set_index('Date')
+        elif 'date' in ticker_df.columns:
+            ticker_df = ticker_df.set_index('date')
+        else:
+            raise ValueError("DataFrame must have a 'Date' or 'date' column")
+    
+    # Convert index to datetime and sort
+    ticker_df.index = pd.to_datetime(ticker_df.index)
+    ticker_df = ticker_df.sort_index()
     
     # Load sector mapping
-    sector_mapping = load_sector_mapping(market_features_dir)
-    if sector_mapping.empty:
-        logger.error("No sector mapping found")
-        return pd.DataFrame()
-    logger.info(f"Loaded sector mapping with {len(sector_mapping)} entries")
+    sector_mapping_path = Path(features_dir) / "sector_mapping.parquet"
+    if not sector_mapping_path.exists():
+        logger.warning(f"No sector mapping found at {sector_mapping_path}")
+        return {'all_sectors': pd.DataFrame()}
     
-    # Initialize results DataFrame
-    dates = None
-    sector_data: Dict[str, List[pd.DataFrame]] = {}
+    sector_mapping = pd.read_parquet(sector_mapping_path)
     
-    # Process each ticker
-    for ticker in tqdm(tickers, desc="Calculating sector performance"):
-        try:
-            # Normalize ticker name
-            norm_ticker = normalize_ticker(ticker)
-            
-            # Get sector info
-            sector_info = sector_mapping[sector_mapping['ticker'] == norm_ticker]
-            if sector_info.empty:
-                logger.warning(f"No sector info for {ticker}")
-                continue
-                
-            sector = sector_info.iloc[0]['sector']
-            subsector = sector_info.iloc[0]['subsector']
-            
-            # Load features for this ticker
-            df = load_features(norm_ticker, features_dir)
-            if df.empty:
-                logger.warning(f"No features found for {ticker}")
-                continue
-                
-            # Get dates if not set
-            if dates is None:
-                dates = df.index
-                
-            # Calculate sector metrics for this ticker
-            ticker_data = pd.DataFrame(index=dates)
-            
-            # Price metrics
-            ticker_data['return_1d'] = df['Close'].pct_change()
-            ticker_data['return_5d'] = df['Close'].pct_change(5)
-            ticker_data['return_20d'] = df['Close'].pct_change(20)
-            
-            # Volume metrics
-            ticker_data['volume_change'] = df['Volume'].pct_change()
-            ticker_data['relative_volume'] = df['Volume'] / df['Volume'].rolling(20).mean()
-            
-            # Technical indicators
-            ticker_data['rsi'] = df['RSI']
-            ticker_data['macd_hist'] = df['MACD_Hist']
-            ticker_data['bb_position'] = (df['Close'] - df['BB_Lower']) / (df['BB_Upper'] - df['BB_Lower'])
-            
-            # Add to sector data
-            if sector not in sector_data:
-                sector_data[sector] = []
-            sector_data[sector].append(ticker_data)
-            
-        except Exception as e:
-            logger.warning(f"Failed to process {ticker}: {e}")
+    # Merge with sector data
+    ticker_df = ticker_df.reset_index().merge(
+        sector_mapping[['ticker', 'sector', 'subsector']],
+        on='ticker',
+        how='left'
+    )
+    # Set index back to the date column (try 'Date', then 'date', then the original index name)
+    for date_col in ['Date', 'date', ticker_df.columns[0]]:
+        if date_col in ticker_df.columns:
+            ticker_df[date_col] = pd.to_datetime(ticker_df[date_col])
+            ticker_df = ticker_df.set_index(date_col)
+            break
+    ticker_df = ticker_df.sort_index()
+    
+    # Get unique dates from the ticker data
+    unique_dates = pd.DatetimeIndex(sorted(ticker_df.index.unique()))
+    sector_dfs = {}
+    
+    # Calculate metrics for each sector
+    for sector in ticker_df['sector'].unique():
+        if pd.isna(sector):
             continue
-    
-    if not sector_data:
-        logger.error("No valid data found for any sectors")
-        return pd.DataFrame()
-    
-    logger.info(f"Found data for {len(sector_data)} sectors")
-    
-    # Calculate sector-level metrics
-    sector_performance_dict = {}
-    
-    # Process each sector
-    for sector, ticker_dfs in sector_data.items():
-        # Combine all ticker data for this sector
-        sector_df = pd.concat(ticker_dfs, axis=1)
+            
+        # Filter data for this sector
+        sector_data = ticker_df[ticker_df['sector'] == sector]
         
-        # Calculate sector metrics
-        sector_performance_dict[f'{sector}_return_1d'] = sector_df['return_1d'].mean(axis=1)
-        sector_performance_dict[f'{sector}_return_5d'] = sector_df['return_5d'].mean(axis=1)
-        sector_performance_dict[f'{sector}_return_20d'] = sector_df['return_20d'].mean(axis=1)
-        sector_performance_dict[f'{sector}_volume_change'] = sector_df['volume_change'].mean(axis=1)
-        sector_performance_dict[f'{sector}_relative_volume'] = sector_df['relative_volume'].mean(axis=1)
-        sector_performance_dict[f'{sector}_avg_rsi'] = sector_df['rsi'].mean(axis=1)
-        sector_performance_dict[f'{sector}_avg_macd_hist'] = sector_df['macd_hist'].mean(axis=1)
-        sector_performance_dict[f'{sector}_avg_bb_position'] = sector_df['bb_position'].mean(axis=1)
-        # Calculate sector momentum
-        sector_performance_dict[f'{sector}_momentum'] = (
-            sector_performance_dict[f'{sector}_return_1d'].rolling(5).mean() +
-            sector_performance_dict[f'{sector}_return_5d'].rolling(5).mean() +
-            sector_performance_dict[f'{sector}_return_20d'].rolling(5).mean()
-        ) / 3
+        # Calculate metrics
+        metrics = sector_data.groupby(sector_data.index).agg({
+            'Close': ['mean', 'std'],
+            'Volume': 'sum'
+        })
+        
+        # Flatten column names
+        metrics.columns = ['price', 'volatility', 'volume']
+        
+        # Calculate returns
+        metrics['returns_1d'] = metrics['price'].pct_change()
+        metrics['returns_5d'] = metrics['price'].pct_change(5)
+        metrics['returns_20d'] = metrics['price'].pct_change(20)
+        
+        # Calculate momentum
+        metrics['momentum_5d'] = metrics['returns_5d'].rolling(5).mean()
+        metrics['momentum_20d'] = metrics['returns_20d'].rolling(20).mean()
+        
+        # Forward fill missing values (up to 5 days) to handle holidays
+        metrics = metrics.ffill(limit=5)
+        
+        # Ensure index is datetime and sort
+        metrics.index = pd.to_datetime(metrics.index)
+        metrics = metrics.sort_index()
+        
+        # Store in dictionary
+        sector_dfs[sector] = metrics
     
-    # Calculate sector rotation metrics
-    for sector in sector_data.keys():
-        # Relative strength vs. market (using equal-weighted average of all sectors)
-        market_return = pd.concat([sector_performance_dict[f'{s}_return_1d'] for s in sector_data.keys()], axis=1).mean(axis=1)
-        sector_performance_dict[f'{sector}_relative_strength'] = (
-            sector_performance_dict[f'{sector}_return_1d'] - market_return
-        ).rolling(20).mean()
+    # Create wide-format DataFrame with all sectors
+    all_sectors = pd.DataFrame(index=unique_dates)
     
-    # Concatenate all sector metrics into a single DataFrame
-    sector_performance = pd.concat(sector_performance_dict, axis=1)
+    # Add each sector's metrics with sector prefix
+    for sector, metrics in sector_dfs.items():
+        for col in metrics.columns:
+            all_sectors[f'{sector}_{col}'] = metrics[col]
     
-    # Save to parquet
-    output_path = Path(output_dir) / "sector_performance.parquet"
-    output_path.parent.mkdir(exist_ok=True)
-    sector_performance.to_parquet(output_path)
+    # Forward fill missing values
+    all_sectors = all_sectors.ffill(limit=5)
     
-    logger.info(f"Saved sector performance data to {output_path}")
-    return sector_performance 
+    # Ensure index is datetime and sort
+    all_sectors.index = pd.to_datetime(all_sectors.index)
+    all_sectors = all_sectors.sort_index()
+    
+    # Add the wide-format table to the dictionary
+    sector_dfs['all_sectors'] = all_sectors
+    
+    return sector_dfs 
