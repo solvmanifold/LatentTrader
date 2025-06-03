@@ -168,7 +168,10 @@ class MarketVolatility:
             volatility_df = volatility_df.sort_index()
             
         # Save updated volatility data
-        volatility_df.to_parquet(volatility_path)
-        logger.info(f"Saved volatility features to {volatility_path}")
+        if not volatility_df.empty:
+            volatility_df.to_parquet(volatility_path)
+            logger.info(f"Saved volatility features to {volatility_path}")
+        else:
+            logger.warning(f"Did NOT overwrite {volatility_path} because new volatility DataFrame is empty.")
         
         return volatility_df 
