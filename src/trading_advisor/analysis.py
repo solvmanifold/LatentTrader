@@ -70,6 +70,7 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
     def score_row(row, analyst_targets=None):
         score = 0.0
         score_details = {}
+        
         # RSI Score
         rsi = row.get('RSI', float('nan'))
         if pd.notna(rsi):
@@ -83,6 +84,7 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
                 score_details['rsi'] = 0.0
         else:
             score_details['rsi'] = 0.0
+            
         # Bollinger Bands Score
         bb_lower = row.get('BB_Lower', float('nan'))
         bb_upper = row.get('BB_Upper', float('nan'))
@@ -100,6 +102,7 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
                 score_details['bollinger'] = 0.0
         else:
             score_details['bollinger'] = 0.0
+            
         # MACD Score
         macd = row.get('MACD', float('nan'))
         macd_signal = row.get('MACD_Signal', float('nan'))
@@ -118,6 +121,7 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
                 score_details['macd'] = 0.0
         else:
             score_details['macd'] = 0.0
+            
         # Moving Averages Score
         sma_20 = row.get('SMA_20', float('nan'))
         sma_50 = row.get('SMA_50', float('nan'))
@@ -143,6 +147,7 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
                 score_details['moving_averages'] = 0.0
         else:
             score_details['moving_averages'] = 0.0
+            
         # Volume Spike Score
         prev_volume = row.get('Prev_Volume', float('nan'))
         volume = row.get('Volume', float('nan'))
@@ -155,6 +160,7 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
                 score_details['volume'] = 0.0
         else:
             score_details['volume'] = 0.0
+            
         # Analyst Targets Score (optional, only for latest row in backtest)
         if analyst_targets and hasattr(analyst_targets, 'get'):
             current_price = analyst_targets.get('current_price', None)
@@ -168,12 +174,15 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
                 score_details['analyst_targets'] = 0.0
         else:
             score_details['analyst_targets'] = 0.0
+            
         # Normalize score to 0-10 range
         normalized_score = float(min(max((score / MAX_RAW_SCORE) * 10, 0), 10))
+        
         # Ensure all tracked keys are present in score_details
         for key in ['macd', 'rsi', 'bollinger', 'moving_averages', 'volume', 'analyst_targets']:
             if key not in score_details:
                 score_details[key] = 0.0
+                
         return normalized_score, score_details
 
     if isinstance(df_or_row, pd.Series):

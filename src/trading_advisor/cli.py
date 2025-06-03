@@ -11,6 +11,8 @@ import os
 from logging.handlers import RotatingFileHandler
 from rich.logging import RichHandler
 import numpy as np
+import click
+from tqdm import tqdm
 
 import typer
 from rich.console import Console
@@ -30,6 +32,8 @@ from trading_advisor.backtest import run_backtest
 from trading_advisor.features import update_features as update_stock_features
 from trading_advisor.market_breadth import calculate_market_breadth
 from trading_advisor.sector_performance import calculate_sector_performance
+from trading_advisor.sentiment import MarketSentiment
+from trading_advisor.market_features import MarketFeatures
 
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
@@ -292,7 +296,7 @@ def chart(
             console.print(f"[bold green]Charts generated for {ticker}:[/bold green]")
             console.print(f"  - Price chart: {chart_path}")
             console.print(f"  - Score breakdown: {score_path}")
-
+        
     except Exception as e:
         typer.echo(f"Error generating charts: {str(e)}", err=True)
         raise typer.Exit(1)
@@ -712,7 +716,7 @@ def prompt_daily(
 def init_features(
     tickers_input: Optional[Path] = typer.Argument(None, help="Path to file with tickers, or 'all' for S&P 500"),
     years: int = typer.Option(5, help="Number of years of historical data to download"),
-    features_dir: str = typer.Option("features", help="Directory to store feature files")
+    features_dir: str = typer.Option("data/features", help="Directory to store feature files")
 ):
     """Initialize features for the given tickers."""
     ticker_list = load_tickers(tickers_input)
@@ -741,46 +745,24 @@ def init_features(
             print(f"  - {t}")
 
 @app.command()
-def update_sector_mapping(
-    tickers_input: Optional[str] = typer.Argument(None, help="Path to file with tickers, or 'all' for S&P 500"),
-    features_dir: str = typer.Option("market_features", help="Directory to store market feature files")
+def generate_market_features(
+    tickers_input: Optional[Path] = typer.Argument(None, help="Path to file with tickers, or 'all' for S&P 500"),
+    days: int = typer.Option(60, help="Number of days of historical data to download"),
+    features_dir: str = typer.Option("data/features", help="Directory to store feature files"),
+    start_date: Optional[str] = typer.Option(None, help="Start date for data collection"),
+    update_sector_mapping: bool = typer.Option(
+        False,
+        "--update-sector-mapping",
+        help="Force update sector mapping"
+    )
 ):
-    """Update sector mapping for the given tickers."""
-    from trading_advisor.data import load_tickers
-    from trading_advisor.market_features import update_sector_mapping
-    
+    """Generate market features."""
     ticker_list = load_tickers(tickers_input)
-    update_sector_mapping(ticker_list, features_dir)
-    logger.info(f"Updated sector mapping for {len(ticker_list)} tickers")
-
-@app.command()
-def update_sector_performance(
-    tickers_input: Optional[str] = typer.Argument(None, help="Path to file with tickers, or 'all' for S&P 500"),
-    features_dir: str = typer.Option("features", help="Directory containing feature files"),
-    market_features_dir: str = typer.Option("market_features", help="Directory containing market feature files"),
-    output_dir: str = typer.Option("market_features/sectors", help="Directory to store sector performance data")
-):
-    """Calculate sector performance metrics and save to parquet."""
-    from trading_advisor.data import load_tickers
-    from trading_advisor.sector_performance import calculate_sector_performance
-    
-    ticker_list = load_tickers(tickers_input)
-    sector_performance = calculate_sector_performance(ticker_list, features_dir, market_features_dir, output_dir)
-    logger.info(f"Calculated sector performance for {len(ticker_list)} tickers")
-
-@app.command()
-def update_breadth(
-    tickers_input: Optional[str] = typer.Argument(None, help="Path to file with tickers, or 'all' for S&P 500"),
-    features_dir: str = typer.Option("features", help="Directory containing feature files"),
-    output_dir: str = typer.Option("market_features/breadth", help="Directory to store market breadth data")
-):
-    """Calculate market breadth indicators."""
-    from trading_advisor.data import load_tickers
-    from trading_advisor.market_breadth import calculate_market_breadth
-    
-    ticker_list = load_tickers(tickers_input)
-    market_breadth = calculate_market_breadth(ticker_list, features_dir, output_dir)
-    logger.info(f"Calculated market breadth for {len(ticker_list)} tickers")
+    features_dir = Path(features_dir)
+    features_dir.mkdir(exist_ok=True)
+    data_path = Path("data")
+    market_features = MarketFeatures(data_path)
+    market_features.generate_market_features(start_date, update_sector_mapping, days)
 
 def to_serializable(val):
     if isinstance(val, (np.integer, np.int64, np.int32)):
