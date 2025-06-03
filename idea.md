@@ -4,9 +4,11 @@
 LatentTrader aims to be a trading assistant that generates actionable, short-term trading playbooks designed to beat the market. The system leverages both classic technical analysis and machine learning (ML) models to create, test, and iterate on predictive scoring models. The ultimate goal is to support robust experimentation, backtesting, and rapid iteration to discover and deploy the most effective trading strategies.
 
 ## Architecture Overview
-
+Prev_Volume
 ### 1. Data Layer (Features)
-- **Source of Truth:** All raw and engineered features (technical indicators, price/volume, etc.) are stored in Parquet files, one per ticker (e.g., `features/AAPL_features.parquet`).
+- **Per-Ticker Features:** All raw and engineered features (technical indicators, price/volume, etc.) are stored in Parquet files, one per ticker (e.g., `features/AAPL_features.parquet`).
+- **Market-Wide Features:** All market-wide and macro features (e.g., VIX, SPY, GDELT sentiment, sector ETFs) are stored in a single Parquet table (`market_features/market_features.parquet`), with one row per date and columns for each feature (e.g., `vix`, `spy_close`, `spy_return`, `gdelt_sentiment`, ...).
+- **Joining:** During feature engineering, per-ticker features are joined with market-wide features by date, so every row for every ticker includes the relevant market context.
 - **Update Process:** Features are updated daily (or as needed) via a dedicated command (`init-features`).
 - **No Model Scores:** These files contain only features, not model outputs.
 
@@ -25,6 +27,55 @@ LatentTrader aims to be a trading assistant that generates actionable, short-ter
 ### 4. Prompting Layer
 - **Prompt Generation from Reports:** Prompts for LLMs or other downstream tasks are generated from the daily report tables/files, ensuring consistency and leveraging the curated report content.
 - **Daily Prompts:** Prompts are saved in a similar structure (e.g., `prompts/{model_name}_{date}.txt` and/or `prompts/{model_name}.parquet`). There is no generic prompt command—use `prompt-daily` only.
+
+## Market Features
+
+Market-wide features are stored in separate parquet files based on their category and update frequency. This separation allows for independent updates and better organization.
+
+### Directory Structure
+```
+market_features/
+├── metadata/
+│   └── sector_mapping.parquet    # Ticker -> Sector mapping
+├── breadth/
+│   └── daily_breadth.parquet     # Market breadth indicators
+├── sectors/
+│   └── sector_performance.parquet # Sector-level metrics
+├── volatility/
+│   └── market_volatility.parquet # Market volatility measures
+└── sentiment/
+    └── market_sentiment.parquet  # Market sentiment indicators
+```
+
+### Feature Categories
+
+1. **Market Breadth** (daily updates)
+   - Number of stocks above/below key moving averages (20/50/200 day)
+   - Percentage of stocks in oversold/overbought RSI conditions
+   - Number of stocks with MACD crossovers
+   - Volume trends across the market
+
+2. **Sector Performance** (daily updates)
+   - Daily sector returns
+   - Sector momentum indicators
+   - Relative strength vs. S&P 500
+   - Number of stocks in each sector above/below key levels
+
+3. **Market Volatility** (daily/intraday updates)
+   - VIX and its derivatives
+   - Market-wide volatility measures
+   - Correlation between stocks
+
+4. **Market Sentiment** (daily/weekly updates)
+   - Put/Call ratios
+   - Short interest trends
+   - Analyst sentiment aggregation
+
+### Implementation Notes
+- Each category is stored in its own parquet file for independent updates
+- Features are computed using individual stock data where available
+- External data sources (e.g., VIX, Put/Call ratios) are integrated as needed
+- Sector mapping is used to aggregate and analyze sector-level metrics
 
 ## Next Steps
 1. **Refactor Reporting/Prompting:**
