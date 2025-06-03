@@ -88,7 +88,24 @@ market_features/
     - Add support for ensembles, parameter sweeps, and advanced experiment tracking.
 4. **Robustness & Testing:**
     - Expand test coverage, especially for new reporting/prompting logic and edge cases.
+5. **Documentation:**
+    - Create thorough documentation for all ticker and market features.
+    - Consider creating a dedicated `docs` directory with structured documentation (e.g., markdown files or a static site).
+6. **CLI Changes:**
+    - Consolidate `init-features` and `generate-market-features` into a single `update-data` command.
+    - Add flags to update ticker features, market features, or all of them.
+    - Standardize parameters (e.g., use `--days` consistently instead of `--years`).
 
 ---
 
 *This architecture enables rapid iteration, robust experimentation, and a clear separation of concerns between data, modeling, reporting, and prompting. The next step is to build out prompt generation from the daily report tables, followed by backtesting and further experimentation support.*
+
+## Data Layer
+- [x] Market data collection (price, volume, etc.)
+- [x] Market breadth indicators
+- [x] Sector performance analysis
+- [x] Sentiment analysis (GDELT)
+- [x] Incremental updates for market features (GDELT, market breadth, sector performance)
+- [x] Data storage and organization (parquet files, separate raw and processed files)
+
+**Note:** The Data Layer is now complete. We have implemented efficient incremental updates for market features, ensuring that only missing dates are fetched and processed. We are ready to move on to the next phase of the project.

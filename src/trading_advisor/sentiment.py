@@ -13,7 +13,8 @@ import numpy as np
 from pathlib import Path
 from typing import Optional, Dict, List
 import logging
-# from .sentiment.gdelt import GDELTClient
+from datetime import datetime
+from .sentiment.gdelt import GDELTClient
 
 logger = logging.getLogger(__name__)
 
@@ -27,9 +28,36 @@ class MarketSentiment:
             data_dir: Base directory for data storage
         """
         self.data_dir = data_dir
+        self.sentiment_dir = data_dir / "market_features"
+        self.sentiment_dir.mkdir(parents=True, exist_ok=True)
         
         # Initialize GDELT client
-        # self.gdelt_client = GDELTClient(data_dir)
+        self.gdelt_client = GDELTClient(data_dir)
+        
+    def get_latest_sentiment_date(self) -> Optional[datetime]:
+        """Get the most recent date in the sentiment data.
+        
+        Returns:
+            Latest date in the sentiment data, or None if no data exists
+        """
+        sentiment_path = self.sentiment_dir / "market_sentiment.parquet"
+        if not sentiment_path.exists():
+            return None
+            
+        try:
+            df = pd.read_parquet(sentiment_path)
+            if df.empty:
+                return None
+            if not isinstance(df.index, pd.DatetimeIndex):
+                if 'Date' in df.columns:
+                    df = df.set_index('Date')
+                elif 'date' in df.columns:
+                    df = df.set_index('date')
+            df.index = pd.to_datetime(df.index)
+            return df.index.max()
+        except Exception as e:
+            logger.error(f"Error reading sentiment data: {e}")
+            return None
         
     def collect_put_call_ratios(self, start_date: Optional[str] = None) -> pd.DataFrame:
         """Collect and process put/call ratio data.
@@ -67,18 +95,16 @@ class MarketSentiment:
         # TODO: Implement analyst sentiment collection
         return pd.DataFrame()
         
-    def collect_news_sentiment(self, start_date: Optional[str] = None, years: int = 5) -> pd.DataFrame:
+    def collect_news_sentiment(self, start_date: Optional[str] = None) -> pd.DataFrame:
         """Collect and process news sentiment data from GDELT.
         
         Args:
             start_date: Optional start date for data collection
-            years: Number of years of historical data to download
             
         Returns:
             DataFrame with news sentiment metrics
         """
-        # return self.gdelt_client.collect_sentiment_data(start_date, years)
-        return pd.DataFrame()
+        return self.gdelt_client.collect_sentiment_data(start_date)
         
     def calculate_sentiment_features(self, gdelt_data: pd.DataFrame) -> pd.DataFrame:
         """Calculate sentiment features from GDELT data.
@@ -125,10 +151,45 @@ class MarketSentiment:
         Returns:
             DataFrame with sentiment features
         """
-        # Get GDELT data
-        # gdelt_data = self.gdelt_client.collect_sentiment_data(start_date, days)
-        
+        # Determine start date for updates
+        update_start = None
+        if start_date is None:
+            # Check latest date in existing sentiment data
+            latest_date = self.get_latest_sentiment_date()
+            if latest_date is not None:
+                update_start = latest_date + pd.Timedelta(days=1)
+                logger.info(f"Found existing sentiment data through {latest_date.date()}. Will update from next day.")
+            else:
+                # No existing data, use days parameter
+                update_start = pd.Timestamp.today() - pd.Timedelta(days=days)
+                logger.info(f"No existing sentiment data found. Will generate {days} days of data.")
+        else:
+            update_start = pd.to_datetime(start_date)
+            logger.info(f"Using provided start date: {update_start.date()}")
+            
+        # Get GDELT data for update period
+        gdelt_data = self.gdelt_client.collect_sentiment_data(update_start.strftime('%Y-%m-%d'))
+        if gdelt_data.empty:
+            logger.warning("No GDELT data available for the update period.")
+            return pd.DataFrame()
+            
         # Calculate sentiment features
-        # sentiment_features = self.calculate_sentiment_features(gdelt_data)
+        sentiment_features = self.calculate_sentiment_features(gdelt_data)
         
-        return pd.DataFrame() 
+        # Merge with existing sentiment data
+        sentiment_path = self.sentiment_dir / "market_sentiment.parquet"
+        if sentiment_path.exists():
+            existing_sentiment = pd.read_parquet(sentiment_path)
+            existing_sentiment.index = pd.to_datetime(existing_sentiment.index)
+            # Remove any overlapping dates from existing data
+            existing_sentiment = existing_sentiment[existing_sentiment.index < sentiment_features.index.min()]
+            # Combine old and new data
+            sentiment_features = pd.concat([existing_sentiment, sentiment_features])
+            sentiment_features = sentiment_features[~sentiment_features.index.duplicated(keep='last')]
+            sentiment_features = sentiment_features.sort_index()
+            
+        # Save updated sentiment data
+        sentiment_features.to_parquet(sentiment_path)
+        logger.info(f"Saved sentiment features to {sentiment_path}")
+        
+        return sentiment_features 

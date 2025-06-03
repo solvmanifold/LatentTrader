@@ -106,7 +106,38 @@ class GDELTClient:
         if start_date is None:
             start_date = (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
             
-        # Fetch data from start_date to today
-        daily_sentiment = self.fetch_gdelt_data(start_date, datetime.now().strftime("%Y%m%d"))
+        # Always use the raw file for incremental updates
+        raw_path = self.data_dir / "market_features" / "gdelt_raw.parquet"
+        existing_data = pd.DataFrame()
+        if raw_path.exists():
+            existing_data = pd.read_parquet(raw_path)
+            if not existing_data.empty:
+                existing_data.index = pd.to_datetime(existing_data.index)
+                logger.info(f"Found existing raw GDELT data through {existing_data.index.max().date()}")
         
-        return daily_sentiment 
+        # Determine date range for new data
+        if not existing_data.empty:
+            # Start from the day after the latest existing data
+            new_start = (existing_data.index.max() + timedelta(days=1)).strftime("%Y%m%d")
+            if new_start > datetime.now().strftime("%Y%m%d"):
+                logger.info("Raw GDELT data is up to date")
+                return existing_data
+        else:
+            new_start = start_date
+            
+        # Fetch only new data
+        new_data = self.fetch_gdelt_data(new_start, datetime.now().strftime("%Y%m%d"))
+        
+        if new_data.empty:
+            return existing_data
+            
+        # Combine with existing data
+        if not existing_data.empty:
+            combined_data = pd.concat([existing_data, new_data])
+            combined_data = combined_data[~combined_data.index.duplicated(keep='last')]
+            combined_data = combined_data.sort_index()
+            combined_data.to_parquet(raw_path)
+            return combined_data
+        else:
+            new_data.to_parquet(raw_path)
+            return new_data 

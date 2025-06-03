@@ -124,10 +124,19 @@ class MarketSentiment:
         Returns:
             DataFrame with sentiment features
         """
-        # Get GDELT data
+        # Always use the raw file for feature calculation
+        raw_path = self.data_dir / "market_features" / "gdelt_raw.parquet"
         gdelt_data = self.gdelt_client.collect_sentiment_data(start_date, days)
         
+        if gdelt_data.empty:
+            return pd.DataFrame()
+            
+        # Save raw data (already handled in collect_sentiment_data)
         # Calculate sentiment features
         sentiment_features = self.calculate_sentiment_features(gdelt_data)
+        
+        # Save processed features
+        sentiment_path = self.data_dir / "market_features" / "market_sentiment.parquet"
+        sentiment_features.to_parquet(sentiment_path)
         
         return sentiment_features 
