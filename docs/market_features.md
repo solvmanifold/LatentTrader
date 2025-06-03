@@ -54,9 +54,8 @@ Each sector's performance is tracked through the following metrics:
   - `momentum_20d`: 20-day rolling average of returns
     - Formula: Momentum = SMA(20) of daily returns
 
-The data is stored in two formats:
-1. Individual sector files: `data/market_features/sectors/{sector_name}.parquet`
-2. Combined wide-format table: `data/market_features/all_sectors.parquet`
+The data is stored in the following format:
+- Individual sector files: `data/market_features/sectors/{sector_name}.parquet`
 
 ## Market Volatility
 
@@ -87,6 +86,9 @@ The data is stored in `data/market_features/market_volatility.parquet`
 
 Market sentiment is derived from GDELT news data and includes the following metrics:
 
+- **What is GDELT?**
+  - The Global Database of Events, Language, and Tone (GDELT) is an open-source project that monitors the world's news media in real time, extracting information about events, people, organizations, locations, counts, themes, sources, emotions, counts, quotes, images, and events. In this project, GDELT is used to quantify daily news sentiment related to the market.
+
 - **Moving Averages:**
   - `sentiment_ma5`: 5-day moving average of sentiment
     - Formula: Sentiment MA5 = SMA(5) of daily sentiment
@@ -101,6 +103,8 @@ Market sentiment is derived from GDELT news data and includes the following metr
   - `sentiment_zscore`: Standardized sentiment score relative to 20-day mean
     - Formula: z = (x - μ) / σ
 
+Note: The raw daily GDELT sentiment score is not included as a feature because it is highly noisy and subject to significant day-to-day fluctuations. Instead, moving averages, momentum, and volatility measures are used to provide more robust and stable indicators of market sentiment, which are generally more useful for modeling and analysis.
+
 The data is stored in two formats:
 1. Raw GDELT data: `data/market_features/gdelt_raw.parquet`
 2. Processed sentiment features: `data/market_features/market_sentiment.parquet`
@@ -108,3 +112,9 @@ The data is stored in two formats:
 Note: Put/Call ratios, short interest trends, and analyst sentiment aggregation are planned for future implementation.
 
 Feel free to explore each feature for more detailed information and their significance in market analysis. 
+
+---
+
+## Note on Data Availability and Modeling
+
+Due to data source lags (e.g., VIX, S&P 500, GDELT sentiment), the most recent row in some market feature tables may be missing or contain NaN values. This typically occurs when the latest data is not yet published or available at the time of update. For modeling and stock selection, always use the last available non-NaN row for each feature table to ensure your models are using valid, up-to-date information. 
