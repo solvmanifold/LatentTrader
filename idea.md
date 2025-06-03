@@ -6,7 +6,7 @@ LatentTrader aims to be a trading assistant that generates actionable, short-ter
 ## Architecture Overview
 Prev_Volume
 ### 1. Data Layer (Features)
-- **Per-Ticker Features:** All raw and engineered features (technical indicators, price/volume, etc.) are stored in Parquet files, one per ticker (e.g., `features/AAPL_features.parquet`).
+- **Per-Ticker Features:** All raw and engineered features (technical indicators, price/volume, etc.) are stored in Parquet files, one per ticker (e.g., `ticker_features/AAPL_features.parquet`).
 - **Market-Wide Features:** All market-wide and macro features (e.g., VIX, SPY, GDELT sentiment, sector ETFs) are stored in a single Parquet table (`market_features/market_features.parquet`), with one row per date and columns for each feature (e.g., `vix`, `spy_close`, `spy_return`, `gdelt_sentiment`, ...).
 - **Joining:** During feature engineering, per-ticker features are joined with market-wide features by date, so every row for every ticker includes the relevant market context.
 - **Update Process:** Features are updated daily (or as needed) via a dedicated command (`init-features`).
@@ -34,17 +34,15 @@ Market-wide features are stored in separate parquet files based on their categor
 
 ### Directory Structure
 ```
-market_features/
+data/market_features/
 ├── metadata/
 │   └── sector_mapping.parquet    # Ticker -> Sector mapping
-├── breadth/
-│   └── daily_breadth.parquet     # Market breadth indicators
-├── sectors/
-│   └── sector_performance.parquet # Sector-level metrics
-├── volatility/
-│   └── market_volatility.parquet # Market volatility measures
-└── sentiment/
-    └── market_sentiment.parquet  # Market sentiment indicators
+├── daily_breadth.parquet         # Market breadth indicators
+├── market_volatility.parquet     # Market volatility measures
+├── market_sentiment.parquet      # Market sentiment indicators
+├── gdelt_raw.parquet             # Raw GDELT sentiment data
+└── sectors/
+    └── {sector_name}.parquet     # Sector-level metrics (one file per sector)
 ```
 
 ### Feature Categories

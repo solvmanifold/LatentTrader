@@ -7,7 +7,7 @@ from trading_advisor.sector_mapping import load_sector_mapping
 
 data_dir = Path('data')
 market_features_dir = data_dir / 'market_features'
-features_dir = data_dir / 'features'
+features_dir = data_dir / 'ticker_features'
 
 sector_mapping = load_sector_mapping(str(market_features_dir))
 feature_files = list(features_dir.glob('*_features.parquet'))

@@ -65,7 +65,7 @@ trading-advisor update-data --tickers tickers.txt --days 60
 Options:
 - `--tickers`, `-t`: Path to a file containing ticker symbols (required unless you want to update only existing tickers). Use `all` for S&P 500. If omitted, only tickers with existing feature files will be updated.
 - `--days`, `-d`: Number of days of historical data to download (default: 60)
-- `--features-dir`: Directory to store feature files (default: data/features)
+- `--features-dir`: Directory to store feature files (default: data/ticker_features)
 - `--start-date`: Start date for data collection (optional)
 - `--update-sector-mapping`: Force update sector mapping (default: false)
 - `--update-tickers/--no-update-tickers`: Update individual ticker features (default: true)

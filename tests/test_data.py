@@ -13,7 +13,7 @@ from trading_advisor.volatility import MarketVolatility
 class TestDataDownload(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.mkdtemp()
-        self.features_dir = Path(self.temp_dir) / "features"
+        self.features_dir = Path(self.temp_dir) / "ticker_features"
         self.features_dir.mkdir(exist_ok=True)
 
     def tearDown(self):

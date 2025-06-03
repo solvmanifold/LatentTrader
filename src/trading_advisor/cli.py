@@ -719,7 +719,7 @@ def update_data(
         help="Path to file with tickers, or 'all' for S&P 500. If omitted, only tickers with existing feature files will be updated."
     ),
     days: int = typer.Option(60, help="Number of days of historical data to download"),
-    features_dir: str = typer.Option("data/features", help="Directory to store feature files"),
+    features_dir: str = typer.Option("data/ticker_features", help="Directory to store feature files"),
     start_date: Optional[str] = typer.Option(None, help="Start date for data collection"),
     update_tickers: bool = typer.Option(
         True,

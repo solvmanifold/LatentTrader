@@ -3,7 +3,7 @@ import pandas as pd
 from trading_advisor.volatility import calculate_market_volatility
 
 # Combine all ticker data
-feature_files = glob.glob('data/features/*_features.parquet')
+feature_files = glob.glob('data/ticker_features/*_features.parquet')
 dfs = []
 for f in feature_files:
     df = pd.read_parquet(f)

@@ -80,7 +80,7 @@ def normalize_ticker(ticker: str) -> str:
         return ticker.replace('.B', '-B')
     return ticker
 
-def get_features_path(ticker, features_dir="features"):
+def get_features_path(ticker, features_dir="data/ticker_features"):
     return Path(features_dir) / f"{ticker}_features.parquet"
 
 def fill_missing_trading_days(df: pd.DataFrame, reference_df: pd.DataFrame) -> pd.DataFrame:
@@ -118,7 +118,7 @@ def download_stock_data(
     ticker: str,
     history_days: int = LOOKBACK_DAYS,
     max_retries: int = 3,
-    features_dir: str = "features",
+    features_dir: str = "data/ticker_features",
     start_date: pd.Timestamp = None,
     end_date: pd.Timestamp = None,
     features_filename: str = None  # New argument for test isolation

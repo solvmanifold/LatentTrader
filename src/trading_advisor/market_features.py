@@ -140,7 +140,7 @@ class MarketFeatures:
         # Load ticker data
         ticker_df = pd.DataFrame()
         for ticker in tqdm(ticker_list, desc="Loading ticker data"):
-            features_path = self.data_dir / "features" / f"{ticker}_features.parquet"
+            features_path = self.data_dir / "ticker_features" / f"{ticker}_features.parquet"
             if not features_path.exists():
                 continue
             df = pd.read_parquet(features_path)
@@ -210,4 +210,4 @@ class MarketFeatures:
         Returns:
             List of ticker symbols
         """
-        return [f.stem.replace('_features', '') for f in (self.data_dir / "features").glob('*_features.parquet')] 
+        return [f.stem.replace('_features', '') for f in (self.data_dir / "ticker_features").glob('*_features.parquet')] 

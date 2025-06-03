@@ -28,7 +28,7 @@ Market breadth indicators are calculated daily and include:
 - **MACD Indicators:** Percentage of stocks with bullish MACD signals (`macd_bullish`)
   - Formula: % Bullish = (Count of stocks with positive MACD histogram / Total stocks) × 100
 
-The data is stored in `data/market_features/daily_breadth.parquet`
+The data is stored in `data/ticker_features/daily_breadth.parquet`
 
 ## Sector Performance
 
@@ -55,7 +55,7 @@ Each sector's performance is tracked through the following metrics:
     - Formula: Momentum = SMA(20) of daily returns
 
 The data is stored in the following format:
-- Individual sector files: `data/market_features/sectors/{sector_name}.parquet`
+- Individual sector files: `data/ticker_features/sectors/{sector_name}.parquet`
 
 ## Market Volatility
 
@@ -80,7 +80,7 @@ Market volatility features include:
   - `avg_correlation`: Average correlation between stocks (20-day rolling window)
     - Formula: ρ = Average of all pairwise correlations
 
-The data is stored in `data/market_features/market_volatility.parquet`
+The data is stored in `data/ticker_features/market_volatility.parquet`
 
 ## Market Sentiment
 
@@ -106,8 +106,8 @@ Market sentiment is derived from GDELT news data and includes the following metr
 Note: The raw daily GDELT sentiment score is not included as a feature because it is highly noisy and subject to significant day-to-day fluctuations. Instead, moving averages, momentum, and volatility measures are used to provide more robust and stable indicators of market sentiment, which are generally more useful for modeling and analysis.
 
 The data is stored in two formats:
-1. Raw GDELT data: `data/market_features/gdelt_raw.parquet`
-2. Processed sentiment features: `data/market_features/market_sentiment.parquet`
+1. Raw GDELT data: `data/ticker_features/gdelt_raw.parquet`
+2. Processed sentiment features: `data/ticker_features/market_sentiment.parquet`
 
 Note: Put/Call ratios, short interest trends, and analyst sentiment aggregation are planned for future implementation.
 

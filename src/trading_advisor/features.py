@@ -10,7 +10,7 @@ from trading_advisor.analysis import calculate_technical_indicators
 
 logger = logging.getLogger(__name__)
 
-def load_features(ticker: str, features_dir: str = "features") -> pd.DataFrame:
+def load_features(ticker: str, features_dir: str = "data/ticker_features") -> pd.DataFrame:
     """
     Load features for a ticker from parquet file.
     
@@ -34,7 +34,7 @@ def load_features(ticker: str, features_dir: str = "features") -> pd.DataFrame:
         logger.error(f"Error loading features for {ticker}: {e}")
         return pd.DataFrame()
 
-def update_features(ticker: str, features_dir: str = "features") -> pd.DataFrame:
+def update_features(ticker: str, features_dir: str = "data/ticker_features") -> pd.DataFrame:
     """
     Download latest data and compute features for a ticker.
     
