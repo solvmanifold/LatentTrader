@@ -12,7 +12,7 @@ import logging
 import requests
 from datetime import datetime, timedelta
 import time
-from tqdm import tqdm
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
 logger = logging.getLogger(__name__)
 
@@ -26,61 +26,62 @@ class GDELTClient:
             data_dir: Base directory for data storage
         """
         self.data_dir = data_dir
+        self.base_url = "http://data.gdeltproject.org/gdeltv2/masterfilelist.txt"
         
     def fetch_gdelt_data(self, start_date: str, end_date: Optional[str] = None) -> pd.DataFrame:
         """Fetch GDELT sentiment data for a date range.
         
         Args:
-            start_date: Start date in YYYY-MM-DD or YYYYMMDD format
-            end_date: Optional end date in YYYY-MM-DD or YYYYMMDD format. If None, uses start_date
+            start_date: Start date in YYYY-MM-DD format
+            end_date: Optional end date in YYYY-MM-DD format (default: today)
             
         Returns:
-            DataFrame with daily sentiment data
+            DataFrame with sentiment data
         """
+        # Convert dates to datetime
+        start = pd.to_datetime(start_date)
         if end_date is None:
-            end_date = start_date
+            end = pd.to_datetime('today')
+        else:
+            end = pd.to_datetime(end_date)
             
-        # Convert dates to datetime, handling both formats
-        def parse_date(date_str: str) -> datetime:
-            try:
-                return datetime.strptime(date_str, "%Y-%m-%d")
-            except ValueError:
-                return datetime.strptime(date_str, "%Y%m%d")
-            
-        start = parse_date(start_date)
-        end = parse_date(end_date)
-        
         # Generate date range
         date_range = pd.date_range(start=start, end=end, freq='D')
+        
+        # Base URL for GDELT data
+        base_url = "http://data.gdeltproject.org/gdeltv2/"
+        
+        # Collect sentiment data
         sentiment_data = []
         
-        base_url = "http://data.gdeltproject.org/events/"
-        
-        for single_date in tqdm(date_range, desc="Fetching GDELT data"):
-            date_str = single_date.strftime("%Y%m%d")
-            url = f"{base_url}{date_str}.export.CSV.zip"
-            
-            try:
-                response = requests.get(url)
-                if response.status_code == 200:
-                    # Read CSV with tab separator and no header
-                    df = pd.read_csv(url, compression='zip', sep='\t', header=None, low_memory=False)
-                    
-                    # Column index for average tone
-                    avgtone_index = 34
-                    
-                    # Calculate average tone
-                    avg_tone = df[avgtone_index].mean()
-                    
-                    sentiment_data.append({
-                        "date": single_date,
-                        "avg_tone": avg_tone
-                    })
-                    logger.info(f"Successfully downloaded GDELT data for {date_str}")
-                else:
-                    logger.warning(f"Data not found for {date_str}")
-            except Exception as e:
-                logger.error(f"Error downloading GDELT data for {date_str}: {e}")
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
+            task = progress.add_task("Fetching GDELT data...", total=len(date_range))
+            for single_date in date_range:
+                date_str = single_date.strftime("%Y%m%d")
+                url = f"{base_url}{date_str}.export.CSV.zip"
+                
+                try:
+                    response = requests.get(url)
+                    if response.status_code == 200:
+                        # Read CSV with tab separator and no header
+                        df = pd.read_csv(url, compression='zip', sep='\t', header=None, low_memory=False)
+                        
+                        # Column index for average tone
+                        avgtone_index = 34
+                        
+                        # Calculate average tone
+                        avg_tone = df[avgtone_index].mean()
+                        
+                        sentiment_data.append({
+                            "date": single_date,
+                            "avg_tone": avg_tone
+                        })
+                        logger.info(f"Successfully downloaded GDELT data for {date_str}")
+                    else:
+                        logger.warning(f"Data not found for {date_str}")
+                except Exception as e:
+                    logger.error(f"Error downloading GDELT data for {date_str}: {e}")
+                progress.update(task, advance=1)
                 
         if not sentiment_data:
             logger.warning("No GDELT data found for the specified date range")
