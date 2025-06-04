@@ -773,6 +773,73 @@ def update_data(
         market_features = MarketFeatures(data_path)
         market_features.generate_market_features(start_date, days, update_sector_mapping)
 
+@app.command()
+def run_model(
+    model_name: str = typer.Option(..., help="Name of the model to run (e.g., 'TechnicalScorer')"),
+    tickers: str = typer.Option("all", help="Comma-separated tickers, path to file, or 'all' for all tickers"),
+    date: str = typer.Option(None, help="Run model for this date (YYYY-MM-DD, defaults to latest)"),
+    features_dir: str = typer.Option("data/ticker_features", help="Directory with feature Parquet files"),
+    model_outputs_dir: str = typer.Option("model_outputs", help="Directory to save model outputs"),
+    force: bool = typer.Option(False, help="Overwrite existing outputs if they exist")
+):
+    """Run a trading model on specified tickers and save outputs."""
+    from trading_advisor.models import registry, ModelRunner
+    from trading_advisor.data import load_ticker_features
+    
+    # Check if model exists
+    if model_name not in registry.list_models():
+        typer.echo(f"Error: Model '{model_name}' not found")
+        typer.echo(f"Available models: {', '.join(registry.list_models().keys())}")
+        raise typer.Exit(1)
+    
+    # Get tickers
+    if tickers == "all":
+        # Get all tickers from features directory
+        tickers = [f.stem.replace("_features", "") for f in Path(features_dir).glob("*_features.parquet")]
+    elif os.path.isfile(tickers):
+        # Read tickers from file
+        with open(tickers) as f:
+            tickers = [line.strip() for line in f if line.strip()]
+    else:
+        # Parse comma-separated list
+        tickers = [t.strip() for t in tickers.split(",")]
+    
+    # Load features
+    features_df = load_ticker_features(tickers, features_dir)
+    if features_df.empty:
+        typer.echo("Error: No features found for any tickers")
+        raise typer.Exit(1)
+    
+    # Create model runner
+    runner = ModelRunner(output_dir=model_outputs_dir)
+    
+    # Run model
+    typer.echo(f"Running {model_name} on {len(tickers)} tickers...")
+    results = runner.run_model(model_name, tickers, features_df, date)
+    
+    # Print summary
+    typer.echo(f"\nModel run complete:")
+    typer.echo(f"- Processed {len(results)} tickers")
+    typer.echo(f"- Outputs saved to {model_outputs_dir}/{model_name}/")
+    
+    # Print top 5 scores if available
+    if results:
+        scores = []
+        for ticker, pred in results.items():
+            if 'score' in pred:
+                score_val = pred['score']
+                # If score is a numpy array or list, use the last value as the most recent score
+                if isinstance(score_val, (np.ndarray, list)):
+                    score_val = float(score_val[-1])
+                else:
+                    score_val = float(score_val)
+                scores.append((ticker, score_val))
+        if scores:
+            scores.sort(key=lambda x: x[1], reverse=True)
+            typer.echo("\nTop 5 scores:")
+            for ticker, score in scores[:5]:
+                typer.echo(f"- {ticker}: {score:.2f}")
+
 def to_serializable(val):
     if isinstance(val, (np.integer, np.int64, np.int32)):
         return int(val)
@@ -788,6 +855,173 @@ def to_serializable(val):
         return [to_serializable(v) for v in val]
     else:
         return val
+
+@app.command()
+def generate_report(
+    model_outputs_dir: Path = typer.Argument(..., help="Directory containing model output Parquet files"),
+    top_n: int = typer.Option(6, help="Number of top tickers to include in the report"),
+    output: str = typer.Option("reports", help="Directory to save report files and Parquet table"),
+    force: bool = typer.Option(False, help="Overwrite existing report if it exists"),
+    positions_csv: str = typer.Option(None, help="CSV file of current positions to always include in the report")
+):
+    """
+    Generate a Markdown report for the top-N tickers by score for a given date, using model outputs from a directory.
+    The date is automatically determined from the directory name (e.g., 'model_outputs/technical/2025-06-03').
+    Save as both a Markdown file and a row in a Parquet table for historical tracking.
+    Optionally, always include tickers from a positions CSV, marked as current positions.
+    """
+    import os
+    import pandas as pd
+    import numpy as np
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+    import json
+
+    logger = logging.getLogger("trading_advisor.generate_report")
+
+    # Get date from directory name
+    try:
+        date = model_outputs_dir.name
+        # Validate date format
+        pd.to_datetime(date)
+    except (ValueError, AttributeError):
+        typer.echo(f"Error: Directory name '{model_outputs_dir.name}' is not a valid date (YYYY-MM-DD)", err=True)
+        raise typer.Exit(1)
+
+    # Get model name from parent directory
+    model_name = model_outputs_dir.parent.name
+
+    # Parse positions CSV if provided
+    positions_set = set()
+    if positions_csv:
+        try:
+            pos_df = pd.read_csv(positions_csv, skiprows=2)
+            if "Symbol" in pos_df.columns:
+                # Only keep rows where Symbol looks like a ticker (A-Z, 0-9, no spaces)
+                valid = pos_df["Symbol"].astype(str).str.match(r"^[A-Z0-9\.\-]+$")
+                positions_set = set(pos_df.loc[valid, "Symbol"].dropna().astype(str).str.strip())
+                print(f"[DEBUG] Parsed positions_set: {positions_set}")
+            else:
+                print("[DEBUG] 'Symbol' column not found in positions CSV.")
+        except Exception as e:
+            typer.echo(f"Error reading positions CSV: {e}", err=True)
+            raise typer.Exit(1)
+
+    # Create output directory
+    os.makedirs(output, exist_ok=True)
+    report_md_path = os.path.join(output, f"{model_name}_{date}.md")
+    report_parquet_path = os.path.join(output, f"{model_name}.parquet")
+
+    # Check if report already exists
+    if os.path.exists(report_md_path) and not force:
+        typer.echo(f"Report already exists: {report_md_path}. Use --force to overwrite.", err=True)
+        raise typer.Exit(1)
+
+    # Load existing report table if it exists
+    if os.path.exists(report_parquet_path):
+        report_df = pd.read_parquet(report_parquet_path)
+    else:
+        report_df = pd.DataFrame()
+
+    # Helper function to extract scalar from numpy array
+    def get_scalar(val):
+        if isinstance(val, np.ndarray):
+            return float(val.item())
+        return float(val)
+
+    # Collect data for the report
+    rows = []
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
+        task = progress.add_task(f"Gathering data for {date}...", total=len(list(model_outputs_dir.glob("*.parquet"))))
+        for parquet_file in model_outputs_dir.glob("*.parquet"):
+            ticker = parquet_file.stem
+            try:
+                df = pd.read_parquet(parquet_file)
+                if date not in df['date'].values:
+                    logger.warning(f"No data for {ticker} on {date}")
+                    progress.update(task, advance=1)
+                    continue
+                row = df[df['date'] == date].iloc[0]
+                # Convert numpy arrays to scalars in details
+                details = row.get("details", {})
+                if details:
+                    details = {
+                        k: get_scalar(v) if isinstance(v, np.ndarray) else v
+                        for k, v in details.items()
+                    }
+                rows.append({
+                    "ticker": ticker,
+                    "score": get_scalar(row.get("score", None)),
+                    "details": details,
+                    "is_position": ticker in positions_set
+                })
+            except Exception as e:
+                logger.error(f"Error processing {ticker}: {e}")
+            progress.update(task, advance=1)
+
+    # Rank by score and select top N (positions do not count toward top_n)
+    rows = [r for r in rows if r["score"] is not None]
+    # Separate positions and non-positions
+    positions_rows = [r for r in rows if r["is_position"]]
+    non_position_rows = [r for r in rows if not r["is_position"]]
+    # Sort non-positions by score and take top_n
+    top_non_positions = sorted(non_position_rows, key=lambda x: x["score"], reverse=True)[:top_n]
+    # Add all positions not already in top_n
+    top_rows = top_non_positions.copy()
+    top_tickers_set = {r["ticker"] for r in top_rows}
+    for r in positions_rows:
+        if r["ticker"] not in top_tickers_set:
+            top_rows.append(r)
+
+    # Generate Markdown report
+    from datetime import datetime as dt
+    md_lines = [
+        f"# Trading Advisor Report\n",
+        f"Generated on: {dt.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+    ]
+    # Current Positions section
+    if positions_rows:
+        md_lines.append(f"## Current Positions\n")
+        for r in positions_rows:
+            md_lines.append(f"### {r['ticker']}")
+            md_lines.append(f"**Technical Score:** {r['score']:.2f}/10")
+            if r['details']:
+                md_lines.append(f"**Technical Details:**")
+                for key, value in r['details'].items():
+                    md_lines.append(f"- {key}: {value:.2f}")
+            md_lines.append("")
+    # New Technical Picks section
+    if top_non_positions:
+        md_lines.append(f"## New Technical Picks (Top {top_n}) for {date}\n")
+        for r in top_non_positions:
+            md_lines.append(f"### {r['ticker']}")
+            md_lines.append(f"**Technical Score:** {r['score']:.2f}/10")
+            if r['details']:
+                md_lines.append(f"**Technical Details:**")
+                for key, value in r['details'].items():
+                    md_lines.append(f"- {key}: {value:.2f}")
+            md_lines.append("")
+
+    # Write Markdown report
+    with open(report_md_path, "w") as f:
+        f.write("\n".join(md_lines))
+    typer.echo(f"Markdown report written to {report_md_path}")
+
+    # Save to Parquet table for historical tracking
+    new_row = {
+        "date": date,
+        "top_tickers": [r["ticker"] for r in top_rows],
+        "scores": [r["score"] for r in top_rows],
+        "report_md": "\n".join(md_lines)
+    }
+    if not report_df.empty:
+        # Remove any existing row for this date
+        report_df = report_df[report_df["date"] != date]
+        report_df = pd.concat([report_df, pd.DataFrame([new_row])], ignore_index=True)
+    else:
+        report_df = pd.DataFrame([new_row])
+    report_df = report_df.sort_values("date").reset_index(drop=True)
+    report_df.to_parquet(report_parquet_path)
+    typer.echo(f"Report row saved to {report_parquet_path}")
 
 def run():
     """Run the CLI application."""

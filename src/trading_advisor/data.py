@@ -311,4 +311,41 @@ def load_tickers(tickers_input: Optional[Path]) -> list[str]:
             return tickers
         except Exception as e:
             logger.error(f"Error reading tickers from {tickers_input}: {e}")
-            sys.exit(1) 
+            sys.exit(1)
+
+def load_ticker_features(tickers: List[str], features_dir: str) -> pd.DataFrame:
+    """Load and combine feature data for multiple tickers.
+    
+    Args:
+        tickers: List of ticker symbols
+        features_dir: Directory containing feature Parquet files
+        
+    Returns:
+        DataFrame containing features for all tickers
+    """
+    dfs = []
+    for ticker in tickers:
+        features_path = Path(features_dir) / f"{ticker}_features.parquet"
+        if not features_path.exists():
+            logger.warning(f"Features file not found for {ticker}: {features_path}")
+            continue
+        try:
+            df = pd.read_parquet(features_path)
+            # Ensure index is datetime
+            if not isinstance(df.index, pd.DatetimeIndex):
+                if 'date' in df.columns:
+                    df.set_index('date', inplace=True)
+                df.index = pd.to_datetime(df.index)
+            df['ticker'] = ticker  # Add ticker column
+            dfs.append(df)
+        except Exception as e:
+            logger.error(f"Error loading features for {ticker}: {e}")
+            continue
+    
+    if not dfs:
+        return pd.DataFrame()
+    
+    # Combine all DataFrames
+    combined_df = pd.concat(dfs, ignore_index=False)
+    
+    return combined_df 
