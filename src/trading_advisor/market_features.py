@@ -13,16 +13,20 @@ from pathlib import Path
 from typing import Dict, Optional, List, Tuple
 from datetime import datetime
 import json
+import warnings
 
 import pandas as pd
 import yfinance as yf
-from tqdm import tqdm
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from trading_advisor.data import normalize_ticker
 from .market_breadth import calculate_market_breadth
 from .sector_performance import calculate_sector_performance
 from .sentiment import MarketSentiment
 from .volatility import MarketVolatility
 from .sector_mapping import update_sector_mapping, load_sector_mapping
+
+# Filter out FutureWarning
+warnings.filterwarnings('ignore', category=FutureWarning)
 
 logger = logging.getLogger(__name__)
 
@@ -69,26 +73,30 @@ def load_ticker_data(ticker_list: List[str], features_dir: str, start_date: Opti
     # Load all ticker data
     all_data = []
     ticker_data = []
-    for ticker in tqdm(ticker_list, desc="Loading ticker data"):
-        feature_file = Path(features_dir) / f"{ticker}_features.parquet"
-        if feature_file.exists():
-            df = pd.read_parquet(feature_file)
-            # Ensure index is date
-            if not isinstance(df.index, pd.DatetimeIndex):
-                if 'Date' in df.columns:
-                    df = df.set_index('Date')
-                elif 'date' in df.columns:
-                    df = df.set_index('date')
-            df.index = pd.to_datetime(df.index)
-            
-            # Filter by start date if provided
-            if start_date is not None:
-                df = df[df.index >= start_date]
+    
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
+        task = progress.add_task("Loading ticker data...", total=len(ticker_list))
+        for ticker in ticker_list:
+            feature_file = Path(features_dir) / f"{ticker}_features.parquet"
+            if feature_file.exists():
+                df = pd.read_parquet(feature_file)
+                # Ensure index is date
+                if not isinstance(df.index, pd.DatetimeIndex):
+                    if 'Date' in df.columns:
+                        df = df.set_index('Date')
+                    elif 'date' in df.columns:
+                        df = df.set_index('date')
+                df.index = pd.to_datetime(df.index)
                 
-            all_data.append(df)
-            df_with_ticker = df.copy()
-            df_with_ticker['ticker'] = ticker
-            ticker_data.append(df_with_ticker)
+                # Filter by start date if provided
+                if start_date is not None:
+                    df = df[df.index >= start_date]
+                    
+                all_data.append(df)
+                df_with_ticker = df.copy()
+                df_with_ticker['ticker'] = ticker
+                ticker_data.append(df_with_ticker)
+            progress.update(task, advance=1)
             
     if not all_data:
         logger.warning("No feature data found. Please run init-features first.")
@@ -139,14 +147,18 @@ class MarketFeatures:
 
         # Load ticker data
         ticker_df = pd.DataFrame()
-        for ticker in tqdm(ticker_list, desc="Loading ticker data"):
-            features_path = self.data_dir / "ticker_features" / f"{ticker}_features.parquet"
-            if not features_path.exists():
-                continue
-            df = pd.read_parquet(features_path)
-            df['ticker'] = ticker
-            df['sector'] = sector_mapping.get(ticker, 'Unknown')
-            ticker_df = pd.concat([ticker_df, df])
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
+            task = progress.add_task("Loading ticker data...", total=len(ticker_list))
+            for ticker in ticker_list:
+                features_path = self.data_dir / "ticker_features" / f"{ticker}_features.parquet"
+                if not features_path.exists():
+                    progress.update(task, advance=1)
+                    continue
+                df = pd.read_parquet(features_path)
+                df['ticker'] = ticker
+                df['sector'] = sector_mapping.get(ticker, 'Unknown')
+                ticker_df = pd.concat([ticker_df, df])
+                progress.update(task, advance=1)
 
         if ticker_df.empty:
             logger.warning("No ticker data found")

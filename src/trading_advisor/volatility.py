@@ -30,8 +30,6 @@ def calculate_market_volatility(combined_df: pd.DataFrame) -> pd.DataFrame:
     try:
         vix = yf.download('^VIX', start=combined_df.index.min(), end=combined_df.index.max())
         volatility_df['vix'] = vix['Close']
-        volatility_df['vix_ma20'] = vix['Close'].rolling(window=20).mean()
-        volatility_df['vix_std20'] = vix['Close'].rolling(window=20).std()
     except Exception as e:
         logger.error(f"Error fetching VIX data: {e}")
     
@@ -40,10 +38,7 @@ def calculate_market_volatility(combined_df: pd.DataFrame) -> pd.DataFrame:
         spy = yf.download('^GSPC', start=combined_df.index.min(), end=combined_df.index.max())
         # Daily returns
         spy_returns = spy['Close'].pct_change()
-        # Rolling volatility (20-day)
         volatility_df['market_volatility'] = spy_returns.rolling(window=20).std() * np.sqrt(252)  # Annualized
-        # Volatility of volatility
-        volatility_df['vol_of_vol'] = volatility_df['market_volatility'].rolling(window=20).std()
     except Exception as e:
         logger.error(f"Error calculating market volatility: {e}")
     
@@ -52,6 +47,14 @@ def calculate_market_volatility(combined_df: pd.DataFrame) -> pd.DataFrame:
         lambda x: x.pct_change().std() * np.sqrt(252)  # Annualized
     )
     volatility_df['cross_sectional_vol'] = daily_returns
+
+    # Fill in missing trading days
+    volatility_df = fill_missing_trading_days(volatility_df, combined_df)
+    
+    # Calculate rolling windows after filling missing days
+    volatility_df['vix_ma20'] = volatility_df['vix'].rolling(window=20).mean()
+    volatility_df['vix_std20'] = volatility_df['vix'].rolling(window=20).std()
+    volatility_df['vol_of_vol'] = volatility_df['market_volatility'].rolling(window=20).std()
 
     # --- Average correlation calculation (refactored, manual rolling) ---
     # Pivot to get a matrix of Close prices: rows=Date, columns=Ticker
@@ -76,6 +79,15 @@ def calculate_market_volatility(combined_df: pd.DataFrame) -> pd.DataFrame:
         upper_triangle = np.triu_indices_from(corr_matrix, k=1)
         avg_corr.append(corr_matrix.values[upper_triangle].mean())
     volatility_df['avg_correlation'] = pd.Series(avg_corr, index=idx)
+    
+    # Check if the last row has any NaNs in key columns
+    if not volatility_df.empty:
+        last_row = volatility_df.iloc[-1]
+        key_columns = ['vix', 'market_volatility', 'cross_sectional_vol']
+        if last_row[key_columns].isna().any():
+            # Remove the last row if any key columns have NaNs
+            volatility_df = volatility_df.iloc[:-1]
+            logger.info("Removed last row due to NaNs in key columns")
     
     return volatility_df
 
@@ -122,52 +134,16 @@ class MarketVolatility:
         
         Args:
             combined_df: DataFrame with combined ticker data
-            start_date: Optional start date in YYYY-MM-DD format
+            start_date: Optional start date in YYYY-MM-DD format (ignored, kept for API compatibility)
             
         Returns:
             DataFrame with volatility features
         """
-        # Determine start date for updates
-        update_start = None
-        if start_date is None:
-            # Check latest date in existing volatility data
-            latest_date = self.get_latest_volatility_date()
-            if latest_date is not None:
-                update_start = latest_date + pd.Timedelta(days=1)
-                logger.info(f"Found existing volatility data through {latest_date.date()}. Will update from next day.")
-            else:
-                # No existing data, use all available data
-                update_start = combined_df.index.min()
-                logger.info("No existing volatility data found. Will generate for all available dates.")
-        else:
-            update_start = pd.to_datetime(start_date)
-            logger.info(f"Using provided start date: {update_start.date()}")
-            
-        # Filter data for update period
-        update_df = combined_df[combined_df.index >= update_start]
-        if update_df.empty:
-            logger.warning("No ticker data available for the update period.")
-            return pd.DataFrame()
-            
-        # Calculate volatility features
-        volatility_df = calculate_market_volatility(update_df)
+        # Calculate volatility features for all available data
+        volatility_df = calculate_market_volatility(combined_df)
         
-        # Fill in missing trading days
-        volatility_df = fill_missing_trading_days(volatility_df, combined_df)
-        
-        # Merge with existing volatility data
+        # Save volatility data
         volatility_path = self.market_features_dir / "market_volatility.parquet"
-        if volatility_path.exists():
-            existing_volatility = pd.read_parquet(volatility_path)
-            existing_volatility.index = pd.to_datetime(existing_volatility.index)
-            # Remove any overlapping dates from existing data
-            existing_volatility = existing_volatility[existing_volatility.index < volatility_df.index.min()]
-            # Combine old and new data
-            volatility_df = pd.concat([existing_volatility, volatility_df])
-            volatility_df = volatility_df[~volatility_df.index.duplicated(keep='last')]
-            volatility_df = volatility_df.sort_index()
-            
-        # Save updated volatility data
         if not volatility_df.empty:
             volatility_df.to_parquet(volatility_path)
             logger.info(f"Saved volatility features to {volatility_path}")
