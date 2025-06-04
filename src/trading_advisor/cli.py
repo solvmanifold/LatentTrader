@@ -34,6 +34,12 @@ from trading_advisor.market_breadth import calculate_market_breadth
 from trading_advisor.sector_performance import calculate_sector_performance
 from trading_advisor.sentiment import MarketSentiment
 from trading_advisor.market_features import MarketFeatures
+from trading_advisor.models.dataset import (
+    DatasetGenerator, 
+    remove_unnecessary_features,
+    save_feature_mappings,
+    apply_feature_mappings
+)
 
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)

@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from datetime import datetime, timedelta
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -413,4 +414,30 @@ def remove_unnecessary_features(df: pd.DataFrame) -> pd.DataFrame:
         'volume'
     ]
     
-    return df.drop(columns=[col for col in features_to_remove if col in df.columns]) 
+    return df.drop(columns=[col for col in features_to_remove if col in df.columns])
+
+def save_feature_mappings(df: pd.DataFrame, output_dir: Path) -> Dict:
+    """Save mappings for categorical features."""
+    mappings = {}
+    
+    # Map tickers to integers
+    unique_tickers = sorted(df['ticker'].unique())
+    ticker_map = {ticker: idx for idx, ticker in enumerate(unique_tickers)}
+    mappings['ticker'] = ticker_map
+    
+    # Save mappings
+    output_path = output_dir / 'feature_mappings.json'
+    with open(output_path, 'w') as f:
+        json.dump(mappings, f, indent=2)
+    
+    logger.info(f"Saved feature mappings to {output_path}")
+    return mappings
+
+def apply_feature_mappings(df: pd.DataFrame, mappings: Dict) -> pd.DataFrame:
+    """Apply mappings to categorical features."""
+    df_mapped = df.copy()
+    
+    # Map tickers
+    df_mapped['ticker'] = df_mapped['ticker'].map(mappings['ticker'])
+    
+    return df_mapped 
