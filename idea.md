@@ -107,3 +107,15 @@ data/market_features/
 - [x] Data storage and organization (parquet files, separate raw and processed files)
 
 **Note:** The Data Layer is now complete. We have implemented efficient incremental updates for market features, ensuring that only missing dates are fetched and processed. We are ready to move on to the next phase of the project.
+
+## Model Layer
+- [x] Basic model interface definition (score/predict methods)
+- [x] Model registry structure
+- [x] Model output storage in parquet format
+- [ ] Model experimentation framework
+- [ ] Ensemble model support
+- [ ] Parameter sweep functionality
+- [ ] Model performance tracking
+- [ ] Model versioning system
+
+**Note:** The Model Layer has basic infrastructure in place with a defined interface and storage system. The next steps focus on building out the experimentation framework and advanced model capabilities.
