@@ -78,71 +78,54 @@ class DatasetGenerator:
     def generate_labels(
         self,
         df: pd.DataFrame,
-        target_days: int = 5,
-        target_return: float = 0.02
-    ) -> pd.Series:
-        """Generate binary labels based on future returns.
+        target_days: int,
+        target_return: float
+    ) -> pd.DataFrame:
+        """Generate binary labels based on future returns."""
+        # Sort by date to ensure correct future return calculation
+        df = df.sort_values('Date')
         
-        Args:
-            df: DataFrame containing price data
-            target_days: Number of days to look ahead
-            target_return: Target return threshold
-            
-        Returns:
-            Series containing binary labels
-        """
         # Calculate future returns
-        future_returns = df['close'].shift(-target_days) / df['close'] - 1
+        future_returns = df['Close'].shift(-target_days) / df['Close'] - 1
         
         # Generate binary labels
-        labels = (future_returns >= target_return).astype(int)
+        df['label'] = (future_returns >= target_return).astype(int)
         
-        return labels
+        return df
     
-    def _load_market_features(self, date: str) -> pd.DataFrame:
-        """Load market features for a specific date.
-        
-        Args:
-            date: Date to load features for
-            
-        Returns:
-            DataFrame containing market features
+    def _load_market_features(self, date: pd.Timestamp) -> pd.DataFrame:
+        """
+        Loads and merges all market features for a specific date.
+        Returns a single-row DataFrame with all market features for the given date.
         """
         market_features = {}
-        
-        # Load each market feature file
-        for feature_file in self.market_features_dir.glob("*.parquet"):
-            if feature_file.name == "metadata":
+        for path in self.market_features_dir.glob("*.parquet"):
+            if path.is_dir() or path.name.startswith("metadata"):
                 continue
-                
-            try:
-                df = pd.read_parquet(feature_file)
-                if 'date' in df.columns:
-                    df = df[df['date'] == date]
-                    if not df.empty:
-                        market_features[feature_file.stem] = df
-            except Exception as e:
-                logger.warning(f"Error loading {feature_file}: {e}")
-                continue
-        
-        # Combine all market features
-        if not market_features:
-            return pd.DataFrame()
+            feature_type = path.stem
+            df = pd.read_parquet(path)
             
-        # Start with the first dataframe
-        combined_df = next(iter(market_features.values()))
+            # Ensure date is the index
+            if not isinstance(df.index, pd.DatetimeIndex):
+                if 'Date' in df.columns:
+                    df = df.set_index('Date')
+                elif 'date' in df.columns:
+                    df = df.set_index('date')
+                else:
+                    continue
+            df.index = pd.to_datetime(df.index)
+            
+            # Filter for target date
+            row = df[df.index == date]
+            if not row.empty:
+                row = row.add_suffix(f'_{feature_type}')
+                market_features[feature_type] = row
         
-        # Merge with remaining dataframes
-        for df in list(market_features.values())[1:]:
-            if not df.empty:
-                combined_df = combined_df.merge(
-                    df,
-                    on='date',
-                    how='outer',
-                    suffixes=('', f'_{df.name}')
-                )
-        
-        return combined_df
+        if market_features:
+            merged = pd.concat(market_features.values(), axis=1)
+            return merged
+        else:
+            return pd.DataFrame()
     
     def _load_sector_features(self, ticker: str, date: str) -> pd.DataFrame:
         """Load sector features for a ticker.
@@ -169,8 +152,28 @@ class DatasetGenerator:
             
         try:
             df = pd.read_parquet(sector_file)
-            df = df[df['date'] == date]
+            
+            # Ensure date is the index
+            if not isinstance(df.index, pd.DatetimeIndex):
+                if 'Date' in df.columns:
+                    df = df.set_index('Date')
+                elif 'date' in df.columns:
+                    df = df.set_index('date')
+                else:
+                    logger.warning(f"No date column found in sector features for {sector}")
+                    return pd.DataFrame()
+            df.index = pd.to_datetime(df.index)
+            
+            # Filter for target date
+            target_date = pd.to_datetime(date)
+            df = df[df.index == target_date]
+            
+            if df.empty:
+                logger.warning(f"No sector features found for {sector} on {date}")
+                return pd.DataFrame()
+            
             return df
+            
         except Exception as e:
             logger.error(f"Error loading sector features for {sector}: {e}")
             return pd.DataFrame()
@@ -192,33 +195,60 @@ class DatasetGenerator:
             DataFrame containing prepared features
         """
         # Load ticker features
-        ticker_features = pd.read_parquet(
-            self.ticker_features_dir / f"{ticker}_features.parquet"
-        )
-        ticker_features = ticker_features[ticker_features['date'] == date]
+        ticker_file = self.ticker_features_dir / f"{ticker}_features.parquet"
+        if not ticker_file.exists():
+            logger.warning(f"No features found for {ticker}")
+            return pd.DataFrame()
+            
+        ticker_features = pd.read_parquet(ticker_file)
         
+        # Ensure date is the index
+        if not isinstance(ticker_features.index, pd.DatetimeIndex):
+            if 'Date' in ticker_features.columns:
+                ticker_features = ticker_features.set_index('Date')
+            elif 'date' in ticker_features.columns:
+                ticker_features = ticker_features.set_index('date')
+            else:
+                logger.warning(f"No date column found in ticker features for {ticker}")
+                return pd.DataFrame()
+        ticker_features.index = pd.to_datetime(ticker_features.index)
+        
+        # Filter for target date
+        target_date = pd.to_datetime(date)
+        ticker_features = ticker_features[ticker_features.index == target_date]
         if ticker_features.empty:
+            logger.warning(f"No ticker features found for {ticker} on {date}")
             return pd.DataFrame()
         
         # Load market features
-        market_features = self._load_market_features(date)
+        market_features = self._load_market_features(target_date)
+        if market_features.empty:
+            logger.warning(f"No market features found for {date}")
+            return pd.DataFrame()
         
         # Load sector features if requested
         if include_sector:
             sector_features = self._load_sector_features(ticker, date)
             if not sector_features.empty:
-                ticker_features = ticker_features.merge(
-                    sector_features,
-                    on='date',
-                    how='left'
-                )
+                logger.info(f"Found sector features for {ticker} on {date}")
+                # Combine features
+                features = pd.concat([ticker_features, market_features, sector_features], axis=1)
+            else:
+                logger.warning(f"No sector features found for {ticker} on {date}")
+                features = pd.concat([ticker_features, market_features], axis=1)
+        else:
+            features = pd.concat([ticker_features, market_features], axis=1)
         
-        # Combine all features
-        features = ticker_features.merge(
-            market_features,
-            on='date',
-            how='left'
-        )
+        logger.debug(f"Combined features columns: {features.columns.tolist()}")
+        logger.debug(f"Combined features head:\n{features.head()}")
+        
+        # Log feature counts for debugging
+        logger.info(f"Feature counts for {ticker} on {date}:")
+        logger.info(f"Ticker features: {len(ticker_features.columns)}")
+        logger.info(f"Market features: {len(market_features.columns)}")
+        if include_sector and not sector_features.empty:
+            logger.info(f"Sector features: {len(sector_features.columns)}")
+        logger.info(f"Total features: {len(features.columns)}")
         
         return features
     
@@ -234,22 +264,7 @@ class DatasetGenerator:
         test_months: int = 1,
         min_samples: int = 100
     ) -> Dict[str, pd.DataFrame]:
-        """Generate complete dataset with splits.
-        
-        Args:
-            tickers: List of tickers to include
-            start_date: Start date for data
-            end_date: End date for data
-            target_days: Number of days to look ahead for labels
-            target_return: Target return threshold for labels
-            train_months: Number of months for training
-            val_months: Number of months for validation
-            test_months: Number of months for testing
-            min_samples: Minimum number of samples required for a ticker
-            
-        Returns:
-            Dictionary containing datasets for each split
-        """
+        """Generate complete dataset with splits."""
         # Generate splits
         splits = self.generate_splits(
             start_date,
@@ -258,7 +273,9 @@ class DatasetGenerator:
             val_months,
             test_months
         )
-        
+        print(f"[DEBUG] Generated {len(splits)} splits.")
+        for i, split in enumerate(splits):
+            print(f"Split {i}: train {split['train_start'].date()} to {split['train_end'].date()}, val {split['val_start'].date()} to {split['val_end'].date()}, test {split['test_start'].date()} to {split['test_end'].date()}")
         # Generate datasets for each split
         datasets = {}
         for i, split in enumerate(splits):
@@ -273,16 +290,13 @@ class DatasetGenerator:
                     tickers, split, 'test', target_days, target_return, min_samples
                 )
             }
+            print(f"[DEBUG] Split {i} sample counts: train={len(split_data['train'])}, val={len(split_data['val'])}, test={len(split_data['test'])}")
             datasets[f'split_{i}'] = split_data
-            
-            # Save split data
+            # Save split data (force save even if empty for debugging)
             split_dir = self.output_dir / f"split_{i}"
             split_dir.mkdir(exist_ok=True)
-            
             for split_name, data in split_data.items():
-                if not data.empty:
-                    data.to_parquet(split_dir / f"{split_name}.parquet")
-        
+                data.to_parquet(split_dir / f"{split_name}.parquet")
         return datasets
     
     def _generate_split_data(
@@ -314,35 +328,67 @@ class DatasetGenerator:
         for ticker in tickers:
             try:
                 # Load ticker features
-                ticker_features = pd.read_parquet(
-                    self.ticker_features_dir / f"{ticker}_features.parquet"
-                )
+                ticker_file = self.ticker_features_dir / f"{ticker}_features.parquet"
+                if not ticker_file.exists():
+                    continue
+                    
+                ticker_features = pd.read_parquet(ticker_file)
+                
+                # Handle date column/index
+                if isinstance(ticker_features.index, pd.DatetimeIndex):
+                    ticker_features = ticker_features.reset_index()
+                    if 'Date' in ticker_features.columns:
+                        date_col = 'Date'
+                    elif 'date' in ticker_features.columns:
+                        date_col = 'date'
+                    else:
+                        logger.warning(f"No date column found in ticker features for {ticker}")
+                        continue
+                else:
+                    if 'Date' in ticker_features.columns:
+                        date_col = 'Date'
+                    elif 'date' in ticker_features.columns:
+                        date_col = 'date'
+                    else:
+                        logger.warning(f"No date column found in ticker features for {ticker}")
+                        continue
+                
+                # Convert date column to datetime
+                ticker_features[date_col] = pd.to_datetime(ticker_features[date_col])
                 
                 # Filter by date range
-                ticker_features = ticker_features[
-                    (ticker_features['date'] >= start_date) &
-                    (ticker_features['date'] <= end_date)
-                ]
+                mask = (ticker_features[date_col] >= start_date) & (ticker_features[date_col] <= end_date)
+                ticker_features = ticker_features[mask]
                 
                 if len(ticker_features) < min_samples:
                     logger.warning(f"Insufficient samples for {ticker} in {split_name}")
                     continue
                 
                 # Generate labels
-                labels = self.generate_labels(
-                    ticker_features,
-                    target_days,
-                    target_return
-                )
-                ticker_features['label'] = labels
+                ticker_features = self.generate_labels(ticker_features, target_days, target_return)
                 
                 # Add ticker column
                 ticker_features['ticker'] = ticker
                 
-                all_data.append(ticker_features)
+                # Prepare features for each date, including market features
+                prepared_features = []
+                for _, row in ticker_features.iterrows():
+                    date_str = str(row[date_col].date())
+                    features = self.prepare_features(ticker, date_str, include_sector=True)
+                    if not features.empty:
+                        logger.debug(f"Features columns before label assignment: {features.columns.tolist()}")
+                        logger.debug(f"Row being processed: {row}")
+                        # Add label and ticker from the original row
+                        features['label'] = row['label']
+                        features['ticker'] = ticker
+                        prepared_features.append(features)
+                
+                if prepared_features:
+                    all_data.extend(prepared_features)
                 
             except Exception as e:
-                logger.error(f"Error processing {ticker} for {split_name}: {e}")
+                import traceback
+                logger.error(f"Error processing {ticker} for {split_name}: {e}\n{traceback.format_exc()}")
                 continue
         
         if not all_data:
