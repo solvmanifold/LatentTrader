@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List
 import logging
 import yfinance as yf
-from tqdm import tqdm
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 import json
 from trading_advisor.data import normalize_ticker
 
@@ -22,18 +22,21 @@ def get_sector_mapping(tickers: list[str]) -> Dict[str, str]:
     """
     sector_mapping = {}
     
-    for ticker in tqdm(tickers, desc="Getting sector info"):
-        try:
-            # Get sector info from yfinance
-            ticker_obj = yf.Ticker(ticker)
-            info = ticker_obj.info
-            
-            sector = info.get('sector', 'Unknown')
-            sector_mapping[normalize_ticker(ticker)] = sector
-            
-        except Exception as e:
-            logger.warning(f"Failed to get sector info for {ticker}: {e}")
-            sector_mapping[normalize_ticker(ticker)] = 'Unknown'
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
+        task = progress.add_task("Getting sector info...", total=len(tickers))
+        for ticker in tickers:
+            try:
+                # Get sector info from yfinance
+                ticker_obj = yf.Ticker(ticker)
+                info = ticker_obj.info
+                
+                sector = info.get('sector', 'Unknown')
+                sector_mapping[normalize_ticker(ticker)] = sector
+                
+            except Exception as e:
+                logger.warning(f"Failed to get sector info for {ticker}: {e}")
+                sector_mapping[normalize_ticker(ticker)] = 'Unknown'
+            progress.update(task, advance=1)
     
     return sector_mapping
 

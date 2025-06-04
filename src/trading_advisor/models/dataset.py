@@ -400,4 +400,17 @@ class DatasetGenerator:
         # Remove rows with NaN labels (due to future returns calculation)
         combined_data = combined_data.dropna(subset=['label'])
         
-        return combined_data 
+        return combined_data
+
+def remove_unnecessary_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Remove unnecessary features from the dataset."""
+    features_to_remove = [
+        'analyst_targets',
+        'Dividends',
+        'Stock Splits',
+        'Volume_Prev',
+        'price',
+        'volume'
+    ]
+    
+    return df.drop(columns=[col for col in features_to_remove if col in df.columns]) 
