@@ -1065,30 +1065,31 @@ def generate_classification_dataset(
     else:
         ticker_list = [t.strip() for t in tickers.split(",")]
     
-    # Initialize dataset generator
-    generator = DatasetGenerator(
-        market_features_dir=market_features_dir,
-        ticker_features_dir=ticker_features_dir,
-        output_dir=output_dir
-    )
-    
-    # Clean up old splits if force is True
-    if force:
-        logger.info("Cleaning up old split directories...")
-        for split_dir in Path(output_dir).glob("split_*"):
-            if split_dir.is_dir():
-                logger.info(f"Removing old split directory: {split_dir}")
-                shutil.rmtree(split_dir)
-        
-        # Also remove old feature mappings if they exist
-        mappings_file = Path(output_dir) / "feature_mappings.json"
-        if mappings_file.exists():
-            logger.info(f"Removing old feature mappings: {mappings_file}")
-            mappings_file.unlink()
-    
     # Generate dataset with progress bar
     with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
         task = progress.add_task("Generating dataset...", total=len(ticker_list))
+        
+        # Initialize dataset generator with progress callback
+        generator = DatasetGenerator(
+            market_features_dir=market_features_dir,
+            ticker_features_dir=ticker_features_dir,
+            output_dir=output_dir,
+            progress_callback=lambda: progress.update(task, advance=1)
+        )
+        
+        # Clean up old splits if force is True
+        if force:
+            logger.info("Cleaning up old split directories...")
+            for split_dir in Path(output_dir).glob("split_*"):
+                if split_dir.is_dir():
+                    logger.info(f"Removing old split directory: {split_dir}")
+                    shutil.rmtree(split_dir)
+            
+            # Also remove old feature mappings if they exist
+            mappings_file = Path(output_dir) / "feature_mappings.json"
+            if mappings_file.exists():
+                logger.info(f"Removing old feature mappings: {mappings_file}")
+                mappings_file.unlink()
         
         # Generate dataset
         datasets = generator.generate_dataset(
@@ -1159,8 +1160,6 @@ def generate_classification_dataset(
                 logger.info("\nLabel distribution:")
                 logger.info(f"Positive: {label_dist.get(1, 0):.2%}")
                 logger.info(f"Negative: {label_dist.get(0, 0):.2%}")
-            
-            progress.update(task, advance=1)
     
     # Generate README
     readme_path = Path(output_dir) / "README.md"

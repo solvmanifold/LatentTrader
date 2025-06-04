@@ -17,7 +17,8 @@ class DatasetGenerator:
         self,
         market_features_dir: str = "data/market_features",
         ticker_features_dir: str = "data/ticker_features",
-        output_dir: str = "data/ml_datasets"
+        output_dir: str = "data/ml_datasets",
+        progress_callback: Optional[callable] = None
     ):
         """Initialize the dataset generator.
         
@@ -25,11 +26,13 @@ class DatasetGenerator:
             market_features_dir: Directory containing market feature files
             ticker_features_dir: Directory containing ticker feature files
             output_dir: Directory to save generated datasets
+            progress_callback: Optional callback function to update progress
         """
         self.market_features_dir = Path(market_features_dir)
         self.ticker_features_dir = Path(ticker_features_dir)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.progress_callback = progress_callback
         
         # Load sector mapping
         self.sector_mapping = pd.read_parquet(
@@ -277,131 +280,106 @@ class DatasetGenerator:
         print(f"[DEBUG] Generated {len(splits)} splits.")
         for i, split in enumerate(splits):
             print(f"Split {i}: train {split['train_start'].date()} to {split['train_end'].date()}, val {split['val_start'].date()} to {split['val_end'].date()}, test {split['test_start'].date()} to {split['test_end'].date()}")
+        
         # Generate datasets for each split
         datasets = {}
         for i, split in enumerate(splits):
             split_data = {
-                'train': self._generate_split_data(
-                    tickers, split, 'train', target_days, target_return, min_samples
-                ),
-                'val': self._generate_split_data(
-                    tickers, split, 'val', target_days, target_return, min_samples
-                ),
-                'test': self._generate_split_data(
-                    tickers, split, 'test', target_days, target_return, min_samples
-                )
+                'train': pd.DataFrame(),
+                'val': pd.DataFrame(),
+                'test': pd.DataFrame()
             }
-            print(f"[DEBUG] Split {i} sample counts: train={len(split_data['train'])}, val={len(split_data['val'])}, test={len(split_data['test'])}")
-            datasets[f'split_{i}'] = split_data
-            # Save split data (force save even if empty for debugging)
+            
+            # Process each ticker
+            for ticker in tickers:
+                try:
+                    # Load ticker features
+                    ticker_file = self.ticker_features_dir / f"{ticker}_features.parquet"
+                    if not ticker_file.exists():
+                        if self.progress_callback:
+                            self.progress_callback()
+                        continue
+                        
+                    ticker_features = pd.read_parquet(ticker_file)
+                    
+                    # Handle date column/index
+                    if isinstance(ticker_features.index, pd.DatetimeIndex):
+                        ticker_features = ticker_features.reset_index()
+                        if 'Date' in ticker_features.columns:
+                            date_col = 'Date'
+                        elif 'date' in ticker_features.columns:
+                            date_col = 'date'
+                        else:
+                            logger.warning(f"No date column found in ticker features for {ticker}")
+                            if self.progress_callback:
+                                self.progress_callback()
+                            continue
+                    else:
+                        if 'Date' in ticker_features.columns:
+                            date_col = 'Date'
+                        elif 'date' in ticker_features.columns:
+                            date_col = 'date'
+                        else:
+                            logger.warning(f"No date column found in ticker features for {ticker}")
+                            if self.progress_callback:
+                                self.progress_callback()
+                            continue
+                    
+                    # Convert date column to datetime
+                    ticker_features[date_col] = pd.to_datetime(ticker_features[date_col])
+                    
+                    # Process each split type (train/val/test)
+                    for split_name in ['train', 'val', 'test']:
+                        start_date = split[f'{split_name}_start']
+                        end_date = split[f'{split_name}_end']
+                        
+                        # Filter by date range
+                        mask = (ticker_features[date_col] >= start_date) & (ticker_features[date_col] <= end_date)
+                        split_features = ticker_features[mask].copy()
+                        
+                        if len(split_features) < min_samples:
+                            logger.warning(f"Insufficient samples for {ticker} in {split_name}")
+                            continue
+                        
+                        # Generate labels
+                        split_features = self.generate_labels(split_features, target_days, target_return)
+                        
+                        # Add ticker column
+                        split_features['ticker'] = ticker
+                        
+                        # Prepare features for each date
+                        prepared_features = []
+                        for _, row in split_features.iterrows():
+                            date_str = str(row[date_col].date())
+                            features = self.prepare_features(ticker, date_str, include_sector=True)
+                            if not features.empty:
+                                features['label'] = row['label']
+                                features['ticker'] = ticker
+                                prepared_features.append(features)
+                        
+                        if prepared_features:
+                            # Combine features for this ticker and split
+                            ticker_data = pd.concat(prepared_features, ignore_index=True)
+                            # Append to existing split data
+                            split_data[split_name] = pd.concat([split_data[split_name], ticker_data], ignore_index=True)
+                
+                except Exception as e:
+                    import traceback
+                    logger.error(f"Error processing {ticker}: {e}\n{traceback.format_exc()}")
+                finally:
+                    if self.progress_callback:
+                        self.progress_callback()
+            
+            # Save split data
             split_dir = self.output_dir / f"split_{i}"
             split_dir.mkdir(exist_ok=True)
             for split_name, data in split_data.items():
-                data.to_parquet(split_dir / f"{split_name}.parquet")
-        return datasets
-    
-    def _generate_split_data(
-        self,
-        tickers: List[str],
-        split: Dict[str, pd.Timestamp],
-        split_name: str,
-        target_days: int,
-        target_return: float,
-        min_samples: int
-    ) -> pd.DataFrame:
-        """Generate data for a specific split.
-        
-        Args:
-            tickers: List of tickers to include
-            split: Dictionary containing split dates
-            split_name: Name of the split (train/val/test)
-            target_days: Number of days to look ahead for labels
-            target_return: Target return threshold for labels
-            min_samples: Minimum number of samples required for a ticker
+                if not data.empty:
+                    data.to_parquet(split_dir / f"{split_name}.parquet")
             
-        Returns:
-            DataFrame containing the split data
-        """
-        start_date = split[f'{split_name}_start']
-        end_date = split[f'{split_name}_end']
+            datasets[f'split_{i}'] = split_data
         
-        all_data = []
-        for ticker in tickers:
-            try:
-                # Load ticker features
-                ticker_file = self.ticker_features_dir / f"{ticker}_features.parquet"
-                if not ticker_file.exists():
-                    continue
-                    
-                ticker_features = pd.read_parquet(ticker_file)
-                
-                # Handle date column/index
-                if isinstance(ticker_features.index, pd.DatetimeIndex):
-                    ticker_features = ticker_features.reset_index()
-                    if 'Date' in ticker_features.columns:
-                        date_col = 'Date'
-                    elif 'date' in ticker_features.columns:
-                        date_col = 'date'
-                    else:
-                        logger.warning(f"No date column found in ticker features for {ticker}")
-                        continue
-                else:
-                    if 'Date' in ticker_features.columns:
-                        date_col = 'Date'
-                    elif 'date' in ticker_features.columns:
-                        date_col = 'date'
-                    else:
-                        logger.warning(f"No date column found in ticker features for {ticker}")
-                        continue
-                
-                # Convert date column to datetime
-                ticker_features[date_col] = pd.to_datetime(ticker_features[date_col])
-                
-                # Filter by date range
-                mask = (ticker_features[date_col] >= start_date) & (ticker_features[date_col] <= end_date)
-                ticker_features = ticker_features[mask]
-                
-                if len(ticker_features) < min_samples:
-                    logger.warning(f"Insufficient samples for {ticker} in {split_name}")
-                    continue
-                
-                # Generate labels
-                ticker_features = self.generate_labels(ticker_features, target_days, target_return)
-                
-                # Add ticker column
-                ticker_features['ticker'] = ticker
-                
-                # Prepare features for each date, including market features
-                prepared_features = []
-                for _, row in ticker_features.iterrows():
-                    date_str = str(row[date_col].date())
-                    features = self.prepare_features(ticker, date_str, include_sector=True)
-                    if not features.empty:
-                        logger.debug(f"Features columns before label assignment: {features.columns.tolist()}")
-                        logger.debug(f"Row being processed: {row}")
-                        # Add label and ticker from the original row
-                        features['label'] = row['label']
-                        features['ticker'] = ticker
-                        prepared_features.append(features)
-                
-                if prepared_features:
-                    all_data.extend(prepared_features)
-                
-            except Exception as e:
-                import traceback
-                logger.error(f"Error processing {ticker} for {split_name}: {e}\n{traceback.format_exc()}")
-                continue
-        
-        if not all_data:
-            return pd.DataFrame()
-        
-        # Combine all ticker data
-        combined_data = pd.concat(all_data, ignore_index=True)
-        
-        # Remove rows with NaN labels (due to future returns calculation)
-        combined_data = combined_data.dropna(subset=['label'])
-        
-        return combined_data
+        return datasets
 
 def remove_unnecessary_features(df: pd.DataFrame) -> pd.DataFrame:
     """Remove unnecessary features from the dataset."""
