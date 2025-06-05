@@ -43,8 +43,11 @@ def preprocess_features(df: pd.DataFrame, scaler: StandardScaler = None, fit: bo
     numeric_cols = sorted(df.select_dtypes(include=[np.number]).columns)
     numeric_cols = [col for col in numeric_cols if col not in ['label', 'ticker']]
     
-    # Handle missing values
-    df_clean = df[numeric_cols].fillna(df[numeric_cols].mean())
+    # Drop rows with NaN labels
+    df_clean = df.dropna(subset=['label'])
+    
+    # Handle missing values in features
+    df_clean = df_clean[numeric_cols].fillna(df_clean[numeric_cols].mean())
     
     # Scale features
     if fit:
