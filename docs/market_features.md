@@ -77,8 +77,6 @@ Market volatility features include:
 - **Cross-Sectional Measures:**
   - `cross_sectional_vol`: Daily dispersion of returns across all stocks (annualized)
     - Formula: σ = √(252 × Variance of cross-sectional returns)
-  - `avg_correlation`: Average correlation between stocks (20-day rolling window)
-    - Formula: ρ = Average of all pairwise correlations
 
 The data is stored in `data/ticker_features/market_volatility.parquet`
 

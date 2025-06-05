@@ -55,30 +55,6 @@ def calculate_market_volatility(combined_df: pd.DataFrame) -> pd.DataFrame:
     volatility_df['vix_ma20'] = volatility_df['vix'].rolling(window=20).mean()
     volatility_df['vix_std20'] = volatility_df['vix'].rolling(window=20).std()
     volatility_df['vol_of_vol'] = volatility_df['market_volatility'].rolling(window=20).std()
-
-    # --- Average correlation calculation (refactored, manual rolling) ---
-    # Pivot to get a matrix of Close prices: rows=Date, columns=Ticker
-    close_matrix = combined_df.reset_index().pivot(index='Date', columns='ticker', values='Close')
-    returns_matrix = close_matrix.pct_change()
-    window = 20
-    min_periods = 2
-    avg_corr = []
-    idx = returns_matrix.index
-    for i in range(len(returns_matrix)):
-        if i < window - 1:
-            avg_corr.append(np.nan)
-            continue
-        window_df = returns_matrix.iloc[i - window + 1:i + 1]
-        if window_df.shape[1] < 2 or window_df.dropna(axis=1, how='all').shape[1] < 2:
-            avg_corr.append(np.nan)
-            continue
-        corr_matrix = window_df.corr()
-        if corr_matrix.shape[0] < 2:
-            avg_corr.append(np.nan)
-            continue
-        upper_triangle = np.triu_indices_from(corr_matrix, k=1)
-        avg_corr.append(corr_matrix.values[upper_triangle].mean())
-    volatility_df['avg_correlation'] = pd.Series(avg_corr, index=idx)
     
     # Check if the last row has any NaNs in key columns
     if not volatility_df.empty:

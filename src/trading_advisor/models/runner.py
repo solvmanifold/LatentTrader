@@ -71,10 +71,10 @@ class ModelRunner:
         """
         if self.feature_columns is None:
             # First time normalization, fit the scaler
-            # Get numeric columns only, excluding date and ticker
+            # Get numeric columns only, excluding date, ticker, and label
             numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
             self.feature_columns = [col for col in numeric_cols 
-                                  if col not in ['date', 'ticker']]
+                                  if col not in ['date', 'ticker', 'label']]
             self.scaler.fit(df[self.feature_columns])
         
         # Create a copy to avoid modifying the original
