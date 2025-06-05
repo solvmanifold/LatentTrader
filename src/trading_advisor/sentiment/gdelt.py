@@ -26,7 +26,32 @@ class GDELTClient:
             data_dir: Base directory for data storage
         """
         self.data_dir = data_dir
-        self.base_url = "http://data.gdeltproject.org/gdeltv2/masterfilelist.txt"
+        self.base_url = "http://data.gdeltproject.org/gdeltv2/"
+        self.masterfile_url = "http://data.gdeltproject.org/gdeltv2/masterfilelist.txt"
+        
+    def get_available_timestamps(self, date: str) -> List[str]:
+        """Get available timestamps for a given date.
+        
+        Args:
+            date: Date in YYYYMMDD format
+            
+        Returns:
+            List of available timestamps for the date
+        """
+        try:
+            response = requests.get(self.masterfile_url)
+            if response.status_code == 200:
+                lines = response.text.split('\n')
+                timestamps = []
+                for line in lines:
+                    if line.strip() and '.export.CSV.zip' in line:
+                        timestamp = line.split('/')[-1].split('.')[0]
+                        if timestamp.startswith(date):
+                            timestamps.append(timestamp)
+                return sorted(timestamps)
+        except Exception as e:
+            logger.error(f"Error getting available timestamps for {date}: {e}")
+        return []
         
     def fetch_gdelt_data(self, start_date: str, end_date: Optional[str] = None) -> pd.DataFrame:
         """Fetch GDELT sentiment data for a date range.
@@ -48,9 +73,6 @@ class GDELTClient:
         # Generate date range
         date_range = pd.date_range(start=start, end=end, freq='D')
         
-        # Base URL for GDELT data
-        base_url = "http://data.gdeltproject.org/gdeltv2/"
-        
         # Collect sentiment data
         sentiment_data = []
         
@@ -58,7 +80,17 @@ class GDELTClient:
             task = progress.add_task("Fetching GDELT data...", total=len(date_range))
             for single_date in date_range:
                 date_str = single_date.strftime("%Y%m%d")
-                url = f"{base_url}{date_str}.export.CSV.zip"
+                
+                # Get available timestamps for this date
+                timestamps = self.get_available_timestamps(date_str)
+                if not timestamps:
+                    logger.warning(f"No data available for {date_str}")
+                    progress.update(task, advance=1)
+                    continue
+                
+                # Use the latest timestamp for the day
+                latest_timestamp = timestamps[-1]
+                url = f"{self.base_url}{latest_timestamp}.export.CSV.zip"
                 
                 try:
                     response = requests.get(url)
@@ -82,6 +114,7 @@ class GDELTClient:
                 except Exception as e:
                     logger.error(f"Error downloading GDELT data for {date_str}: {e}")
                 progress.update(task, advance=1)
+                time.sleep(2)  # Be nice to the GDELT server
                 
         if not sentiment_data:
             logger.warning("No GDELT data found for the specified date range")
