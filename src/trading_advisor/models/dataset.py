@@ -425,6 +425,24 @@ class DatasetGenerator:
 
 This dataset is designed for training and evaluating machine learning models for stock price prediction. It uses a binary classification approach where the target is whether a stock's price will increase by a specified threshold within a given prediction window.
 
+## Generation Command
+
+The dataset was generated using the following command:
+
+```bash
+trading-advisor generate-dataset \\
+    --tickers {','.join(generation_params['tickers'])} \\
+    --start-date {generation_params['start_date']} \\
+    --end-date {generation_params['end_date']} \\
+    --target-days {generation_params['target_days']} \\
+    --target-return {generation_params['target_return']} \\
+    --train-months {generation_params['train_months']} \\
+    --val-months {generation_params['val_months']} \\
+    --test-months {generation_params['test_months']} \\
+    --min-samples {generation_params['min_samples']} \\
+    --output {output_dir}
+```
+
 ## Dataset Organization
 
 The dataset is organized into time-series splits to prevent data leakage and ensure realistic model evaluation:
@@ -459,6 +477,11 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 - Test Period: {generation_params['test_months']} months
 - Minimum Samples per Ticker: {generation_params['min_samples']}
 - Tickers: {', '.join(generation_params['tickers'])}
+
+### Data Cleaning
+- Training set: {generation_params['train_dropped']} rows dropped ({generation_params['train_dropped']/generation_params['train_before']*100:.1f}%) due to NaN labels
+- Validation set: {generation_params['val_dropped']} rows dropped ({generation_params['val_dropped']/generation_params['val_before']*100:.1f}%) due to NaN labels
+- Test set: {generation_params['test_dropped']} rows dropped ({generation_params['test_dropped']/generation_params['test_before']*100:.1f}%) due to NaN labels
 
 ### Split Statistics
 
@@ -760,6 +783,19 @@ split_0_test = test_df[
         combined_val = remove_unnecessary_features(combined_val)
         combined_test = remove_unnecessary_features(combined_test)
         
+        # Drop rows with NaN labels and track statistics
+        train_before = len(combined_train)
+        val_before = len(combined_val)
+        test_before = len(combined_test)
+        
+        combined_train = combined_train.dropna(subset=['label'])
+        combined_val = combined_val.dropna(subset=['label'])
+        combined_test = combined_test.dropna(subset=['label'])
+        
+        train_dropped = train_before - len(combined_train)
+        val_dropped = val_before - len(combined_val)
+        test_dropped = test_before - len(combined_test)
+        
         # Save feature mappings
         mappings = save_feature_mappings(combined_train, output_dir)
         
@@ -772,6 +808,11 @@ split_0_test = test_df[
         print(f"Saving train dataset to {train_path} with shape {combined_train.shape}")
         print(f"Saving val dataset to {val_path} with shape {combined_val.shape}")
         print(f"Saving test dataset to {test_path} with shape {combined_test.shape}")
+        print(f"\nRows dropped due to NaN labels:")
+        print(f"Training: {train_dropped} rows ({train_dropped/train_before*100:.1f}%)")
+        print(f"Validation: {val_dropped} rows ({val_dropped/val_before*100:.1f}%)")
+        print(f"Test: {test_dropped} rows ({test_dropped/test_before*100:.1f}%)")
+        
         combined_train.to_parquet(train_path)
         combined_val.to_parquet(val_path)
         combined_test.to_parquet(test_path)
@@ -786,7 +827,13 @@ split_0_test = test_df[
             'val_months': val_months,
             'test_months': test_months,
             'min_samples': min_samples,
-            'tickers': tickers
+            'tickers': tickers,
+            'train_dropped': train_dropped,
+            'val_dropped': val_dropped,
+            'test_dropped': test_dropped,
+            'train_before': train_before,
+            'val_before': val_before,
+            'test_before': test_before
         }
         self._generate_readme(output_dir, generation_params, split_stats, splits)
         
