@@ -234,10 +234,5 @@ def main():
     for metric, value in metrics.items():
         logger.info(f"{metric}: {value:.4f}")
 
-# Remove train_and_evaluate function definition and all references to it
-
-# Remove RUN_EVALUATE_ONLY and update main to use only train and evaluate
-
 if __name__ == "__main__":
-    main() 
     main() 
