@@ -329,71 +329,70 @@ def load_trained_model(dataset_name: str) -> Tuple[LogisticTradingModel, Standar
     
     return model, scaler, feature_columns
 
-def predict_single_row(
-    model: LogisticTradingModel,
-    scaler: StandardScaler,
-    feature_columns: List[str],
-    row: pd.DataFrame
-) -> Dict[str, Any]:
-    """Run inference on a single row of data.
+def predict_single_row(model, scaler, feature_columns, date, ticker, verbose=False):
+    """Make a prediction for a single date and ticker."""
+    # Load features for the date
+    features = load_features_for_date(date, verbose=verbose)
+    if features is None:
+        return None, None
     
-    Args:
-        model: Trained model
-        scaler: Feature scaler
-        feature_columns: List of feature column names in the order they were used during training
-        row: DataFrame containing a single row of features
-        
-    Returns:
-        Dictionary containing prediction and probability
-    """
-    # Ensure we have all required features
-    missing_cols = set(feature_columns) - set(row.columns)
-    if missing_cols:
-        raise ValueError(f"Missing required features: {missing_cols}")
+    # Get the row for the specific ticker
+    ticker_code = get_ticker_code(ticker)
+    if ticker_code is None:
+        return None, None
+    
+    row = features[features['ticker'] == ticker_code]
+    if row.empty:
+        return None, None
     
     # Select and order features exactly as they were during training
     X = row[feature_columns].copy()
     
-    # Use scaler's feature_names_in_ to ensure correct order
-    if hasattr(scaler, 'feature_names_in_'):
-        X = X[scaler.feature_names_in_]
+    if verbose:
+        print("\nFeature order during prediction:")
+        print("Expected order:", feature_columns)
+        print("Actual order:", X.columns.tolist())
+        if hasattr(scaler, 'feature_names_in_'):
+            print("Scaler feature names:", scaler.feature_names_in_)
+        
+        print("\nRaw feature values before scaling:")
+        for col in X.columns:
+            print(f"{col}: {X[col].iloc[0]:.6f}")
     
-    # Log feature order
-    logger.info("Feature order during prediction:")
-    logger.info(f"Expected order: {feature_columns}")
-    logger.info(f"Actual order: {X.columns.tolist()}")
-    if hasattr(scaler, 'feature_names_in_'):
-        logger.info(f"Scaler feature names: {scaler.feature_names_in_}")
-    
-    # Log raw feature values
-    logger.info("\nRaw feature values before scaling:")
-    for col in X.columns:
-        logger.info(f"{col}: {X[col].iloc[0]:.6f}")
-    
-    # Handle missing values
+    # Handle missing values using the same approach as training
     X = X.fillna(X.mean())
     
-    # Log feature values after handling missing values
-    logger.info("\nFeature values after handling missing values:")
-    for col in X.columns:
-        logger.info(f"{col}: {X[col].iloc[0]:.6f}")
+    if verbose:
+        print("\nFeature values after handling missing values:")
+        for col in X.columns:
+            print(f"{col}: {X[col].iloc[0]:.6f}")
     
-    # Scale features
+    # Scale features using the same scaler as training
     X_scaled = scaler.transform(X)
-    X_scaled_df = pd.DataFrame(X_scaled, columns=X.columns)
+    X_scaled = pd.DataFrame(X_scaled, columns=feature_columns)
     
-    # Log scaled feature values
-    logger.info("\nScaled feature values:")
-    for col in X_scaled_df.columns:
-        logger.info(f"{col}: {X_scaled_df[col].iloc[0]:.6f}")
+    if verbose:
+        print("\nScaled feature values:")
+        for col in X_scaled.columns:
+            print(f"{col}: {X_scaled[col].iloc[0]:.6f}")
     
-    # Get prediction
-    results = model.predict(pd.DataFrame(X_scaled, columns=X.columns))
+    # Make prediction
+    prediction = model.predict(X_scaled)
+    probability = model.predict_proba(X_scaled)[:, 1]
     
-    return {
-        'prediction': results['predictions'][0],
-        'probability': results['probabilities'][0]
-    }
+    if verbose:
+        print("\nFeature columns:", feature_columns)
+        print("Features shape:", X_scaled.shape)
+        print("Features dtype:", X_scaled.dtype)
+        print("Features mean:", X_scaled.mean().values)
+        print("Features std:", X_scaled.std().values)
+        print("Predictions shape:", prediction.shape)
+        print("Predictions unique values:", np.unique(prediction))
+        print("Probabilities shape:", probability.shape)
+        print("Probabilities mean:", probability.mean())
+        print("Probabilities std:", probability.std())
+    
+    return prediction[0], probability[0]
 
 def _load_market_features(date: pd.Timestamp) -> pd.DataFrame:
     """Load market features for a specific date.
@@ -566,14 +565,16 @@ def get_prediction_for_date_ticker(dataset_name: str, date: str, ticker: str) ->
         raise ValueError(f"Missing required features: {missing_cols}")
     
     # Get prediction
-    result = predict_single_row(model, scaler, feature_columns, features)
+    prediction, probability = predict_single_row(model, scaler, feature_columns, target_date, ticker)
     
     # Add metadata
-    result.update({
+    result = {
         'ticker': ticker,
         'date': date,
-        'dataset': dataset_name
-    })
+        'dataset': dataset_name,
+        'prediction': prediction,
+        'probability': probability
+    }
     
     return result
 
