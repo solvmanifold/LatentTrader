@@ -163,6 +163,9 @@ class DatasetGenerator:
         # Generate binary labels
         df['label'] = (future_returns >= target_return).astype(int)
         
+        # Drop rows with NaN labels
+        df = df.dropna(subset=['label'])
+        
         return df
     
     def _load_market_features(self, date: pd.Timestamp) -> pd.DataFrame:
