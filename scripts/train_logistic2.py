@@ -198,6 +198,12 @@ def evaluate(
     # Save per-row predictions for comparison
     test_processed['predicted_label'] = test_results['predictions']
     test_processed['predicted_proba'] = test_results['probabilities']
+    
+    # Add metadata columns for comparison
+    test_processed['Date'] = test_df['Date'].values
+    test_processed['ticker'] = test_df['ticker'].values
+    
+    # Save predictions with metadata
     test_processed.to_parquet(output_dir / "test_predictions.parquet")
 
     return test_metrics, importance_df
