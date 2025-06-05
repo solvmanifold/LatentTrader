@@ -1,160 +1,166 @@
-# Trading Advisor
+# LatentTrader
 
-A Python CLI tool for generating tactical swing trading advice based on technical indicators and analyst targets for S&P 500 stocks.
+A machine learning-powered trading assistant that generates actionable, short-term trading playbooks designed to beat the market. The system leverages both traditional technical analysis features and modern ML models to create, test, and iterate on predictive models.
 
 ## Features
 
-- Pulls historical stock data using `yfinance`
-- Calculates various technical indicators:
-  - RSI (Relative Strength Index)
-  - MACD (Moving Average Convergence Divergence)
-  - Bollinger Bands
-  - Moving Averages (20, 50, 200-day)
-- Incorporates analyst price targets
-- Generates markdown-formatted reports with actionable trading playbooks
-- Supports current position analysis
-- Caches Ticker objects for performance
-- Saves structured JSON data for programmatic analysis
-- Normalized technical scores (0-10) for easy comparison
-- Ranks top setups by confidence × upside
+- **Market Data Collection**
+  - Historical stock data retrieval using `yfinance`
+  - Market breadth indicators
+  - Sector performance analysis
+  - Market sentiment analysis (GDELT)
+  - Volatility measures
+
+- **Feature Engineering**
+  - Technical indicators (RSI, MACD, etc.)
+  - Market-wide features
+  - Sector-level metrics
+  - Sentiment indicators
+  - Feature preprocessing and normalization
+
+- **Machine Learning Models**
+  - Logistic regression for binary classification
+  - Time-series aware cross-validation
+  - Feature importance analysis
+  - Model performance tracking
+  - Ensemble model support (coming soon)
+
+- **Reporting and Analysis**
+  - Daily markdown-formatted reports
+  - Interactive charts and visualizations
+  - Model performance metrics
+  - Feature importance plots
+  - Historical tracking and analysis
 
 ## Installation
 
-### From Source
-
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/solvmanifold/LatentTrader.git
-   cd LatentTrader
-   ```
+```bash
+git clone https://github.com/yourusername/LatentTrader.git
+cd LatentTrader
+```
 
 2. Create and activate a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. Install the package in development mode:
-   ```bash
-   pip install -e .
-   ```
-
-### From PyPI (Coming Soon)
-
 ```bash
-pip install trading-advisor
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+## Usage
+
+### Data Management
+```bash
+# Update market data
+python -m trading_advisor update-data
+
+# Generate ML dataset
+python -m trading_advisor generate-classification-dataset
+```
+
+### Model Training and Evaluation
+```bash
+# Train a model
+python -m trading_advisor train-model --model logistic --data-path data/ml_datasets
+
+# Evaluate model performance
+python -m trading_advisor evaluate-model --model logistic --split test
+```
+
+### Reporting
+```bash
+# Generate daily report
+python -m trading_advisor report-daily --model logistic
+
+# Generate trading prompt
+python -m trading_advisor prompt-daily --model logistic
+```
+
+## Project Structure
+
+```
+LatentTrader/
+├── data/
+│   ├── market_features/     # Market-wide features
+│   ├── ticker_features/     # Per-ticker features
+│   └── ml_datasets/         # ML training datasets
+├── model_outputs/
+│   └── logistic/           # Model outputs and artifacts
+├── scripts/
+│   ├── train_logistic.py   # Model training script
+│   └── analyze_labels.py   # Dataset analysis
+├── src/
+│   └── trading_advisor/
+│       ├── models/         # Model implementations
+│       ├── features/       # Feature engineering
+│       └── reporting/      # Report generation
+└── tests/                  # Test suite
 ```
 
 ## Recent Improvements
 
-- Table values in score breakdown are now robustly sanitized and explicitly converted to strings, preventing HTML tags or formatting issues in both HTML and static image exports.
-- Debug print statements have been removed for clean CLI output.
-- If you see unexpected <br> tags in PNG/PDF exports, this is a limitation of the Plotly/Kaleido rendering stack; the HTML output will always be correct.
-- For best results, always check the HTML output for the most accurate rendering.
+- Added logistic regression model with cross-validation
+- Implemented feature importance analysis
+- Added model performance tracking
+- Improved dataset generation with time-series splits
+- Enhanced reporting with model predictions
 
-## Usage
+## Next Steps
 
-### Update Data
+1. **Dataset Generation Optimization**
+   - Implement dynamic dataset generation
+   - Add memory-efficient batch processing
+   - Improve feature caching
 
-```bash
-trading-advisor update-data --tickers tickers.txt --days 60
-```
+2. **CLI Integration**
+   - Add model training commands
+   - Implement model evaluation
+   - Add prediction functionality
 
-*Note: If you omit the `--tickers` argument, only tickers with existing feature files will be updated. To update all S&P 500 tickers, use `--tickers all`.*
+3. **Model Improvements**
+   - Add ensemble model support
+   - Implement parameter sweeps
+   - Add model versioning
 
-Options:
-- `--tickers`, `-t`: Path to a file containing ticker symbols (required unless you want to update only existing tickers). Use `all` for S&P 500. If omitted, only tickers with existing feature files will be updated.
-- `--days`, `-d`: Number of days of historical data to download (default: 60)
-- `--features-dir`: Directory to store feature files (default: data/ticker_features)
-- `--start-date`: Start date for data collection (optional)
-- `--update-sector-mapping`: Force update sector mapping (default: false)
-- `--update-tickers/--no-update-tickers`: Update individual ticker features (default: true)
-- `--update-market/--no-update-market`: Update market-wide features (default: true)
-
-### Analyze Stocks
-
-```bash
-trading-advisor analyze --tickers tickers.txt --positions positions.csv
-```
-
-Options:
-- `--tickers`, `-t`: Path to a file containing ticker symbols (required unless --positions-only)
-- `--positions`, `-p`: Path to a CSV file containing positions (optional)
-- `--positions-only`: Analyze only positions (optional)
-- `--output`, `-o`: Path to the output JSON file (default: `output/analysis.json`)
-- `--days`, `-d`: Number of days of historical data to analyze (default: 100)
-
-### Generate Daily Report
-
-```bash
-trading-advisor report-daily --model-name TechnicalScorer --date 2025-05-23 --top-n 6
-```
-
-### Generate Daily Research Prompt
-
-```bash
-trading-advisor prompt-daily --model-name TechnicalScorer --date 2025-05-23 --top-n 6
-```
-
-### Generate Interactive Charts
-
-```bash
-trading-advisor chart AAPL MSFT --output-dir output/charts --days 100
-```
-
-Options:
-- `TICKER ...`: One or more stock ticker symbols (e.g., AAPL MSFT)
-- `--output-dir`, `-o`: Directory to save the charts (default: `output/charts`)
-- `--days`, `-d`: Number of days of historical data to include (default: 100)
-- `--pdf`: Export charts as images and combine into a single PDF (optional)
-- `--json`, `-j`: Path to analysis JSON file (optional, for charting analyzed tickers)
-
-### Backtest Strategy
-
-```bash
-trading-advisor backtest AAPL MSFT --start-date 2024-01-01 --end-date 2024-02-01 --top-n 2 --hold-days 5 --stop-loss -0.05 --profit-target 0.05
-```
-
-Options:
-- `TICKER ...`: One or more stock ticker symbols to backtest (e.g., AAPL MSFT)
-- `--start-date`: Backtest start date (YYYY-MM-DD, required)
-- `--end-date`: Backtest end date (YYYY-MM-DD, required)
-- `--top-n`: Number of top picks to buy each week (default: 3)
-- `--hold-days`: Max holding period in trading days (default: 10)
-- `--stop-loss`: Stop-loss threshold (e.g., -0.10 for -10%, default: -0.10)
-- `--profit-target`: Profit target threshold (e.g., 0.10 for +10%, default: 0.10)
-
-The backtest command simulates a weekly top-N strategy with fixed holding periods and stop/profit exits, reporting total return and trade log.
-
----
+4. **Testing and Validation**
+   - Expand test coverage
+   - Add performance benchmarks
+   - Implement cross-validation framework
 
 ## Logging
 
-Trading Advisor logs all activity to both the terminal and a log file:
-
-- **Terminal:** Pretty, colorized logs using Rich for easy reading.
-- **File:** All logs are saved to `logs/trading_advisor.log` with automatic rotation (max 10MB per file, up to 5 backup files).
-- The `logs/` folder is created automatically if it does not exist.
-
-This ensures you always have a persistent record of all analysis, errors, and activity for debugging or audit purposes.
-
----
+All activity is logged to both the terminal and log files in the `logs/` directory. Log files are organized by date and component.
 
 ## Test Coverage
 
-- The CLI is fully tested with robust coverage for all commands and error cases.
-- See `tests/test_cli.py` for comprehensive CLI tests, including analyze, chart, report-daily, prompt-daily, backtest, and error handling scenarios.
+Run the test suite with:
+```bash
+pytest tests/
+```
 
 ## Requirements
 
-- Python 3.9 or higher
-- pandas >= 2.0.0
-- numpy >= 1.24.0
-- yfinance >= 0.2.36
-- ta >= 0.10.0
-- typer >= 0.9.0
-- rich >= 13.0.0
-- plotly >= 5.13.0
+- Python 3.8+
+- pandas
+- numpy
+- scikit-learn
+- yfinance
+- plotly
+- pytest (for testing)
+
+See `requirements.txt` for a complete list of dependencies.
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 

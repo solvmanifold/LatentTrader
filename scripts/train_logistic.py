@@ -8,13 +8,22 @@ import matplotlib.pyplot as plt
 from trading_advisor.models.logistic_model import LogisticTradingModel
 from typing import Dict, List, Tuple
 from sklearn.preprocessing import StandardScaler
+import random
+import joblib
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Set all random seeds for reproducibility
+def set_random_seeds(seed: int = 42):
+    """Set random seeds for all operations."""
+    np.random.seed(seed)
+    random.seed(seed)
+
 def load_split(split_dir: Path) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Load train, validation, and test sets from a split directory."""
+    # Sort files to ensure consistent order
     train_df = pd.read_parquet(split_dir / "train.parquet")
     val_df = pd.read_parquet(split_dir / "val.parquet")
     test_df = pd.read_parquet(split_dir / "test.parquet")
@@ -47,8 +56,8 @@ def analyze_dataset(df: pd.DataFrame, name: str) -> None:
 
 def preprocess_features(df: pd.DataFrame, scaler: StandardScaler = None, fit: bool = False) -> Tuple[np.ndarray, StandardScaler]:
     """Preprocess features by scaling and handling missing values."""
-    # Select numeric columns
-    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    # Select numeric columns and sort to ensure consistent order
+    numeric_cols = sorted(df.select_dtypes(include=[np.number]).columns)
     numeric_cols = [col for col in numeric_cols if col not in ['label']]
     
     # Handle missing values
@@ -109,7 +118,7 @@ def train_and_evaluate_split(
     model_params: Dict
 ) -> Tuple[Dict, pd.DataFrame]:
     """Train and evaluate model on a specific split."""
-    split_dir = Path(f"data/ml_datasets/split_{split_num}")
+    split_dir = Path(f"data/ml_datasets/logistic_all/split_{split_num}")
     train_df, val_df, test_df = load_split(split_dir)
     
     # Analyze datasets
@@ -123,6 +132,16 @@ def train_and_evaluate_split(
     X_val, _ = preprocess_features(val_df, scaler=scaler)
     X_test, _ = preprocess_features(test_df, scaler=scaler)
     
+    # Get feature columns (sorted numeric columns excluding 'label')
+    feature_columns = sorted(train_df.select_dtypes(include=[np.number]).columns)
+    feature_columns = [col for col in feature_columns if col not in ['label']]
+
+    # Save scaler and feature columns
+    scaler_path = output_dir / f"scaler_split_{split_num}.pkl"
+    features_path = output_dir / f"features_split_{split_num}.pkl"
+    joblib.dump(scaler, scaler_path)
+    joblib.dump(feature_columns, features_path)
+
     # Get labels
     y_train = train_df['label'].values
     y_val = val_df['label'].values
@@ -212,6 +231,9 @@ def aggregate_results(metrics_list: List[Dict], importance_dfs: List[pd.DataFram
         logger.info(f"{feature}: {row['mean_importance']:.4f} ± {row['std_importance']:.4f}")
 
 def main():
+    # Set random seeds
+    set_random_seeds(42)
+    
     # Create output directory
     output_dir = Path("model_outputs/logistic")
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -229,7 +251,7 @@ def main():
     metrics_list = []
     importance_dfs = []
     
-    for split_num in range(6):  # We have splits 0-5
+    for split_num in range(37):  # We have splits 0-36
         try:
             metrics, importance_df = train_and_evaluate_split(
                 split_num=split_num,

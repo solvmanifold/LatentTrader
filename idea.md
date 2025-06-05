@@ -1,7 +1,7 @@
 # LatentTrader: Vision and Architecture
 
 ## Project Vision
-LatentTrader aims to be a trading assistant that generates actionable, short-term trading playbooks designed to beat the market. The system leverages both classic technical analysis and machine learning (ML) models to create, test, and iterate on predictive scoring models. The ultimate goal is to support robust experimentation, backtesting, and rapid iteration to discover and deploy the most effective trading strategies.
+LatentTrader aims to be a machine learning-powered trading assistant that generates actionable, short-term trading playbooks designed to beat the market. The system leverages both traditional technical analysis features and modern ML models to create, test, and iterate on predictive models. The ultimate goal is to support robust experimentation, backtesting, and rapid iteration to discover and deploy the most effective trading strategies.
 
 ## Architecture Overview
 
@@ -12,14 +12,14 @@ LatentTrader aims to be a trading assistant that generates actionable, short-ter
 - **Update Process:** Features are updated via the `update-data` command with flags for different feature types.
 - **Feature Mappings:** Categorical features (e.g., tickers) are mapped to integers and stored in `feature_mappings.json`.
 
-### 2. Model Layer (Outputs)
-- **Model Registry:** Each model (classic, ML, ensemble, etc.) is a Python class/function with a standard interface.
-- **Model Runner:** The `run-model` command loads features, runs models, and outputs scores/playbooks.
-- **Model Outputs:** Model scores are stored in `model_outputs/{model_name}/{ticker}.parquet`.
-- **ML Datasets:** Binary classification datasets are generated with time-series splits via `generate-classification-dataset`.
+### 2. Model Layer (ML Models)
+- **Model Registry:** Each model (logistic regression, ensemble, etc.) is a Python class with a standard interface.
+- **Model Training:** The `train-model` command handles model training, validation, and evaluation.
+- **Model Outputs:** Trained models and their artifacts are stored in `model_outputs/{model_name}/`.
+- **ML Datasets:** Binary classification datasets are generated with time-series splits for training and evaluation.
 
 ### 3. Reporting Layer (Daily Reports)
-- **Daily Markdown Reports:** Generated via `report-daily` command, listing top-N tickers by score.
+- **Daily Markdown Reports:** Generated via `report-daily` command, listing top-N tickers by model predictions.
 - **Historical Tracking:** Reports are saved as both Markdown files and Parquet tables.
 - **Consistent, Auditable, Historical:** Easy querying and re-generation of reports for any day/model.
 
@@ -84,6 +84,7 @@ data/market_features/
    - Model registry structure
    - Model output storage
    - Basic model runner implementation
+   - Initial logistic regression model implementation
 
 3. **Reporting Layer**
    - Daily Markdown reports
@@ -97,56 +98,78 @@ data/market_features/
    - `prompt-daily` for prompt generation
    - `generate-classification-dataset` for ML datasets
 
-### 🚧 In Progress/Next Steps
-1. **Model Layer (Advanced Features)**
-   - Model experimentation framework
-   - Ensemble model support
-   - Parameter sweep functionality
-   - Model performance tracking
-   - Model versioning system
+### 🚧 Implementation Plan
 
-2. **Backtesting**
-   - Re-implement using new model outputs
-   - Integrate with reporting structure
-   - Add performance metrics and visualization
+1. **Dataset Generation Optimization** (Priority: High)
+   - [ ] Fix progress bar to show progress across all splits
+   - [ ] Implement dynamic dataset generation during training
+   - [ ] Add memory-efficient batch processing
+   - [ ] Implement feature caching for frequently used features
+   - [ ] Add parallel processing for feature generation
+   - [ ] Create dataset validation and quality checks
 
-3. **Documentation**
-   - Create thorough documentation for features
-   - Add usage examples and guides
-   - Document model interfaces and requirements
+2. **CLI Integration** (Priority: High)
+   - [ ] Add `train-model` command:
+     - Model selection
+     - Hyperparameter specification
+     - Training data selection
+     - Validation split configuration
+   - [ ] Add `evaluate-model` command:
+     - Performance metrics
+     - Feature importance analysis
+     - Confusion matrix generation
+   - [ ] Add `predict` command:
+     - Single ticker prediction
+     - Batch prediction
+     - Confidence scores
+   - [ ] Add model management commands:
+     - List available models
+     - Save/load models
+     - Delete models
+     - Model versioning
 
-4. **Testing and Robustness**
-   - Expand test coverage
-   - Add edge case handling
-   - Improve error messages and logging
+3. **Codebase Cleanup** (Priority: Medium)
+   - [ ] Remove unused files:
+     - Old technical scorer outputs
+     - Deprecated model files
+     - Unused scripts
+   - [ ] Standardize file organization:
+     - Consistent directory structure
+     - Clear naming conventions
+     - Proper module organization
+   - [ ] Update documentation:
+     - Code comments
+     - Function docstrings
+     - README updates
+     - Usage examples
 
-# Next Steps for Logistic Model Project
+4. **Model Improvements** (Priority: Medium)
+   - [ ] Implement model versioning
+   - [ ] Add model performance tracking
+   - [ ] Create model comparison tools
+   - [ ] Add ensemble model support
+   - [ ] Implement parameter sweep functionality
 
-1. **Expand Dataset**
-   - Generate a larger dataset with all tickers and at least 4 years of data.
-   - Ensure splits are representative and balanced across time and tickers.
+5. **Testing and Validation** (Priority: High)
+   - [ ] Add unit tests for new functionality
+   - [ ] Implement integration tests
+   - [ ] Add performance benchmarks
+   - [ ] Create validation datasets
+   - [ ] Implement cross-validation framework
 
-2. **Re-run Cross-Validation**
-   - Use the improved script to train and evaluate the model on the expanded dataset.
-   - Aggregate and analyze results for stability and generalization.
+6. **Documentation and Examples** (Priority: Medium)
+   - [ ] Update README with new features
+   - [ ] Create usage examples
+   - [ ] Add API documentation
+   - [ ] Create tutorial notebooks
+   - [ ] Document best practices
 
-3. **Model/Feature Engineering (Optional)**
-   - Experiment with additional features or feature selection.
-   - Try different regularization strengths or model hyperparameters.
-   - Consider ensembling or stacking with other models if performance is still unstable.
-
-4. **CLI Integration**
-   - Once satisfied with model robustness and performance, integrate the logistic model into the CLI.
-   - Add commands for training, evaluation, and prediction from the command line.
-
-5. **Documentation & Visualization**
-   - Document the pipeline, results, and key findings.
-   - Save and visualize feature importances and confusion matrices for the expanded dataset.
-
-6. **Further Validation**
-   - Test the model on out-of-sample data or new tickers.
-   - Monitor for overfitting or data leakage.
+### Timeline
+- **Week 1**: Dataset Generation Optimization & CLI Integration
+- **Week 2**: Codebase Cleanup & Model Improvements
+- **Week 3**: Testing and Validation
+- **Week 4**: Documentation and Examples
 
 ---
 
-*These steps ensure a robust, scalable, and production-ready trading model pipeline.*
+*This plan ensures a systematic approach to improving the codebase while maintaining focus on ML-driven trading strategies.*

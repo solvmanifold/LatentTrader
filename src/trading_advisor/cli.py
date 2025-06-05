@@ -55,7 +55,7 @@ file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s:
 
 # Terminal handler (RichHandler for pretty output)
 console_handler = RichHandler(rich_tracebacks=True)
-console_handler.setLevel(logging.WARNING)
+console_handler.setLevel(logging.INFO)
 
 # Configure logging
 logging.basicConfig(
@@ -1273,6 +1273,82 @@ test_df = pd.read_parquet(split_dir / "test.parquet")
     typer.echo(f"- Output directory: {output_dir}")
     typer.echo(f"- Feature mappings saved to: {output_dir}/feature_mappings.json")
     typer.echo(f"- README updated at: {readme_path}")
+
+@app.command()
+def generate_dataset(
+    tickers: str = typer.Option("all", help="Comma-separated tickers, path to file, or 'all' for all tickers"),
+    start_date: str = typer.Option(..., help="Start date for dataset (YYYY-MM-DD)"),
+    end_date: str = typer.Option(..., help="End date for dataset (YYYY-MM-DD)"),
+    target_days: int = typer.Option(5, help="Number of days to look ahead for target"),
+    target_return: float = typer.Option(0.02, help="Target return threshold"),
+    train_months: int = typer.Option(3, help="Number of months for training"),
+    val_months: int = typer.Option(1, help="Number of months for validation"),
+    test_months: int = typer.Option(1, help="Number of months for testing"),
+    min_samples: int = typer.Option(10, help="Minimum number of samples required"),
+    output: str = typer.Option("data/ml_datasets", help="Directory to save output files"),
+    force: bool = typer.Option(False, help="Overwrite existing files if they exist"),
+    log_level: str = typer.Option("WARNING", help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
+):
+    """Generate machine learning datasets for specified tickers."""
+    # Configure logging
+    logging.basicConfig(
+        level=getattr(logging, log_level),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    # Set root logger level
+    logging.getLogger().setLevel(getattr(logging, log_level))
+    
+    # Set specific logger levels
+    logging.getLogger('trading_advisor').setLevel(getattr(logging, log_level))
+    
+    # Parse tickers
+    if tickers == "all":
+        ticker_list = load_tickers("all")
+    elif os.path.isfile(tickers):
+        with open(tickers) as f:
+            ticker_list = [line.strip() for line in f if line.strip()]
+    else:
+        ticker_list = [t.strip() for t in tickers.split(",")]
+    
+    # Create output directory
+    output_dir = Path(output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Initialize dataset generator
+    generator = DatasetGenerator(
+        market_features_dir='data/market_features',
+        ticker_features_dir='data/ticker_features',
+        output_dir=output_dir
+    )
+    
+    # Generate dataset
+    try:
+        datasets = generator.generate_dataset(
+            tickers=ticker_list,
+            start_date=start_date,
+            end_date=end_date,
+            target_days=target_days,
+            target_return=target_return,
+            train_months=train_months,
+            val_months=val_months,
+            test_months=test_months,
+            min_samples=min_samples,
+            output=output,
+            force=force
+        )
+        
+        print(f"Successfully generated datasets with shapes:")
+        print(f"Train: {datasets['train'].shape}")
+        print(f"Validation: {datasets['val'].shape}")
+        print(f"Test: {datasets['test'].shape}")
+        
+    except ValueError as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Error generating dataset: {str(e)}", err=True)
+        raise typer.Exit(1)
 
 def run():
     """Run the CLI application."""
