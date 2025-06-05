@@ -51,16 +51,33 @@ def preprocess_features(df: pd.DataFrame, scaler: StandardScaler = None, fit: bo
     # Handle missing values in features
     df_clean = df_clean[numeric_cols].fillna(df_clean[numeric_cols].mean())
     
+    # Log feature statistics before scaling
+    if fit:
+        logger.info("\nFeature statistics before scaling (training):")
+        logger.info(f"Mean: {df_clean.mean().to_dict()}")
+        logger.info(f"Std: {df_clean.std().to_dict()}")
+    
     # Scale features
     if fit:
         scaler = StandardScaler()
         X = scaler.fit_transform(df_clean)
         # Store feature names in scaler
         scaler.feature_names_in_ = numeric_cols
+        
+        # Log scaler statistics
+        logger.info("\nScaler statistics after fitting:")
+        logger.info(f"Mean: {scaler.mean_}")
+        logger.info(f"Scale: {scaler.scale_}")
     else:
         # Ensure we're using the same feature order as during training
         df_clean = df_clean[scaler.feature_names_in_]
         X = scaler.transform(df_clean)
+    
+    # Log scaled feature statistics
+    X_df = pd.DataFrame(X, columns=df_clean.columns)
+    logger.info("\nFeature statistics after scaling:")
+    logger.info(f"Mean: {X_df.mean().to_dict()}")
+    logger.info(f"Std: {X_df.std().to_dict()}")
     
     return X, scaler
 
@@ -348,11 +365,27 @@ def predict_single_row(
     if hasattr(scaler, 'feature_names_in_'):
         logger.info(f"Scaler feature names: {scaler.feature_names_in_}")
     
+    # Log raw feature values
+    logger.info("\nRaw feature values before scaling:")
+    for col in X.columns:
+        logger.info(f"{col}: {X[col].iloc[0]:.6f}")
+    
     # Handle missing values
     X = X.fillna(X.mean())
     
+    # Log feature values after handling missing values
+    logger.info("\nFeature values after handling missing values:")
+    for col in X.columns:
+        logger.info(f"{col}: {X[col].iloc[0]:.6f}")
+    
     # Scale features
     X_scaled = scaler.transform(X)
+    X_scaled_df = pd.DataFrame(X_scaled, columns=X.columns)
+    
+    # Log scaled feature values
+    logger.info("\nScaled feature values:")
+    for col in X_scaled_df.columns:
+        logger.info(f"{col}: {X_scaled_df[col].iloc[0]:.6f}")
     
     # Get prediction
     results = model.predict(pd.DataFrame(X_scaled, columns=X.columns))
