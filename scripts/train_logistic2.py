@@ -188,44 +188,56 @@ def evaluate(
 
     return test_metrics, importance_df
 
-def train_and_evaluate(
-    train_df: pd.DataFrame,
-    val_df: pd.DataFrame,
-    test_df: pd.DataFrame,
-    output_dir: Path,
-    model_params: Dict
-) -> Tuple[Dict, pd.DataFrame]:
-    """Train and evaluate model on the dataset."""
-    # Train the model
-    model, scaler, numeric_cols = train(train_df, val_df, output_dir, model_params)
+def main():
+    # Set random seeds
+    set_random_seeds(42)
     
-    # Evaluate the model
-    test_metrics, importance_df = evaluate(model, test_df, scaler, numeric_cols, output_dir)
+    # Create output directories
+    output_dir = Path("model_outputs/logistic2")
+    method1_dir = output_dir / "method1"
+    method2_dir = output_dir / "method2"
     
-    return test_metrics, importance_df
+    for dir_path in [method1_dir, method2_dir]:
+        dir_path.mkdir(parents=True, exist_ok=True)
+    
+    # Model parameters
+    model_params = {
+        'C': 0.1,  # Stronger regularization
+        'class_weight': 'balanced',
+        'max_iter': 1000,
+        'random_state': 42,
+        'solver': 'liblinear'  # Better for small datasets
+    }
+    
+    # Load dataset
+    data_dir = Path("data/ml_datasets/test_run")
+    train_df, val_df, test_df = load_dataset(data_dir)
+    
+    # Train and evaluate using only the separate functions
+    logger.info("\n=== Training and Evaluating using separate functions ===")
+    model, scaler, numeric_cols = train(
+        train_df=train_df,
+        val_df=val_df,
+        output_dir=method2_dir,
+        model_params=model_params
+    )
+    
+    metrics, importance_df = evaluate(
+        model=model,
+        test_df=test_df,
+        scaler=scaler,
+        numeric_cols=numeric_cols,
+        output_dir=method2_dir
+    )
+    
+    logger.info("\nFinal Results:")
+    for metric, value in metrics.items():
+        logger.info(f"{metric}: {value:.4f}")
 
-RUN_EVALUATE_ONLY = True  # Set to True to run just evaluate
+# Remove train_and_evaluate function definition and all references to it
+
+# Remove RUN_EVALUATE_ONLY and update main to use only train and evaluate
 
 if __name__ == "__main__":
-    if RUN_EVALUATE_ONLY:
-        # Only run evaluate
-        from trading_advisor.models.logistic_model import LogisticTradingModel
-        output_dir = Path("model_outputs/logistic2/method2")
-        data_dir = Path("data/ml_datasets/test_run")
-        _, _, test_df = load_dataset(data_dir)
-        # Load model, scaler, and features
-        model = LogisticTradingModel.load(output_dir / "logistic_model.pkl")
-        scaler = joblib.load(output_dir / "scaler.pkl")
-        numeric_cols = joblib.load(output_dir / "features.pkl")
-        metrics, importance_df = evaluate(
-            model=model,
-            test_df=test_df,
-            scaler=scaler,
-            numeric_cols=numeric_cols,
-            output_dir=output_dir
-        )
-        logger.info("\nResults from evaluate-only run:")
-        for metric, value in metrics.items():
-            logger.info(f"{metric}: {value:.4f}")
-    else:
-        main() 
+    main() 
+    main() 
