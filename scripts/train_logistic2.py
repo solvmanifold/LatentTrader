@@ -10,6 +10,7 @@ from typing import Dict, List, Tuple
 from sklearn.preprocessing import StandardScaler
 import random
 import joblib
+import hashlib
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -94,6 +95,99 @@ def plot_feature_importance(model: LogisticTradingModel, output_dir: Path, split
         return importance_df
     return pd.DataFrame()
 
+def train(
+    train_df: pd.DataFrame,
+    val_df: pd.DataFrame,
+    output_dir: Path,
+    model_params: Dict
+) -> Tuple[LogisticTradingModel, StandardScaler, List[str]]:
+    """Train model on the dataset and return the trained model, scaler, and feature columns."""
+    # Analyze datasets
+    analyze_dataset(train_df, "Training")
+    analyze_dataset(val_df, "Validation")
+
+    # Preprocess features
+    X_train, scaler = preprocess_features(train_df, fit=True)
+    X_val, _ = preprocess_features(val_df, scaler=scaler)
+
+    # Get feature columns (actual order used for training)
+    numeric_cols = train_df.select_dtypes(include=[np.number]).columns
+    numeric_cols = [col for col in numeric_cols if col not in ['label', 'ticker']]
+
+    # Save scaler and feature columns
+    scaler_path = output_dir / "scaler.pkl"
+    features_path = output_dir / "features.pkl"
+    joblib.dump(scaler, scaler_path)
+    joblib.dump(numeric_cols, features_path)
+
+    # Get labels
+    y_train = train_df['label'].values
+    y_val = val_df['label'].values
+
+    # Initialize and train model
+    logger.info("\nTraining logistic model...")
+    model = LogisticTradingModel(**model_params)
+
+    # Create training DataFrame with preprocessed features
+    train_processed = pd.DataFrame(X_train, columns=numeric_cols)
+    train_processed['label'] = y_train
+    val_processed = pd.DataFrame(X_val, columns=numeric_cols)
+    val_processed['label'] = y_val
+
+    model.train(train_processed, val_processed)
+
+    # Save model
+    model_path = output_dir / "logistic_model.pkl"
+    model.save(model_path)
+    logger.info(f"\nSaved trained model to {model_path}")
+
+    return model, scaler, numeric_cols
+
+def evaluate(
+    model: LogisticTradingModel,
+    test_df: pd.DataFrame,
+    scaler: StandardScaler,
+    numeric_cols: List[str],
+    output_dir: Path
+) -> Tuple[Dict, pd.DataFrame]:
+    """Evaluate model on the test dataset."""
+    # Analyze test dataset
+    analyze_dataset(test_df, "Test")
+
+    # Preprocess features
+    X_test, _ = preprocess_features(test_df, scaler=scaler)
+    y_test = test_df['label'].values
+
+    # Evaluate on test set
+    logger.info("\nEvaluating on test set...")
+    test_processed = pd.DataFrame(X_test, columns=numeric_cols)
+    test_processed['label'] = y_test
+
+    test_results = model.predict(test_processed)
+    test_pred = test_results['predictions']
+    test_proba = test_results['probabilities']
+
+    # Calculate metrics
+    test_metrics = {
+        'accuracy': np.mean(test_pred == y_test),
+        'precision': precision_score(y_test, test_pred, zero_division=0),
+        'recall': recall_score(y_test, test_pred, zero_division=0),
+        'auc': roc_auc_score(y_test, test_proba)
+    }
+
+    # Log test metrics
+    logger.info("\nTest Set Metrics:")
+    for metric, value in test_metrics.items():
+        logger.info(f"{metric}: {value:.4f}")
+
+    # Plot confusion matrix
+    plot_confusion_matrix(y_test, test_pred, output_dir, 0)
+
+    # Plot feature importance
+    importance_df = plot_feature_importance(model, output_dir, 0)
+
+    return test_metrics, importance_df
+
 def train_and_evaluate(
     train_df: pd.DataFrame,
     val_df: pd.DataFrame,
@@ -102,115 +196,36 @@ def train_and_evaluate(
     model_params: Dict
 ) -> Tuple[Dict, pd.DataFrame]:
     """Train and evaluate model on the dataset."""
-    # Analyze datasets
-    analyze_dataset(train_df, "Training")
-    analyze_dataset(val_df, "Validation")
-    analyze_dataset(test_df, "Test")
+    # Train the model
+    model, scaler, numeric_cols = train(train_df, val_df, output_dir, model_params)
     
-    # Preprocess features
-    X_train, scaler = preprocess_features(train_df, fit=True)
-    X_val, _ = preprocess_features(val_df, scaler=scaler)
-    X_test, _ = preprocess_features(test_df, scaler=scaler)
-    
-    # Get feature columns (sorted numeric columns excluding 'label' and 'ticker')
-    feature_columns = sorted(train_df.select_dtypes(include=[np.number]).columns)
-    feature_columns = [col for col in feature_columns if col not in ['label', 'ticker']]
-
-    # Save scaler and feature columns
-    scaler_path = output_dir / "scaler.pkl"
-    features_path = output_dir / "features.pkl"
-    joblib.dump(scaler, scaler_path)
-    joblib.dump(feature_columns, features_path)
-
-    # Get labels
-    y_train = train_df['label'].values
-    y_val = val_df['label'].values
-    y_test = test_df['label'].values
-    
-    # Initialize and train model
-    logger.info("\nTraining logistic model...")
-    model = LogisticTradingModel(**model_params)
-    
-    # Create training DataFrame with preprocessed features
-    numeric_cols = train_df.select_dtypes(include=[np.number]).columns
-    numeric_cols = [col for col in numeric_cols if col not in ['label', 'ticker']]
-    
-    train_processed = pd.DataFrame(X_train, columns=numeric_cols)
-    train_processed['label'] = y_train
-    val_processed = pd.DataFrame(X_val, columns=numeric_cols)
-    val_processed['label'] = y_val
-    
-    model.train(train_processed, val_processed)
-    
-    # Evaluate on test set
-    logger.info("\nEvaluating on test set...")
-    test_processed = pd.DataFrame(X_test, columns=numeric_cols)
-    test_processed['label'] = y_test
-    
-    test_results = model.predict(test_processed)
-    test_pred = test_results['predictions']
-    test_proba = test_results['probabilities']
-    
-    # Calculate metrics
-    test_metrics = {
-        'accuracy': np.mean(test_pred == y_test),
-        'precision': precision_score(y_test, test_pred, zero_division=0),
-        'recall': recall_score(y_test, test_pred, zero_division=0),
-        'auc': roc_auc_score(y_test, test_proba)
-    }
-    
-    # Log test metrics
-    logger.info("\nTest Set Metrics:")
-    for metric, value in test_metrics.items():
-        logger.info(f"{metric}: {value:.4f}")
-    
-    # Plot confusion matrix
-    plot_confusion_matrix(y_test, test_pred, output_dir, 0)
-    
-    # Plot feature importance
-    importance_df = plot_feature_importance(model, output_dir, 0)
-    
-    # Save model
-    model_path = output_dir / "logistic_model.pkl"
-    model.save(model_path)
-    logger.info(f"\nSaved trained model to {model_path}")
+    # Evaluate the model
+    test_metrics, importance_df = evaluate(model, test_df, scaler, numeric_cols, output_dir)
     
     return test_metrics, importance_df
 
-def main():
-    # Set random seeds
-    set_random_seeds(42)
-    
-    # Create output directory
-    output_dir = Path("model_outputs/logistic2")
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Model parameters
-    model_params = {
-        'C': 0.1,  # Stronger regularization
-        'class_weight': 'balanced',
-        'max_iter': 1000,
-        'random_state': 42,
-        'solver': 'liblinear'  # Better for small datasets
-    }
-    
-    # Load dataset
-    data_dir = Path("data/ml_datasets/test_run")
-    train_df, val_df, test_df = load_dataset(data_dir)
-    
-    # Train and evaluate
-    metrics, importance_df = train_and_evaluate(
-        train_df=train_df,
-        val_df=val_df,
-        test_df=test_df,
-        output_dir=output_dir,
-        model_params=model_params
-    )
-    
-    # Log final results
-    logger.info("\nFinal Results:")
-    for metric, value in metrics.items():
-        logger.info(f"{metric}: {value:.4f}")
+RUN_EVALUATE_ONLY = True  # Set to True to run just evaluate
 
 if __name__ == "__main__":
-    main() 
+    if RUN_EVALUATE_ONLY:
+        # Only run evaluate
+        from trading_advisor.models.logistic_model import LogisticTradingModel
+        output_dir = Path("model_outputs/logistic2/method2")
+        data_dir = Path("data/ml_datasets/test_run")
+        _, _, test_df = load_dataset(data_dir)
+        # Load model, scaler, and features
+        model = LogisticTradingModel.load(output_dir / "logistic_model.pkl")
+        scaler = joblib.load(output_dir / "scaler.pkl")
+        numeric_cols = joblib.load(output_dir / "features.pkl")
+        metrics, importance_df = evaluate(
+            model=model,
+            test_df=test_df,
+            scaler=scaler,
+            numeric_cols=numeric_cols,
+            output_dir=output_dir
+        )
+        logger.info("\nResults from evaluate-only run:")
+        for metric, value in metrics.items():
+            logger.info(f"{metric}: {value:.4f}")
+    else:
+        main() 
