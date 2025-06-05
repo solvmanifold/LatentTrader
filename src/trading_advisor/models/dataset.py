@@ -10,7 +10,9 @@ import json
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from rich.console import Console
 
+# Configure logging to only show WARNING and above by default
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.WARNING)
 
 def remove_unnecessary_features(df: pd.DataFrame) -> pd.DataFrame:
     """Remove unnecessary features from the dataset."""
@@ -39,7 +41,7 @@ def save_feature_mappings(df: pd.DataFrame, output_dir: Path) -> Dict:
     with open(output_path, 'w') as f:
         json.dump(mappings, f, indent=2)
     
-    logger.info(f"Saved feature mappings to {output_path}")
+    logger.debug(f"Saved feature mappings to {output_path}")
     return mappings
 
 def apply_feature_mappings(df: pd.DataFrame, mappings: Dict) -> pd.DataFrame:
@@ -59,6 +61,7 @@ class DatasetGenerator:
         market_features_dir: str = "data/market_features",
         ticker_features_dir: str = "data/ticker_features",
         output_dir: str = "data/ml_datasets",
+        feature_config: Optional[str] = None,
         progress_callback: Optional[Callable] = None,
         batch_size: int = 1000  # Number of samples to process at once
     ):
@@ -68,6 +71,7 @@ class DatasetGenerator:
             market_features_dir: Directory containing market feature files
             ticker_features_dir: Directory containing ticker feature files
             output_dir: Directory to save generated datasets
+            feature_config: Path to feature configuration JSON file (optional)
             progress_callback: Optional callback function to update progress
             batch_size: Number of samples to process at once for memory efficiency
         """
@@ -77,6 +81,12 @@ class DatasetGenerator:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.progress_callback = progress_callback
         self.batch_size = batch_size
+        
+        # Load feature configuration if provided
+        self.feature_config = None
+        if feature_config:
+            with open(feature_config) as f:
+                self.feature_config = json.load(f)
         
         # Load sector mapping
         self.sector_mapping = pd.read_parquet(
@@ -272,9 +282,6 @@ class DatasetGenerator:
         ticker_features.index = pd.to_datetime(ticker_features.index)
         ticker_features = self.drop_date_column(ticker_features)
         ticker_features.index.name = None
-        print(f"[DEBUG] ticker_features after index set/drop: columns={ticker_features.columns}, index={ticker_features.index.names}")
-        print(f"[DEBUG] ticker_features.index[:5]: {ticker_features.index[:5]}")
-        print(f"[DEBUG] [type(x) for x in ticker_features.index[:5]]: {[type(x) for x in ticker_features.index[:5]]}")
         
         # Filter for target date
         target_date = pd.to_datetime(date)
@@ -299,11 +306,101 @@ class DatasetGenerator:
         else:
             features = pd.concat([ticker_features, market_features], axis=1)
         
-        logger.info(f"Requested date for {ticker}: {date}")
-        logger.info(f"Resulting DataFrame for {ticker}: {features}")
+        # Apply feature filtering if configuration exists
+        if self.feature_config:
+            logger.debug(f"Feature configuration: {self.feature_config}")
+            logger.debug(f"Original features: {features.columns.tolist()}")
+            
+            # Get all allowed features from config
+            allowed_features = set()
+            
+            # Add ticker features
+            allowed_features.update(self.feature_config['ticker_features'])
+            
+            # Add market features
+            for category in self.feature_config['market_features'].values():
+                allowed_features.update(category)
+            
+            # Add sector features
+            allowed_features.update(self.feature_config['sector_features'])
+            
+            # Filter columns
+            matching_cols = []
+            for col in features.columns:
+                # Always include these columns
+                if col in ['ticker', 'label', 'Date']:
+                    matching_cols.append(col)
+                    continue
+                    
+                # For sector features, only include if they exactly match the config
+                if col.endswith('_sector'):
+                    if col in allowed_features:
+                        matching_cols.append(col)
+                    continue
+                    
+                # For other features, include if they match the config
+                if col in allowed_features:
+                    matching_cols.append(col)
+            
+            logger.debug(f"Allowed features: {allowed_features}")
+            logger.debug(f"Matching columns: {matching_cols}")
+            
+            if matching_cols:
+                features = features[matching_cols]
+            else:
+                logger.warning("No features remained after filtering")
+                return pd.DataFrame()
+        
         features = self.drop_date_column(features)
         return features
-    
+
+    def _format_feature_list(self, features: List[str]) -> str:
+        """Format a list of features for the README."""
+        if not features:
+            return "No features specified in configuration."
+        
+        # Categorize features
+        ticker_features = []
+        market_features = {
+            "daily_breadth": [],
+            "market_volatility": [],
+            "market_sentiment": []
+        }
+        sector_features = []
+        
+        # Categorize features based on their suffixes and names
+        for feature in features:
+            if '_daily_breadth' in feature:
+                market_features["daily_breadth"].append(feature)
+            elif '_market_volatility' in feature:
+                market_features["market_volatility"].append(feature)
+            elif '_market_sentiment' in feature:
+                market_features["market_sentiment"].append(feature)
+            elif feature.endswith('_sector'):
+                sector_features.append(feature)
+            else:
+                ticker_features.append(feature)
+        
+        # Format the features
+        formatted = []
+        
+        if ticker_features:
+            formatted.append("### Ticker Features")
+            formatted.extend([f"- `{feature}`" for feature in sorted(ticker_features)])
+        
+        if any(market_features.values()):
+            formatted.append("\n### Market Features")
+            for category, features in market_features.items():
+                if features:
+                    formatted.append(f"#### {category.replace('_', ' ').title()}")
+                    formatted.extend([f"- `{feature}`" for feature in sorted(features)])
+        
+        if sector_features:
+            formatted.append("\n### Sector Features")
+            formatted.extend([f"- `{feature}`" for feature in sorted(sector_features)])
+        
+        return "\n".join(formatted)
+
     def _generate_readme(
         self,
         output_dir: Path,
@@ -311,14 +408,16 @@ class DatasetGenerator:
         split_stats: List[Dict],
         splits: List[Dict[str, pd.Timestamp]]
     ) -> None:
-        """Generate README.md with dataset documentation.
+        """Generate README.md with dataset documentation."""
+        # Get the actual features from the first split's train data
+        train_path = output_dir / 'train.parquet'
+        if train_path.exists():
+            train_df = pd.read_parquet(train_path)
+            actual_features = [col for col in train_df.columns if col not in ['Date', 'ticker', 'label']]
+            logger.debug(f"Features in train data: {actual_features}")
+        else:
+            actual_features = []
         
-        Args:
-            output_dir: Directory to save README.md
-            generation_params: Dictionary of generation parameters
-            split_stats: List of dictionaries containing split statistics
-            splits: List of split dictionaries containing date ranges
-        """
         readme_content = f"""# Stock Price Prediction Dataset
 
 This dataset is designed for training and evaluating machine learning models for stock price prediction. It uses a binary classification approach where the target is whether a stock's price will increase by a specified threshold within a given prediction window.
@@ -336,33 +435,13 @@ The dataset is organized into time-series splits to prevent data leakage and ens
 
 The binary classification labels are defined as follows:
 - `1` (Positive): The stock's price increases by at least {generation_params['target_return']*100:.1f}% within {generation_params['target_days']} trading days
-- `0` (Negative): The stock's price does not increase by {generation_params['target_return']*100:.1f}% within {generation_params['target_days']} trading days
+- `0` (Negative): The stock's price does not increase by {generation_params['target_return']*100:.1f}% within {generation_params['target_days']}
 
 ## Features
 
-The dataset includes the following types of features:
+The dataset includes the following features:
 
-1. Core Price and Volume Data:
-   - Open, High, Low, Close prices
-   - Volume and volume-based indicators
-   - Price changes and returns
-
-2. Technical Indicators:
-   - Moving Averages (SMA, EMA)
-   - Relative Strength Index (RSI)
-   - MACD and Signal lines
-   - Bollinger Bands
-   - Volume indicators
-
-3. Market Features:
-   - Market-wide volatility measures
-   - Sector performance metrics
-   - Market breadth indicators
-   - Economic indicators
-
-4. Additional Features:
-   - Time-based features (day of week, month, etc.)
-   - Categorical features (ticker symbols, mapped to integers)
+{self._format_feature_list(actual_features)}
 
 ## Dataset Statistics
 
@@ -600,6 +679,43 @@ split_0_test = test_df[
                             
                         features_df = pd.concat(all_features)
                         
+                        # Apply feature filtering if configuration exists
+                        if self.feature_config:
+                            logger.debug(f"Feature configuration: {self.feature_config}")
+                            logger.debug(f"Original features: {features_df.columns.tolist()}")
+                            
+                            # Get all allowed features from config
+                            allowed_features = set()
+                            
+                            # Add ticker features
+                            allowed_features.update(self.feature_config['ticker_features'])
+                            
+                            # Add market features
+                            for category in self.feature_config['market_features'].values():
+                                allowed_features.update(category)
+                            
+                            # Add sector features
+                            allowed_features.update(self.feature_config['sector_features'])
+                            
+                            # Filter columns
+                            matching_cols = [col for col in features_df.columns if col in allowed_features]
+                            # Always include 'ticker' if present
+                            if 'ticker' in features_df.columns and 'ticker' not in matching_cols:
+                                matching_cols.append('ticker')
+                            if 'label' in features_df.columns and 'label' not in matching_cols:
+                                matching_cols.append('label')
+                            if 'Date' in features_df.columns and 'Date' not in matching_cols:
+                                matching_cols.append('Date')
+                            logger.debug(f"Allowed features: {allowed_features}")
+                            logger.debug(f"Matching columns: {matching_cols}")
+                            
+                            if matching_cols:
+                                features_df = features_df[matching_cols]
+                            else:
+                                logger.warning("No features remained after filtering")
+                                progress.update(task, advance=1)
+                                continue
+                        
                         # Generate split datasets
                         split_data = self._generate_split_datasets(features_df, labels, split)
                         if split_data:
@@ -744,8 +860,8 @@ split_0_test = test_df[
             val_data = val_data.drop(columns=['index'])
             test_data = test_data.drop(columns=['index'])
 
-            # Log the number of samples in each split
-            logger.info(f"Generated split datasets: Train: {len(train_data)}, Validation: {len(val_data)}, Test: {len(test_data)}")
+            # Log the number of samples in each split at debug level
+            logger.debug(f"Generated split datasets: Train: {len(train_data)}, Validation: {len(val_data)}, Test: {len(test_data)}")
 
             return {
                 'train': train_data,
@@ -776,7 +892,7 @@ split_0_test = test_df[
         with open(output_path, 'w') as f:
             json.dump(mappings, f, indent=2)
         
-        logger.info(f"Saved feature mappings to {output_path}")
+        logger.debug(f"Saved feature mappings to {output_path}")
         return mappings
 
     def apply_feature_mappings(self, df: pd.DataFrame, mappings: Dict) -> pd.DataFrame:

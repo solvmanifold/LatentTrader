@@ -1046,6 +1046,7 @@ def generate_classification_dataset(
     market_features_dir: str = typer.Option("data/market_features", help="Directory containing market feature files"),
     ticker_features_dir: str = typer.Option("data/ticker_features", help="Directory containing ticker feature files"),
     output_dir: str = typer.Option("data/ml_datasets", help="Directory to save generated datasets"),
+    feature_config: Optional[str] = typer.Option(None, help="Path to feature configuration JSON file"),
     force: bool = typer.Option(False, help="Overwrite existing datasets if they exist")
 ):
     """Generate binary classification dataset for stock price prediction with time-series splits."""
@@ -1074,6 +1075,7 @@ def generate_classification_dataset(
             market_features_dir=market_features_dir,
             ticker_features_dir=ticker_features_dir,
             output_dir=output_dir,
+            feature_config=feature_config,
             progress_callback=lambda: progress.update(task, advance=1)
         )
         
@@ -1182,29 +1184,23 @@ The binary classification labels are defined as follows:
 
 ## Features
 
-The dataset includes the following types of features:
+The dataset includes the following features:
 
-1. Core Price and Volume Data:
-   - Open, High, Low, Close prices
-   - Volume and volume-based indicators
-   - Price changes and returns
+### Ticker Features
+{generator._format_feature_list(generator.feature_config['ticker_features'] if generator.feature_config else [])}
 
-2. Technical Indicators:
-   - Moving Averages (SMA, EMA)
-   - Relative Strength Index (RSI)
-   - MACD and Signal lines
-   - Bollinger Bands
-   - Volume indicators
+### Market Features
+#### Daily Breadth
+{generator._format_feature_list(generator.feature_config['market_features']['daily_breadth'] if generator.feature_config else [])}
 
-3. Market Features:
-   - Market-wide volatility measures
-   - Sector performance metrics
-   - Market breadth indicators
-   - Economic indicators
+#### Market Volatility
+{generator._format_feature_list(generator.feature_config['market_features']['market_volatility'] if generator.feature_config else [])}
 
-4. Additional Features:
-   - Time-based features (day of week, month, etc.)
-   - Categorical features (ticker symbols, mapped to integers)
+#### Market Sentiment
+{generator._format_feature_list(generator.feature_config['market_features']['market_sentiment'] if generator.feature_config else [])}
+
+### Sector Features
+{generator._format_feature_list(generator.feature_config['sector_features'] if generator.feature_config else [])}
 
 ## Dataset Statistics
 
@@ -1218,6 +1214,7 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 - Validation Period: {val_months} months
 - Test Period: {test_months} months
 - Minimum Samples per Ticker: {min_samples}
+- Tickers: {', '.join(ticker_list)}
 
 ### Split Statistics
 """
@@ -1286,21 +1283,17 @@ def generate_dataset(
     test_months: int = typer.Option(1, help="Number of months for testing"),
     min_samples: int = typer.Option(10, help="Minimum number of samples required"),
     output: str = typer.Option("data/ml_datasets", help="Directory to save output files"),
+    feature_config: Optional[str] = typer.Option(None, help="Path to feature configuration JSON file"),
     force: bool = typer.Option(False, help="Overwrite existing files if they exist"),
     log_level: str = typer.Option("WARNING", help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
 ):
     """Generate machine learning datasets for specified tickers."""
-    # Configure logging
-    logging.basicConfig(
-        level=getattr(logging, log_level),
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+    from trading_advisor.models.dataset import DatasetGenerator
+    from trading_advisor.data import load_tickers
+    import logging
     
-    # Set root logger level
-    logging.getLogger().setLevel(getattr(logging, log_level))
-    
-    # Set specific logger levels
-    logging.getLogger('trading_advisor').setLevel(getattr(logging, log_level))
+    # Set up logging
+    logging.basicConfig(level=getattr(logging, log_level))
     
     # Parse tickers
     if tickers == "all":
@@ -1311,44 +1304,28 @@ def generate_dataset(
     else:
         ticker_list = [t.strip() for t in tickers.split(",")]
     
-    # Create output directory
-    output_dir = Path(output)
-    output_dir.mkdir(parents=True, exist_ok=True)
-    
     # Initialize dataset generator
     generator = DatasetGenerator(
-        market_features_dir='data/market_features',
-        ticker_features_dir='data/ticker_features',
-        output_dir=output_dir
+        market_features_dir="data/market_features",
+        ticker_features_dir="data/ticker_features",
+        output_dir=output,
+        feature_config=feature_config
     )
     
     # Generate dataset
-    try:
-        datasets = generator.generate_dataset(
-            tickers=ticker_list,
-            start_date=start_date,
-            end_date=end_date,
-            target_days=target_days,
-            target_return=target_return,
-            train_months=train_months,
-            val_months=val_months,
-            test_months=test_months,
-            min_samples=min_samples,
-            output=output,
-            force=force
-        )
-        
-        print(f"Successfully generated datasets with shapes:")
-        print(f"Train: {datasets['train'].shape}")
-        print(f"Validation: {datasets['val'].shape}")
-        print(f"Test: {datasets['test'].shape}")
-        
-    except ValueError as e:
-        typer.echo(f"Error: {str(e)}", err=True)
-        raise typer.Exit(1)
-    except Exception as e:
-        typer.echo(f"Error generating dataset: {str(e)}", err=True)
-        raise typer.Exit(1)
+    generator.generate_dataset(
+        tickers=ticker_list,
+        start_date=start_date,
+        end_date=end_date,
+        target_days=target_days,
+        target_return=target_return,
+        train_months=train_months,
+        val_months=val_months,
+        test_months=test_months,
+        min_samples=min_samples,
+        output=output,
+        force=force
+    )
 
 def run():
     """Run the CLI application."""
