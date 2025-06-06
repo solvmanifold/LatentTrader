@@ -12,7 +12,14 @@ from trading_advisor.validation import (
     DataTypeValidator,
     RequiredColumnValidator,
     DataQualityValidator,
-    validate_parquet_file
+    validate_parquet_file,
+    validate_market_features,
+    MARKET_FEATURE_TYPES,
+    MARKET_FEATURE_REQUIRED,
+    BREADTH_FEATURE_TYPES,
+    BREADTH_FEATURE_REQUIRED,
+    SENTIMENT_FEATURE_TYPES,
+    SENTIMENT_FEATURE_REQUIRED
 )
 from datetime import datetime, timedelta
 
@@ -453,4 +460,94 @@ def test_data_versioning():
     # Test that version metadata is preserved
     df_v1.attrs['version'] = '1.0'
     df_v2.attrs['version'] = '2.0'
-    assert df_v1.attrs['version'] != df_v2.attrs['version'], "Version metadata should be preserved" 
+    assert df_v1.attrs['version'] != df_v2.attrs['version'], "Version metadata should be preserved"
+
+
+def test_market_features_validation():
+    """Test market features validation."""
+    # Create temporary directory for market features
+    with tempfile.TemporaryDirectory() as temp_dir:
+        market_dir = os.path.join(temp_dir, 'market_features')
+        os.makedirs(market_dir)
+        
+        # Create valid market volatility data
+        dates = pd.date_range(start='2023-01-01', end='2023-01-10', freq='B')
+        market_volatility = pd.DataFrame({
+            'date': dates,
+            'market_volatility_daily_volatility': np.random.randn(len(dates)),
+            'market_volatility_weekly_volatility': np.random.randn(len(dates)),
+            'market_volatility_monthly_volatility': np.random.randn(len(dates)),
+            'market_volatility_avg_correlation': np.random.randn(len(dates)),
+            'market_volatility_ticker': ['^GSPC'] * len(dates)
+        })
+        market_volatility.to_parquet(os.path.join(market_dir, 'market_volatility.parquet'))
+        
+        # Create valid daily breadth data
+        daily_breadth = pd.DataFrame({
+            'date': dates,
+            'daily_breadth_adv_dec_line': np.random.randn(len(dates)),
+            'daily_breadth_new_highs': np.random.randint(0, 100, len(dates)),
+            'daily_breadth_new_lows': np.random.randint(0, 100, len(dates)),
+            'daily_breadth_above_ma20': np.random.randn(len(dates)),
+            'daily_breadth_above_ma50': np.random.randn(len(dates)),
+            'daily_breadth_rsi_bullish': np.random.randn(len(dates)),
+            'daily_breadth_rsi_oversold': np.random.randn(len(dates)),
+            'daily_breadth_rsi_overbought': np.random.randn(len(dates)),
+            'daily_breadth_macd_bullish': np.random.randn(len(dates))
+        })
+        daily_breadth.to_parquet(os.path.join(market_dir, 'daily_breadth.parquet'))
+        
+        # Create valid market sentiment data
+        market_sentiment = pd.DataFrame({
+            'date': dates,
+            'market_sentiment_ma5': np.random.randn(len(dates)),
+            'market_sentiment_ma20': np.random.randn(len(dates)),
+            'market_sentiment_momentum': np.random.randn(len(dates)),
+            'market_sentiment_volatility': np.random.randn(len(dates)),
+            'market_sentiment_zscore': np.random.randn(len(dates))
+        })
+        market_sentiment.to_parquet(os.path.join(market_dir, 'market_sentiment.parquet'))
+        
+        # Create valid GDELT data
+        gdelt_data = pd.DataFrame({
+            'date': dates,
+            'avg_tone': np.random.randn(len(dates))
+        })
+        gdelt_data.to_parquet(os.path.join(market_dir, 'gdelt_raw.parquet'))
+        
+        # Create sector directory and add a sector file
+        sectors_dir = os.path.join(market_dir, 'sectors')
+        os.makedirs(sectors_dir)
+        tech_sector = pd.DataFrame({
+            'date': dates,
+            'sector_price': np.random.randn(len(dates)),
+            'sector_volatility': np.random.randn(len(dates)),
+            'sector_volume': np.random.randint(0, 1000, len(dates)),
+            'sector_returns_1d': np.random.randn(len(dates)),
+            'sector_returns_5d': np.random.randn(len(dates)),
+            'sector_returns_20d': np.random.randn(len(dates)),
+            'sector_momentum_5d': np.random.randn(len(dates)),
+            'sector_momentum_20d': np.random.randn(len(dates))
+        })
+        tech_sector.to_parquet(os.path.join(sectors_dir, 'technology.parquet'))
+        
+        # Test validation of all market features
+        assert validate_market_features()
+        
+        # Test with invalid market volatility data
+        invalid_volatility = market_volatility.copy()
+        invalid_volatility['market_volatility_daily_volatility'] = 'invalid'  # Wrong type
+        invalid_volatility.to_parquet(os.path.join(market_dir, 'market_volatility.parquet'))
+        assert not validate_market_features()
+        
+        # Test with missing required column
+        invalid_breadth = daily_breadth.copy()
+        invalid_breadth = invalid_breadth.drop('daily_breadth_adv_dec_line', axis=1)
+        invalid_breadth.to_parquet(os.path.join(market_dir, 'daily_breadth.parquet'))
+        assert not validate_market_features()
+        
+        # Test with invalid sector data
+        invalid_sector = tech_sector.copy()
+        invalid_sector['sector_price'] = 'invalid'  # Wrong type
+        invalid_sector.to_parquet(os.path.join(sectors_dir, 'technology.parquet'))
+        assert not validate_market_features() 

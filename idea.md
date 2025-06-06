@@ -130,11 +130,12 @@ data/market_features/
    - [x] Add column name standardization
    - [x] Implement consistent date column handling
    - [x] Add validation for file and column names
-   - [ ] Create migration script for existing data
-   - [ ] Add automated validation of naming conventions
-   - [ ] Implement feature name mapping system
-   - [ ] Create data validation framework
-   - [ ] Document feature dependencies
+   - [x] Create data validation framework
+   - [ ] Integrate validation into data pipeline:
+     - Add validation during data loading
+     - Add validation before processing
+     - Add validation before storage
+     - Add validation during updates
    - [ ] Establish data quality metrics and monitoring
 
 2. **Feature Normalization** (Priority: High)

@@ -171,9 +171,11 @@ class GDELTClient:
             combined_data = combined_data[~combined_data.index.duplicated(keep='last')]
             combined_data = combined_data.sort_index()
             raw_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure parent directory exists
+            combined_data['date'] = combined_data.index
             combined_data.to_parquet(raw_path)
             return combined_data
         else:
             raw_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure parent directory exists
+            new_data['date'] = new_data.index
             new_data.to_parquet(raw_path)
             return new_data 

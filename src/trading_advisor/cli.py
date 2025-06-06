@@ -740,6 +740,11 @@ def update_data(
         False,
         "--update-sector-mapping/--no-update-sector-mapping",
         help="Force update sector mapping (default: false)"
+    ),
+    validate: bool = typer.Option(
+        False,
+        "--validate/--no-validate",
+        help="Run data validation after updates (default: false)"
     )
 ):
     """Update ticker and market features.\n\nTICKERS_INPUT can be a path to a file with tickers (one per line), or 'all' for S&P 500. If omitted, only tickers with existing feature files will be updated."""
@@ -780,6 +785,12 @@ def update_data(
         logger.info("Updating market features...")
         market_features = MarketFeatures(data_path)
         market_features.generate_market_features(days=days, force_update_sector_mapping=update_sector_mapping)
+    
+    # Run validation if requested
+    if validate:
+        logger.info("Running data validation...")
+        from scripts.validate_data import validate_market_features
+        validate_market_features()
 
 @app.command()
 def run_model(

@@ -36,9 +36,15 @@ def get_sp500_data(start_date: Optional[str] = None) -> pd.DataFrame:
     market_features_dir.mkdir(parents=True, exist_ok=True)
     sp500_path = market_features_dir / "sp500.parquet"
     
+    def _flatten_columns(df):
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = ['_'.join([str(l) for l in col if l and l != '']) for col in df.columns.values]
+        return df
+    
     # Try to load existing data
     if sp500_path.exists():
         sp500 = pd.read_parquet(sp500_path)
+        sp500 = _flatten_columns(sp500)
         sp500.index = pd.to_datetime(sp500.index)
     else:
         sp500 = pd.DataFrame()
@@ -47,6 +53,7 @@ def get_sp500_data(start_date: Optional[str] = None) -> pd.DataFrame:
     if sp500.empty:
         # No data, download from start_date (or default)
         sp500_new = yf.download('^GSPC', start=start_date, progress=False)
+        sp500_new = _flatten_columns(sp500_new)
     else:
         # Download only missing dates
         last_date = sp500.index.max()
@@ -59,40 +66,80 @@ def get_sp500_data(start_date: Optional[str] = None) -> pd.DataFrame:
                 fetch_start = (last_date + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
         else:
             fetch_start = (last_date + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
-        sp500_new = yf.download('^GSPC', start=fetch_start, progress=False)
+        
+        # Use today's date as end date, normalized to midnight
+        fetch_end = pd.Timestamp.today().normalize()
+        
+        # Only download if we need new data
+        if fetch_start <= fetch_end.strftime('%Y-%m-%d'):
+            sp500_new = yf.download('^GSPC', start=fetch_start, end=fetch_end, progress=False)
+            sp500_new = _flatten_columns(sp500_new)
+        else:
+            sp500_new = pd.DataFrame()
     
     # Process new data if any
     if not sp500_new.empty:
-        sp500_new = sp500_new[['Close']].rename(columns={'Close': 'sp500_price'})
+        # Ensure we have the Close column and rename it
+        if 'Close' in sp500_new.columns:
+            sp500_new = sp500_new[['Close']].rename(columns={'Close': 'sp500_price'})
+        elif 'Adj Close' in sp500_new.columns:
+            sp500_new = sp500_new[['Adj Close']].rename(columns={'Adj Close': 'sp500_price'})
+        else:
+            # If neither Close nor Adj Close exists, use the first column
+            first_col = sp500_new.columns[0]
+            sp500_new = sp500_new[[first_col]].rename(columns={first_col: 'sp500_price'})
+            
         sp500_new['sp500_returns_20d'] = sp500_new['sp500_price'].pct_change(periods=20)
         sp500_new.index = pd.to_datetime(sp500_new.index)
+        
         # Append new data
         sp500 = pd.concat([sp500, sp500_new])
         sp500 = sp500[~sp500.index.duplicated(keep='last')]
         sp500 = sp500.sort_index()
         # Recompute returns for the whole set (in case of new data)
         sp500['sp500_returns_20d'] = sp500['sp500_price'].pct_change(periods=20)
+        sp500 = _flatten_columns(sp500)
         sp500.to_parquet(sp500_path)
+    
     # If still empty, try to download from scratch
     if sp500.empty:
         try:
             sp500 = yf.download('^GSPC', start=start_date, progress=False)
-            sp500 = sp500[['Close']].rename(columns={'Close': 'sp500_price'})
+            sp500 = _flatten_columns(sp500)
+            # Ensure we have the Close column and rename it
+            if 'Close' in sp500.columns:
+                sp500 = sp500[['Close']].rename(columns={'Close': 'sp500_price'})
+            elif 'Adj Close' in sp500.columns:
+                sp500 = sp500[['Adj Close']].rename(columns={'Adj Close': 'sp500_price'})
+            else:
+                # If neither Close nor Adj Close exists, use the first column
+                first_col = sp500.columns[0]
+                sp500 = sp500[[first_col]].rename(columns={first_col: 'sp500_price'})
+                
             sp500['sp500_returns_20d'] = sp500['sp500_price'].pct_change(periods=20)
             sp500.index = pd.to_datetime(sp500.index)
             sp500.to_parquet(sp500_path)
         except Exception as e:
             logger.error(f"Error downloading S&P 500 data: {e}")
             return pd.DataFrame()
+    
     # Ensure index is only Date (not MultiIndex)
     if isinstance(sp500.index, pd.MultiIndex):
         sp500 = sp500.reset_index()
     if 'Date' in sp500.columns:
         sp500 = sp500.set_index('Date')
     sp500.index = pd.to_datetime(sp500.index)
+    
     # Filter to start_date if provided
     if start_date is not None:
         sp500 = sp500[sp500.index >= pd.to_datetime(start_date)]
+    
+    # Ensure we have the required columns
+    if 'sp500_price' not in sp500.columns:
+        logger.error("Failed to get sp500_price column")
+        return pd.DataFrame()
+        
+    sp500 = _flatten_columns(sp500)
     return sp500
 
 def calculate_sector_performance(ticker_df: pd.DataFrame, market_features_dir: str) -> Dict[str, pd.DataFrame]:
@@ -111,7 +158,13 @@ def calculate_sector_performance(ticker_df: pd.DataFrame, market_features_dir: s
         return {}
     
     # Get S&P 500 data for relative strength calculation
-    start_date = ticker_df.index.min().strftime('%Y-%m-%d')
+    # Handle MultiIndex (date, ticker) by extracting the date part
+    min_index = ticker_df.index.min()
+    if isinstance(min_index, tuple):
+        min_date = min_index[0]
+    else:
+        min_date = min_index
+    start_date = pd.to_datetime(min_date).strftime('%Y-%m-%d')
     sp500_df = get_sp500_data(start_date)
     
     if sp500_df.empty:
@@ -139,16 +192,47 @@ def calculate_sector_performance(ticker_df: pd.DataFrame, market_features_dir: s
         if not sp500_df.empty:
             # Merge with S&P 500 data
             sector_df = sector_df.join(sp500_df[['sp500_price', 'sp500_returns_20d']])
-            # Calculate relative strength as ratio of sector to S&P 500 20-day returns
-            sector_df['relative_strength'] = sector_df['returns_20d'] / sector_df['sp500_returns_20d']
-            # Drop S&P 500 columns
-            sector_df = sector_df.drop(['sp500_price', 'sp500_returns_20d'], axis=1)
+            
+            # Calculate daily returns for S&P 500
+            sp500_df['sp500_returns_1d'] = sp500_df['sp500_price'].pct_change()
+            sp500_df['sp500_returns_5d'] = sp500_df['sp500_price'].pct_change(periods=5)
+            
+            # Calculate relative strength using cumulative returns
+            sector_df['sector_cumulative_returns'] = (1 + sector_df['returns_1d']).cumprod()
+            sector_df['sp500_cumulative_returns'] = (1 + sp500_df['sp500_returns_1d']).cumprod()
+            
+            # Calculate relative strength as the ratio of cumulative returns
+            sector_df['relative_strength'] = (sector_df['sector_cumulative_returns'] / 
+                                            sector_df['sp500_cumulative_returns'])
+            
+            # Add relative strength ratio (RSR) - alternative measure using 5-day returns
+            sector_df['relative_strength_ratio'] = (sector_df['returns_5d'] - 
+                                                  sp500_df['sp500_returns_5d'])
+            
+            # Drop intermediate columns
+            sector_df = sector_df.drop(['sector_cumulative_returns', 
+                                      'sp500_cumulative_returns',
+                                      'sp500_price', 
+                                      'sp500_returns_20d'], axis=1)
         else:
             # If no S&P 500 data, set relative strength to NaN
             sector_df['relative_strength'] = np.nan
+            sector_df['relative_strength_ratio'] = np.nan
+        
+        # Ensure index is DatetimeIndex
+        if not isinstance(sector_df.index, pd.DatetimeIndex):
+            sector_df.index = pd.to_datetime(sector_df.index)
+        
+        # Use a date-only index for reference
+        date_ref = ticker_df.index.get_level_values(0).unique()
+        date_ref = pd.DataFrame(index=pd.DatetimeIndex(date_ref))
         
         # Fill in missing trading days
-        sector_df = fill_missing_trading_days(sector_df, ticker_df)
+        sector_df = fill_missing_trading_days(sector_df, date_ref)
+        
+        # Ensure index is DatetimeIndex after filling
+        if not isinstance(sector_df.index, pd.DatetimeIndex):
+            sector_df.index = pd.to_datetime(sector_df.index)
         
         sector_dfs[sector] = sector_df
     
@@ -156,8 +240,20 @@ def calculate_sector_performance(ticker_df: pd.DataFrame, market_features_dir: s
     all_sectors_df = pd.concat(sector_dfs, axis=1)
     all_sectors_df.columns = [f"{sector}_{col}" for sector, col in all_sectors_df.columns]
     
+    # Ensure index is DatetimeIndex
+    if not isinstance(all_sectors_df.index, pd.DatetimeIndex):
+        all_sectors_df.index = pd.to_datetime(all_sectors_df.index)
+    
+    # Use a date-only index for reference
+    date_ref = ticker_df.index.get_level_values(0).unique()
+    date_ref = pd.DataFrame(index=pd.DatetimeIndex(date_ref))
+    
     # Fill in missing trading days for the combined table
-    all_sectors_df = fill_missing_trading_days(all_sectors_df, ticker_df)
+    all_sectors_df = fill_missing_trading_days(all_sectors_df, date_ref)
+    
+    # Ensure index is DatetimeIndex after filling
+    if not isinstance(all_sectors_df.index, pd.DatetimeIndex):
+        all_sectors_df.index = pd.to_datetime(all_sectors_df.index)
     
     sector_dfs['all_sectors'] = all_sectors_df
     

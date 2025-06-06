@@ -30,6 +30,17 @@ Market breadth indicators are calculated daily and include:
 
 The data is stored in `data/ticker_features/daily_breadth.parquet`
 
+## S&P 500 Data
+
+The S&P 500 data provides key market benchmark metrics:
+
+- **Price Data:**
+  - `sp500_price`: Daily closing price of the S&P 500 index
+  - `sp500_returns_20d`: 20-day returns of the S&P 500 index
+    - Formula: Returns = (Price(today) - Price(20 days ago)) / Price(20 days ago)
+
+The data is stored in `data/market_features/sp500.parquet`
+
 ## Sector Performance
 
 Each sector's performance is tracked through the following metrics:

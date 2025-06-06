@@ -199,7 +199,7 @@ class MarketFeatures:
         # Generate market sentiment
         logger.info("Starting market sentiment generation...")
         sentiment_df = MarketSentiment(self.data_dir).generate_sentiment_features(days=days)
-        sentiment_df = standardize_columns_and_date(sentiment_df, source_prefix="market_sentiment")
+        sentiment_df = standardize_columns_and_date(sentiment_df)
         sentiment_path = self.market_features_dir / "market_sentiment.parquet"
         sentiment_df.to_parquet(sentiment_path)
         logger.info("Saved market sentiment")
