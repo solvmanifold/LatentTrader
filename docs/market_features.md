@@ -127,4 +127,24 @@ Market features are updated using the `update-data` command, which takes a `days
 4. Update market sentiment using GDELT data
 5. Compute market volatility measures
 
-The update process is incremental, meaning it will only process new dates that aren't already in the feature files. This ensures efficient updates while maintaining historical data consistency. 
+The update process is incremental, meaning it will only process new dates that aren't already in the feature files. This ensures efficient updates while maintaining historical data consistency.
+
+## Date Handling
+
+All market feature files follow a consistent date handling approach:
+
+1. **Date Storage:**
+   - Dates are stored either as a DatetimeIndex (preferred) or as a 'date' column
+   - All dates are normalized (time set to midnight)
+   - The date column is always placed first in the column order
+
+2. **Date Format:**
+   - All dates are stored in YYYY-MM-DD format
+   - No timezone information is included
+   - Missing trading days are filled with NaN values
+
+3. **Date Alignment:**
+   - When combining features from different sources, dates are aligned using the nearest available date
+   - For market features, if a specific date is not available, the system uses the most recent available date
+
+This standardized date handling ensures consistent data alignment across all market features and simplifies the process of combining different feature sets for analysis. 
