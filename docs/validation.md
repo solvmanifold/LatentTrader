@@ -151,4 +151,130 @@ When adding new features to the validation framework:
 1. Add new validator classes if needed
 2. Update tests to cover new functionality
 3. Update this documentation
-4. Follow the existing error/warning pattern 
+4. Follow the existing error/warning pattern
+
+## Additional Examples
+
+### Real-world Examples
+
+Here are examples of validation configurations for different types of data files:
+
+```python
+# Market Features Example
+market_expected_types = {
+    'date': np.datetime64,
+    'vix': np.floating,
+    'vix_ma20': np.floating,
+    'market_volatility': np.floating,
+    'cross_sectional_vol': np.floating
+}
+market_required_columns = ['date', 'vix', 'market_volatility']
+
+# Ticker Features Example
+ticker_expected_types = {
+    'date': np.datetime64,
+    'close_price': np.floating,
+    'volume': np.integer,
+    'rsi_14': np.floating,
+    'macd': np.floating,
+    'macd_signal': np.floating
+}
+ticker_required_columns = ['date', 'close_price', 'volume']
+```
+
+### Common Validation Patterns
+
+```python
+# Validating multiple files in a directory
+def validate_directory(directory: str, expected_types: Dict[str, type], required_columns: List[str]):
+    for file in Path(directory).glob('*.parquet'):
+        if not validate_parquet_file(str(file), expected_types, required_columns):
+            print(f"Validation failed for {file}")
+
+# Validating with custom quality thresholds
+class CustomQualityValidator(DataQualityValidator):
+    def validate(self) -> bool:
+        # Check for missing values above threshold
+        null_ratio = self.df.isnull().mean()
+        if (null_ratio > 0.1).any():
+            self.add_error(f"Columns with >10% missing values: {null_ratio[null_ratio > 0.1].index.tolist()}")
+        return len(self.errors) == 0
+```
+
+### Integration Examples
+
+```python
+# In market_breadth.py
+def update_market_breadth():
+    df = calculate_market_breadth()
+    
+    # Validate before saving
+    if not validate_parquet_file(
+        'data/market_features/daily_breadth.parquet',
+        expected_types=market_expected_types,
+        required_columns=market_required_columns
+    ):
+        raise ValueError("Market breadth data validation failed")
+    
+    df.to_parquet('data/market_features/daily_breadth.parquet')
+```
+
+### Error Recovery Examples
+
+```python
+# Handling validation errors with recovery
+def safe_update_features():
+    try:
+        df = generate_features()
+        if not validate_parquet_file('features.parquet', expected_types, required_columns):
+            # Try to fix common issues
+            df = df.fillna(method='ffill')  # Forward fill missing values
+            df = df.replace([np.inf, -np.inf], np.nan)  # Replace infinite values
+            
+            # Validate again
+            if not validate_parquet_file('features.parquet', expected_types, required_columns):
+                raise ValueError("Could not fix validation issues")
+        
+        df.to_parquet('features.parquet')
+    except Exception as e:
+        logger.error(f"Feature update failed: {e}")
+        # Implement fallback or notification
+```
+
+### Custom Validator Examples
+
+```python
+# Custom validator for time series data
+class TimeSeriesValidator(DataValidator):
+    def __init__(self, df: pd.DataFrame):
+        super().__init__()
+        self.df = df
+        # Get list of trading days (excluding weekends and holidays)
+        self.trading_days = pd.bdate_range(
+            start=df['date'].min(),
+            end=df['date'].max(),
+            freq='B'  # Business day frequency
+        )
+    
+    def validate(self) -> bool:
+        # Check for date ordering
+        if not self.df['date'].is_monotonic_increasing:
+            self.add_error("Dates are not in ascending order")
+        
+        # Check for missing trading days
+        missing_days = set(self.trading_days) - set(self.df['date'])
+        if missing_days:
+            self.add_warning(f"Missing {len(missing_days)} trading days")
+        
+        # Check for duplicate dates
+        if self.df['date'].duplicated().any():
+            self.add_error("Duplicate dates found in time series")
+        
+        return len(self.errors) == 0
+```
+
+This TimeSeriesValidator now:
+1. Uses `pd.bdate_range` to get business days (excluding weekends)
+2. Checks for missing trading days instead of calendar days
+3. Adds a check for duplicate dates
+4. Properly handles the trading day calendar 
