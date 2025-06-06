@@ -7,6 +7,7 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import roc_auc_score, precision_score, recall_score
 from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
 import torch
 import torch.nn as nn
 
@@ -22,7 +23,7 @@ class LogisticTradingModel(BaseTradingModel):
         target_column: str = "label",
         **model_kwargs
     ):
-        """Initialize the model.
+        """Initialize model.
         
         Args:
             target_column: Name of the target column
@@ -31,9 +32,10 @@ class LogisticTradingModel(BaseTradingModel):
         super().__init__()
         self.target_column = target_column
         self.model = LogisticRegression(**model_kwargs)
-        self.imputer = SimpleImputer(strategy='constant', fill_value=0)
+        self.scaler = StandardScaler()
         self.feature_columns = None
         self.dropped_columns = None  # Store dropped columns
+        self.feature_means = None  # Store training data means
     
     def _align_and_impute(self, df: pd.DataFrame, fit: bool = False) -> np.ndarray:
         # Ensure all required columns are present
@@ -51,19 +53,18 @@ class LogisticTradingModel(BaseTradingModel):
             for col in nan_cols:
                 nan_count = X[col].isna().sum()
                 logger.warning(f"Column {col} has {nan_count} NaN values")
-        # Drop columns that are entirely NaN
-        all_nan_cols = X.columns[X.isna().all()].tolist()
-        if all_nan_cols:
-            logger.warning(f"Dropping columns that are entirely NaN: {all_nan_cols}")
-            X = X.drop(columns=all_nan_cols)
-            if fit:
-                self.dropped_columns = all_nan_cols
-        # Impute
+        # Fill missing values with training data means
         if fit:
-            X_imputed = self.imputer.fit_transform(X)
+            self.feature_means = X.mean()
+            X = X.fillna(self.feature_means)
         else:
-            X_imputed = self.imputer.transform(X)
-        return X_imputed
+            X = X.fillna(self.feature_means)
+        # Scale features
+        if fit:
+            X_scaled = self.scaler.fit_transform(X)
+        else:
+            X_scaled = self.scaler.transform(X)
+        return X_scaled
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass of the model.
@@ -107,25 +108,20 @@ class LogisticTradingModel(BaseTradingModel):
             train_data: DataFrame containing training data
             val_data: Optional DataFrame containing validation data
         """
-        # Get feature columns (exclude date, ticker, and target)
-        self.feature_columns = [
-            col for col in train_data.columns
-            if col not in ['date', 'ticker', self.target_column]
-        ]
+        # Store feature columns
+        self.feature_columns = [col for col in train_data.columns if col != self.target_column]
         
-        # Prepare training data
-        X_train = self._align_and_impute(train_data, fit=True)
-        y_train = train_data[self.target_column].values
-        # Robustly cast labels to int and check for non-binary values
-        unique_labels = np.unique(y_train)
-        if not np.all(np.isin(unique_labels, [0, 1])):
-            logger.warning(f"Non-binary label values found: {unique_labels}. Casting to int and clipping to [0, 1].")
-            y_train = np.clip(y_train.astype(int), 0, 1)
-        else:
-            y_train = y_train.astype(int)
+        # Calculate feature means from training data
+        X_train = train_data[self.feature_columns]
+        self.feature_means = X_train.mean()
+        
+        # Scale features
+        X_train_scaled = self.scaler.fit_transform(X_train)
+        self.scaler.feature_names_in_ = self.feature_columns
         
         # Train model
-        self.model.fit(X_train, y_train)
+        y_train = train_data[self.target_column]
+        self.model.fit(X_train_scaled, y_train)
         
         # Evaluate on validation data if provided
         if val_data is not None:
@@ -173,9 +169,23 @@ class LogisticTradingModel(BaseTradingModel):
         # Prepare features
         features = self._align_and_impute(df, fit=False)
         
+        # Debug logging
+        logger.info(f"\nFeature columns: {self.feature_columns}")
+        logger.info(f"Features shape: {features.shape}")
+        logger.info(f"Features dtype: {features.dtype}")
+        logger.info(f"Features mean: {np.mean(features, axis=0)}")
+        logger.info(f"Features std: {np.std(features, axis=0)}")
+        
         # Get predictions
         predictions = self.model.predict(features)
         probabilities = self.model.predict_proba(features)[:, 1]
+        
+        # Debug logging
+        logger.info(f"Predictions shape: {predictions.shape}")
+        logger.info(f"Predictions unique values: {np.unique(predictions)}")
+        logger.info(f"Probabilities shape: {probabilities.shape}")
+        logger.info(f"Probabilities mean: {np.mean(probabilities)}")
+        logger.info(f"Probabilities std: {np.std(probabilities)}")
         
         # Create results dictionary
         results = {
@@ -196,11 +206,13 @@ class LogisticTradingModel(BaseTradingModel):
         import pickle
         model_data = {
             'model': self.model,
-            'imputer': self.imputer,
+            'scaler_mean': self.scaler.mean_,
+            'scaler_scale': self.scaler.scale_,
             'feature_columns': self.feature_columns,
             'target_column': self.target_column,
             'model_name': self.model_name,
-            'dropped_columns': self.dropped_columns
+            'dropped_columns': self.dropped_columns,
+            'feature_means': self.feature_means
         }
         with open(path, 'wb') as f:
             pickle.dump(model_data, f)
@@ -221,7 +233,10 @@ class LogisticTradingModel(BaseTradingModel):
         
         model = cls(target_column=model_data['target_column'])
         model.model = model_data['model']
-        model.imputer = model_data['imputer']
+        model.scaler = StandardScaler()
+        model.scaler.mean_ = model_data['scaler_mean']
+        model.scaler.scale_ = model_data['scaler_scale']
         model.feature_columns = model_data['feature_columns']
         model.dropped_columns = model_data['dropped_columns']
+        model.feature_means = model_data['feature_means']
         return model 

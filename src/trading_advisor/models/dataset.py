@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import json
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn, TimeRemainingColumn
 from rich.console import Console
+import os
 
 # Configure logging to only show WARNING and above by default
 logger = logging.getLogger(__name__)
@@ -168,19 +169,24 @@ class DatasetGenerator:
         
         return df
     
+    def _add_prefix_from_filename(self, df, file_path, skip_cols=None):
+        """Add prefix to columns based on the base filename (without .parquet)."""
+        if skip_cols is None:
+            skip_cols = ['Date', 'ticker']
+        prefix = os.path.splitext(os.path.basename(str(file_path)))[0] + '_'
+        rename_dict = {col: prefix + col for col in df.columns if col not in skip_cols}
+        return df.rename(columns=rename_dict)
+
     def _load_market_features(self, date: pd.Timestamp) -> pd.DataFrame:
         """Load market features with caching."""
         date_str = date.strftime('%Y-%m-%d')
         if date_str in self._market_feature_cache:
             return self._market_feature_cache[date_str]
-            
         market_features = {}
         for path in self.market_features_dir.glob("*.parquet"):
             if path.is_dir() or path.name.startswith("metadata"):
                 continue
-            feature_type = path.stem
             df = pd.read_parquet(path)
-            
             # Ensure date is the index
             if not isinstance(df.index, pd.DatetimeIndex):
                 if 'Date' in df.columns:
@@ -191,46 +197,37 @@ class DatasetGenerator:
                     continue
             df.index = pd.to_datetime(df.index)
             df = self.drop_date_column(df)
-            
             # Filter for target date or nearest previous date
             if date in df.index:
                 row = df.loc[date]
             else:
-                # Find the nearest previous date
                 mask = df.index <= date
                 if not mask.any():
                     continue
                 nearest_date = df.index[mask].max()
                 row = df.loc[nearest_date]
-            
             row = row.to_frame().T
-            row = row.add_suffix(f'_{feature_type}')
-            market_features[feature_type] = row
-        
+            row = self._add_prefix_from_filename(row, path)
+            market_features[path.stem] = row
         if market_features:
             merged = pd.concat(market_features.values(), axis=1)
             self._market_feature_cache[date_str] = merged
             return merged
         else:
             return pd.DataFrame()
-    
+
     def _load_sector_features(self, ticker: str, date: pd.Timestamp) -> pd.DataFrame:
         """Load sector features with caching."""
         date_str = date.strftime('%Y-%m-%d')
         cache_key = f"{ticker}_{date_str}"
-        
         if cache_key in self._sector_feature_cache:
             return self._sector_feature_cache[cache_key]
-            
         # Get sector for ticker
         sector = self.sector_mapping[self.sector_mapping['ticker'] == ticker]['sector'].iloc[0]
         sector_file = self.market_features_dir / "sectors" / f"{sector}.parquet"
-        
         if not sector_file.exists():
             return pd.DataFrame()
-            
         sector_features = pd.read_parquet(sector_file)
-        
         # Ensure date is the index
         if not isinstance(sector_features.index, pd.DatetimeIndex):
             if 'Date' in sector_features.columns:
@@ -241,23 +238,20 @@ class DatasetGenerator:
                 return pd.DataFrame()
         sector_features.index = pd.to_datetime(sector_features.index)
         sector_features = self.drop_date_column(sector_features)
-        
         # Filter for target date or nearest previous date
         if date in sector_features.index:
             row = sector_features.loc[date]
         else:
-            # Find the nearest previous date
             mask = sector_features.index <= date
             if not mask.any():
                 return pd.DataFrame()
             nearest_date = sector_features.index[mask].max()
             row = sector_features.loc[nearest_date]
-        
         row = row.to_frame().T
-        row = row.add_suffix('_sector')
+        row = self._add_prefix_from_filename(row, sector_file)
         self._sector_feature_cache[cache_key] = row
         return row
-    
+
     def prepare_features(
         self,
         ticker: str,
@@ -270,9 +264,7 @@ class DatasetGenerator:
         if not ticker_file.exists():
             logger.warning(f"No features found for {ticker}")
             return pd.DataFrame()
-            
         ticker_features = pd.read_parquet(ticker_file)
-        
         # Ensure date is the index
         if not isinstance(ticker_features.index, pd.DatetimeIndex):
             if 'Date' in ticker_features.columns:
@@ -285,20 +277,18 @@ class DatasetGenerator:
         ticker_features.index = pd.to_datetime(ticker_features.index)
         ticker_features = self.drop_date_column(ticker_features)
         ticker_features.index.name = None
-        
         # Filter for target date
         target_date = pd.to_datetime(date)
         ticker_features = ticker_features[ticker_features.index == target_date]
         if ticker_features.empty:
             logger.warning(f"No ticker features found for {ticker} on {date}")
             return pd.DataFrame()
-        
+        ticker_features = self._add_prefix_from_filename(ticker_features, ticker_file)
         # Load market features (using cache)
         market_features = self._load_market_features(target_date)
         if market_features.empty:
             logger.warning(f"No market features found for {date}")
             return pd.DataFrame()
-        
         # Load sector features if requested (using cache)
         if include_sector:
             sector_features = self._load_sector_features(ticker, target_date)
@@ -308,52 +298,7 @@ class DatasetGenerator:
                 features = pd.concat([ticker_features, market_features], axis=1)
         else:
             features = pd.concat([ticker_features, market_features], axis=1)
-        
-        # Apply feature filtering if configuration exists
-        if self.feature_config:
-            logger.debug(f"Feature configuration: {self.feature_config}")
-            logger.debug(f"Original features: {features.columns.tolist()}")
-            
-            # Get all allowed features from config
-            allowed_features = set()
-            
-            # Add ticker features
-            allowed_features.update(self.feature_config['ticker_features'])
-            
-            # Add market features
-            for category in self.feature_config['market_features'].values():
-                allowed_features.update(category)
-            
-            # Add sector features
-            allowed_features.update(self.feature_config['sector_features'])
-            
-            # Filter columns
-            matching_cols = []
-            for col in features.columns:
-                # Always include these columns
-                if col in ['ticker', 'label', 'Date']:
-                    matching_cols.append(col)
-                    continue
-                    
-                # For sector features, only include if they exactly match the config
-                if col.endswith('_sector'):
-                    if col in allowed_features:
-                        matching_cols.append(col)
-                    continue
-                    
-                # For other features, include if they match the config
-                if col in allowed_features:
-                    matching_cols.append(col)
-            
-            logger.debug(f"Allowed features: {allowed_features}")
-            logger.debug(f"Matching columns: {matching_cols}")
-            
-            if matching_cols:
-                features = features[matching_cols]
-            else:
-                logger.warning("No features remained after filtering")
-                return pd.DataFrame()
-        
+        # No suffix or config-based filtering, just return all features
         features = self.drop_date_column(features)
         return features
 

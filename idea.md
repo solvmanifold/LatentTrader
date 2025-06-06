@@ -14,7 +14,7 @@ LatentTrader aims to be a machine learning-powered trading assistant that genera
 
 ### 2. Model Layer (ML Models)
 - **Model Registry:** Each model (logistic regression, ensemble, etc.) is a Python class with a standard interface.
-- **Model Training:** The `train-model` command handles model training, validation, and evaluation.
+- **Model Training:** Training is handled through dedicated scripts in the `scripts/` directory.
 - **Model Outputs:** Trained models and their artifacts are stored in `model_outputs/{model_name}/`.
 - **ML Datasets:** Binary classification datasets are generated with time-series splits for training and evaluation.
 
@@ -67,6 +67,121 @@ data/market_features/
    - Analyst sentiment aggregation
    - GDELT news sentiment
 
+## Data Layer Improvements
+
+### 1. Data Standardization (Priority: High)
+- **File Naming Convention**
+  - All filenames should be lowercase with underscores
+  - Example: `communication_services.parquet` instead of `Communication Services.parquet`
+  - Consistent naming across all feature files
+
+- **Column Naming Convention**
+  - All column names should be lowercase with underscores
+  - No spaces allowed in column names
+  - Market feature columns should include source filename as prefix
+  - Example: `daily_breadth_above_ma20` instead of `Above MA20`
+
+- **DataFrame Structure**
+  - Always include a `date` column (even when using date as index)
+  - Consistent datetime format across all files
+  - Clear separation between index and columns
+
+### 2. Feature Normalization (Priority: High)
+- **Normalization Process**
+  - Move normalization to dataset generation phase
+  - Store normalization statistics (mean, std) in a pickle file
+  - Enable consistent normalization for new predictions
+  - Support incremental updates with existing normalization
+
+- **Normalization Storage**
+  - Store normalization stats per feature type
+  - Include metadata about normalization method
+  - Version control for normalization parameters
+  - Support for different normalization strategies
+
+### 3. Dataset Generation Enhancement
+- **Feature Collection**
+  - Single interface for gathering features
+  - Support for both batch and single-row predictions
+  - Consistent feature ordering across all uses
+  - Clear error handling for missing features
+  - Support for feature imputation with stored statistics
+  - Validation of feature completeness and quality
+
+- **Prediction Support**
+  - Enable single-row predictions using dataset metadata
+  - Support for new data points outside training set
+  - Consistent feature processing pipeline
+  - Clear documentation of required features
+  - Integration with model prediction pipeline
+  - Support for feature validation and error reporting
+
+- **Feature Consistency**
+  - Ensure same features used in training and prediction
+  - Support for feature versioning and tracking
+  - Validation of feature availability and quality
+  - Clear error messages for missing or invalid features
+  - Support for feature subset selection
+
+### Implementation Plan
+
+1. **Data Standardization** (Priority: High)
+   - [ ] Update `update-data` to enforce naming conventions
+   - [ ] Add column name standardization
+   - [ ] Implement consistent date column handling
+   - [ ] Add validation for file and column names
+   - [ ] Create migration script for existing data
+   - [ ] Add automated validation of naming conventions
+   - [ ] Implement feature name mapping system
+
+2. **Feature Normalization** (Priority: High)
+   - [ ] Move normalization to dataset generation
+   - [ ] Create normalization statistics storage
+   - [ ] Implement normalization for new predictions
+   - [ ] Add validation for normalization consistency
+   - [ ] Create migration script for existing datasets
+   - [ ] Add support for different normalization strategies
+   - [ ] Implement normalization versioning
+
+3. **Dataset Generation Enhancement** (Priority: High)
+   - [ ] Update feature collection interface
+   - [ ] Implement single-row prediction support
+   - [ ] Add feature validation and error handling
+   - [ ] Create documentation for feature requirements
+   - [ ] Add tests for feature consistency
+   - [ ] Implement feature versioning system
+   - [ ] Add support for feature subset selection
+   - [ ] Create feature quality metrics
+   - [ ] Implement automated feature validation
+
+4. **Prediction Pipeline** (Priority: High)
+   - [ ] Create unified prediction interface
+   - [ ] Implement feature validation in predictions
+   - [ ] Add support for feature imputation
+   - [ ] Create prediction quality metrics
+   - [ ] Implement prediction logging
+   - [ ] Add support for batch predictions
+   - [ ] Create prediction validation system
+
+### Migration Strategy
+1. **Phase 1: Data Standardization**
+   - Create new data structure
+   - Write migration scripts
+   - Test with subset of data
+   - Full data migration
+
+2. **Phase 2: Feature Normalization**
+   - Implement new normalization
+   - Create statistics storage
+   - Test with existing models
+   - Update prediction pipeline
+
+3. **Phase 3: Dataset Generation**
+   - Update feature collection
+   - Implement single-row support
+   - Test with existing models
+   - Update documentation
+
 ## Progress and Next Steps
 
 ### ✅ Completed
@@ -96,7 +211,7 @@ data/market_features/
    - `run-model` for model execution
    - `report-daily` for report generation
    - `prompt-daily` for prompt generation
-   - `generate-classification-dataset` for ML datasets
+   - `generate-dataset` for ML datasets
 
 ### 🚧 Implementation Plan
 
@@ -108,25 +223,24 @@ data/market_features/
    - [ ] Add parallel processing for feature generation
    - [ ] Create dataset validation and quality checks
 
-2. **CLI Integration** (Priority: High)
-   - [ ] Add `train-model` command:
-     - Model selection
-     - Hyperparameter specification
-     - Training data selection
-     - Validation split configuration
-   - [ ] Add `evaluate-model` command:
+2. **Model Training Scripts** (Priority: High)
+   - [ ] Enhance `train_logistic2.py`:
+     - Add hyperparameter tuning
+     - Implement cross-validation
+     - Add early stopping
+     - Improve logging and visualization
+   - [ ] Create `train_ensemble.py`:
+     - Implement bagging/boosting
+     - Add model stacking
+     - Support multiple base models
+   - [ ] Add model evaluation scripts:
      - Performance metrics
      - Feature importance analysis
      - Confusion matrix generation
-   - [ ] Add `predict` command:
-     - Single ticker prediction
-     - Batch prediction
-     - Confidence scores
-   - [ ] Add model management commands:
-     - List available models
-     - Save/load models
-     - Delete models
+   - [ ] Create model management utilities:
      - Model versioning
+     - Model comparison
+     - Model deployment
 
 3. **Codebase Cleanup** (Priority: Medium)
    - [ ] Remove unused files:
@@ -165,7 +279,7 @@ data/market_features/
    - [ ] Document best practices
 
 ### Timeline
-- **Week 1**: Dataset Generation Optimization & CLI Integration
+- **Week 1**: Dataset Generation Optimization & Model Training Scripts
 - **Week 2**: Codebase Cleanup & Model Improvements
 - **Week 3**: Testing and Validation
 - **Week 4**: Documentation and Examples

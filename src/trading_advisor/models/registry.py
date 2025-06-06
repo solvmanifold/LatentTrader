@@ -19,7 +19,7 @@ class ModelRegistry:
     def _register_default_models(self):
         """Register default models."""
         self.register_model('technical', TechnicalScorer)
-        self.register_model('logistic', LogisticTradingModel)
+        self.register_model('logistic2', LogisticTradingModel)
     
     def register_model(self, name: str, model_class: Type[BaseTradingModel]):
         """Register a model class.

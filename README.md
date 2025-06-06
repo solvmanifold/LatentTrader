@@ -1,6 +1,6 @@
-# LatentTrader
+# Trading Advisor
 
-A machine learning-powered trading assistant that generates actionable, short-term trading playbooks designed to beat the market. The system leverages both traditional technical analysis features and modern ML models to create, test, and iterate on predictive models.
+A Python-based trading advisor that generates technical analysis and trading recommendations.
 
 ## Features
 
@@ -34,50 +34,75 @@ A machine learning-powered trading assistant that generates actionable, short-te
 
 ## Installation
 
-1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/LatentTrader.git
-cd LatentTrader
-```
-
-2. Create and activate a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Usage
 
-### Data Management
+### Core CLI Commands
+
+The Trading Advisor provides several command-line tools for data management and reporting:
+
 ```bash
-# Update market data
+# Generate a report for a specific date
+python -m trading_advisor report-daily --date 2024-03-20
+
+# Generate a prompt for a specific date
+python -m trading_advisor prompt-daily --date 2024-03-20
+
+# Update data for all tickers
 python -m trading_advisor update-data
 
-# Generate ML dataset
-python -m trading_advisor generate-classification-dataset
+# Generate a dataset for machine learning
+python -m trading_advisor generate-dataset --start-date 2023-01-01 --end-date 2024-01-01
 ```
 
-### Model Training and Evaluation
-```bash
-# Train a model
-python -m trading_advisor train-model --model logistic --data-path data/ml_datasets
+### Model Training Scripts
 
-# Evaluate model performance
-python -m trading_advisor evaluate-model --model logistic --split test
+Model training and evaluation are handled through separate Python scripts in the `scripts/` directory:
+
+```bash
+# Train a logistic regression model on a specific dataset
+python scripts/train_logistic2.py --dataset test_run
+
+# Train on a different dataset
+python scripts/train_logistic2.py --dataset large_test
+
+# Evaluate a previously trained model
+python scripts/train_logistic2.py --dataset test_run --evaluate
+
+# Show detailed logging information
+python scripts/train_logistic2.py --dataset test_run --verbose
 ```
 
-### Reporting
-```bash
-# Generate daily report
-python -m trading_advisor report-daily --model logistic
+The training script will:
+1. Load the specified dataset from `data/ml_datasets/{dataset_name}/`
+2. Train a logistic regression model with the following parameters:
+   - C: 0.1 (strong regularization)
+   - class_weight: 'balanced' (handles class imbalance)
+   - max_iter: 1000
+   - solver: 'liblinear' (good for small datasets)
+3. Save model outputs to `model_outputs/logistic2/{dataset_name}/`:
+   - `logistic_model.pkl`: Trained model
+   - `scaler.pkl`: Feature scaler
+   - `features.pkl`: Feature column names
+   - `metrics.json`: Performance metrics
+   - `confusion_matrix_split_0.png`: Confusion matrix plot
+   - `feature_importance_split_0.png`: Feature importance plot
 
-# Generate trading prompt
-python -m trading_advisor prompt-daily --model logistic
+The model outputs are organized by dataset name to prevent overwriting when training on different datasets.
+
+When using the `--evaluate` flag, the script will:
+1. Load a previously trained model and its artifacts
+2. Evaluate the model on the test set
+3. Generate new performance metrics and visualizations
+4. Update the metrics.json file with the latest results
+
+By default, the script shows only essential information. Use the `--verbose` flag to see detailed logging including feature statistics and intermediate steps.
+
+# Analyze dataset labels
+python scripts/analyze_labels.py --dataset-dir data/ml_datasets/test_run
 ```
 
 ## Project Structure
@@ -89,9 +114,10 @@ LatentTrader/
 │   ├── ticker_features/     # Per-ticker features
 │   └── ml_datasets/         # ML training datasets
 ├── model_outputs/
-│   └── logistic/           # Model outputs and artifacts
+│   └── logistic2/          # Model outputs and artifacts
 ├── scripts/
-│   ├── train_logistic.py   # Model training script
+│   ├── train_logistic2.py  # Model training script
+│   ├── evaluate_logistic.py # Model evaluation
 │   └── analyze_labels.py   # Dataset analysis
 ├── src/
 │   └── trading_advisor/
@@ -116,17 +142,12 @@ LatentTrader/
    - Add memory-efficient batch processing
    - Improve feature caching
 
-2. **CLI Integration**
-   - Add model training commands
-   - Implement model evaluation
-   - Add prediction functionality
-
-3. **Model Improvements**
+2. **Model Improvements**
    - Add ensemble model support
    - Implement parameter sweeps
    - Add model versioning
 
-4. **Testing and Validation**
+3. **Testing and Validation**
    - Expand test coverage
    - Add performance benchmarks
    - Implement cross-validation framework
