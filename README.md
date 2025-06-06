@@ -17,6 +17,7 @@ A Python-based trading advisor that generates technical analysis and trading rec
   - Sector-level metrics
   - Sentiment indicators
   - Feature preprocessing and normalization
+  - Data validation framework ([docs](docs/validation.md))
 
 - **Machine Learning Models**
   - Logistic regression for binary classification
