@@ -33,6 +33,17 @@ A Python-based trading advisor that generates technical analysis and trading rec
   - Feature importance plots
   - Historical tracking and analysis
 
+## Data Validation
+
+The project includes a comprehensive data validation framework that ensures:
+
+- **Data Quality**: Validation of data types, missing values, and outliers
+- **Data Completeness**: Checking for missing trading days and data gaps
+- **Data Consistency**: Ensuring consistency across files and calculations
+- **Performance**: Testing with large datasets and monitoring resource usage
+
+For more details, see the [Validation Documentation](docs/validation.md).
+
 ## Installation
 
 ```bash

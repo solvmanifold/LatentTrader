@@ -1,280 +1,214 @@
 # Data Validation Framework
 
-The LatentTrader project includes a comprehensive data validation framework to ensure data quality and consistency across all data files. This framework helps maintain our data standards and catch issues early in the data pipeline.
+This document describes the validation framework used in the LatentTrader project to ensure data quality and consistency.
 
 ## Overview
 
-The validation framework provides several validators that check:
-- File naming conventions
-- Column naming conventions
-- Data types and formats
-- Required columns
-- Data quality metrics
+The validation framework consists of several components that work together to validate different aspects of the data:
+
+1. **File Name Validation**
+   - Ensures consistent file naming conventions
+   - Validates file extensions
+   - Enforces lowercase with underscores
+
+2. **Column Name Validation**
+   - Ensures consistent column naming conventions
+   - Validates column name format
+   - Enforces lowercase with underscores
+
+3. **Data Type Validation**
+   - Validates data types of columns
+   - Ensures consistent datetime formats
+   - Validates numeric data types
+
+4. **Required Column Validation**
+   - Ensures all required columns are present
+   - Validates column dependencies
+   - Checks for missing columns
+
+5. **Data Quality Validation**
+   - Checks for missing values
+   - Validates data ranges
+   - Checks for outliers
+   - Validates data consistency
+
+6. **Data Completeness Validation**
+   - Ensures all trading days are present
+   - Validates data gaps
+   - Checks for missing data points
+
+7. **Data Consistency Validation**
+   - Ensures consistency across files
+   - Validates sector mappings
+   - Checks for data alignment
+
+8. **Performance Validation**
+   - Tests with large datasets
+   - Validates memory usage
+   - Checks computation time
+
+## Validation Tests
+
+### Basic Validation Tests
+
+```python
+def test_file_name_validator():
+    """Test file name validation."""
+    # Tests for valid and invalid file names
+    # Tests for file extensions
+    # Tests for naming conventions
+
+def test_column_name_validator():
+    """Test column name validation."""
+    # Tests for valid and invalid column names
+    # Tests for naming conventions
+    # Tests for required columns
+
+def test_data_type_validator():
+    """Test data type validation."""
+    # Tests for data types
+    # Tests for datetime formats
+    # Tests for numeric types
+
+def test_required_column_validator():
+    """Test required column validation."""
+    # Tests for required columns
+    # Tests for column dependencies
+    # Tests for missing columns
+
+def test_data_quality_validator():
+    """Test data quality validation."""
+    # Tests for missing values
+    # Tests for data ranges
+    # Tests for outliers
+    # Tests for data consistency
+```
+
+### Advanced Validation Tests
+
+```python
+def test_data_completeness():
+    """Test data completeness."""
+    # Tests for missing trading days
+    # Tests for data gaps
+    # Tests for data alignment
+
+def test_data_consistency():
+    """Test data consistency."""
+    # Tests for consistency across files
+    # Tests for sector mappings
+    # Tests for data alignment
+
+def test_edge_cases():
+    """Test edge cases."""
+    # Tests for empty DataFrames
+    # Tests for single-row DataFrames
+    # Tests for all NaN values
+    # Tests for extreme values
+
+def test_performance():
+    """Test performance."""
+    # Tests for large datasets
+    # Tests for memory usage
+    # Tests for computation time
+
+def test_sector_mapping_consistency():
+    """Test sector mapping consistency."""
+    # Tests for valid sectors
+    # Tests for multiple sectors
+    # Tests for sector dependencies
+
+def test_market_features_consistency():
+    """Test market features consistency."""
+    # Tests for feature alignment
+    # Tests for feature dependencies
+    # Tests for feature calculations
+
+def test_data_pipeline():
+    """Test data pipeline."""
+    # Tests for data download
+    # Tests for data processing
+    # Tests for data storage
+    # Tests for data updates
+
+def test_data_updates():
+    """Test data updates."""
+    # Tests for incremental updates
+    # Tests for data preservation
+    # Tests for data consistency
+
+def test_data_versioning():
+    """Test data versioning."""
+    # Tests for version metadata
+    # Tests for version consistency
+    # Tests for version updates
+```
 
 ## Usage
 
-### Basic Usage
+The validation framework can be used in several ways:
 
-The simplest way to validate a Parquet file is using the `validate_parquet_file` function:
+1. **Command Line**
+   ```bash
+   python -m trading_advisor.validation validate_data
+   ```
 
-```python
-from trading_advisor.validation import validate_parquet_file
-import numpy as np
+2. **Python API**
+   ```python
+   from trading_advisor.validation import validate_parquet_file
+   
+   # Validate a single file
+   validate_parquet_file('data/market_features/daily_breadth.parquet')
+   
+   # Validate multiple files
+   validate_parquet_file('data/market_features/*.parquet')
+   ```
 
-# Define expected types for your columns
-expected_types = {
-    'date': np.datetime64,
-    'close_price': np.floating,
-    'volume': np.integer
-}
+3. **Integration with Data Pipeline**
+   ```python
+   from trading_advisor.validation import DataQualityValidator
+   
+   # Validate data during processing
+   validator = DataQualityValidator(df)
+   if not validator.validate():
+       raise ValidationError(validator.get_errors())
+   ```
 
-# Define required columns
-required_columns = ['date', 'close_price']
+## Best Practices
 
-# Validate a file
-is_valid = validate_parquet_file(
-    'data/market_features/daily_breadth.parquet',
-    expected_types=expected_types,
-    required_columns=required_columns
-)
-```
+1. **Run Validation Early**
+   - Validate data as soon as it's loaded
+   - Validate data before processing
+   - Validate data before storage
 
-### Individual Validators
+2. **Validate Consistently**
+   - Use the same validation rules across the project
+   - Validate all data files
+   - Validate all data updates
 
-For more specific validation needs, you can use the individual validators:
+3. **Handle Validation Errors**
+   - Log validation errors
+   - Raise appropriate exceptions
+   - Provide clear error messages
 
-```python
-from trading_advisor.validation import (
-    FileNameValidator,
-    ColumnNameValidator,
-    DataTypeValidator,
-    RequiredColumnValidator,
-    DataQualityValidator
-)
+4. **Monitor Validation Performance**
+   - Track validation time
+   - Monitor memory usage
+   - Optimize validation rules
 
-# Validate file name
-file_validator = FileNameValidator('data/market_features/daily_breadth.parquet')
-if file_validator.validate():
-    print("File name is valid")
-else:
-    print("File name validation errors:", file_validator.get_errors())
+## Future Improvements
 
-# Validate DataFrame
-df = pd.read_parquet('data/market_features/daily_breadth.parquet')
+1. **Enhanced Validation Rules**
+   - Add more validation rules
+   - Improve error messages
+   - Add validation documentation
 
-# Validate column names
-col_validator = ColumnNameValidator(df)
-if col_validator.validate():
-    print("Column names are valid")
-else:
-    print("Column name validation errors:", col_validator.get_errors())
+2. **Performance Optimization**
+   - Optimize validation speed
+   - Reduce memory usage
+   - Add parallel validation
 
-# Validate data quality
-quality_validator = DataQualityValidator(df)
-quality_validator.validate()
-print("Data quality warnings:", quality_validator.get_warnings())
-```
-
-## Validation Rules
-
-### File Names
-- Must be lowercase
-- Use underscores instead of spaces
-- Must have .parquet extension
-- Example: `daily_breadth.parquet`
-
-### Column Names
-- Must be lowercase
-- Use underscores instead of spaces
-- Can only contain letters, numbers, and underscores
-- Example: `close_price`, `volume_ma20`
-
-### Data Types
-- Date columns must be datetime64
-- Price columns must be floating point
-- Volume columns must be integer
-- Custom types can be specified using numpy types
-
-### Data Quality
-The framework checks for:
-- Missing values (reported as warnings)
-- Infinite values (reported as errors)
-- Duplicate rows (reported as warnings)
-
-## Integration with Data Pipeline
-
-The validation framework is designed to be integrated into your data processing pipeline. Here's an example of how to use it in a data update function:
-
-```python
-def update_market_features():
-    # Generate or update features
-    df = generate_market_features()
-    
-    # Validate before saving
-    expected_types = {
-        'date': np.datetime64,
-        'close_price': np.floating,
-        'volume': np.integer
-    }
-    required_columns = ['date', 'close_price']
-    
-    if validate_parquet_file('data/market_features/daily_breadth.parquet',
-                           expected_types=expected_types,
-                           required_columns=required_columns):
-        df.to_parquet('data/market_features/daily_breadth.parquet')
-    else:
-        raise ValueError("Data validation failed")
-```
-
-## Running Tests
-
-The validation framework includes comprehensive tests. To run them:
-
-```bash
-python -m pytest tests/test_validation.py -v
-```
-
-## Error Handling
-
-The framework provides detailed error messages to help identify and fix issues:
-
-```python
-validator = FileNameValidator('data/market_features/DailyBreadth.parquet')
-if not validator.validate():
-    for error in validator.get_errors():
-        print(f"Error: {error}")
-```
-
-## Contributing
-
-When adding new features to the validation framework:
-1. Add new validator classes if needed
-2. Update tests to cover new functionality
-3. Update this documentation
-4. Follow the existing error/warning pattern
-
-## Additional Examples
-
-### Real-world Examples
-
-Here are examples of validation configurations for different types of data files:
-
-```python
-# Market Features Example
-market_expected_types = {
-    'date': np.datetime64,
-    'vix': np.floating,
-    'vix_ma20': np.floating,
-    'market_volatility': np.floating,
-    'cross_sectional_vol': np.floating
-}
-market_required_columns = ['date', 'vix', 'market_volatility']
-
-# Ticker Features Example
-ticker_expected_types = {
-    'date': np.datetime64,
-    'close_price': np.floating,
-    'volume': np.integer,
-    'rsi_14': np.floating,
-    'macd': np.floating,
-    'macd_signal': np.floating
-}
-ticker_required_columns = ['date', 'close_price', 'volume']
-```
-
-### Common Validation Patterns
-
-```python
-# Validating multiple files in a directory
-def validate_directory(directory: str, expected_types: Dict[str, type], required_columns: List[str]):
-    for file in Path(directory).glob('*.parquet'):
-        if not validate_parquet_file(str(file), expected_types, required_columns):
-            print(f"Validation failed for {file}")
-
-# Validating with custom quality thresholds
-class CustomQualityValidator(DataQualityValidator):
-    def validate(self) -> bool:
-        # Check for missing values above threshold
-        null_ratio = self.df.isnull().mean()
-        if (null_ratio > 0.1).any():
-            self.add_error(f"Columns with >10% missing values: {null_ratio[null_ratio > 0.1].index.tolist()}")
-        return len(self.errors) == 0
-```
-
-### Integration Examples
-
-```python
-# In market_breadth.py
-def update_market_breadth():
-    df = calculate_market_breadth()
-    
-    # Validate before saving
-    if not validate_parquet_file(
-        'data/market_features/daily_breadth.parquet',
-        expected_types=market_expected_types,
-        required_columns=market_required_columns
-    ):
-        raise ValueError("Market breadth data validation failed")
-    
-    df.to_parquet('data/market_features/daily_breadth.parquet')
-```
-
-### Error Recovery Examples
-
-```python
-# Handling validation errors with recovery
-def safe_update_features():
-    try:
-        df = generate_features()
-        if not validate_parquet_file('features.parquet', expected_types, required_columns):
-            # Try to fix common issues
-            df = df.fillna(method='ffill')  # Forward fill missing values
-            df = df.replace([np.inf, -np.inf], np.nan)  # Replace infinite values
-            
-            # Validate again
-            if not validate_parquet_file('features.parquet', expected_types, required_columns):
-                raise ValueError("Could not fix validation issues")
-        
-        df.to_parquet('features.parquet')
-    except Exception as e:
-        logger.error(f"Feature update failed: {e}")
-        # Implement fallback or notification
-```
-
-### Custom Validator Examples
-
-```python
-# Custom validator for time series data
-class TimeSeriesValidator(DataValidator):
-    def __init__(self, df: pd.DataFrame):
-        super().__init__()
-        self.df = df
-        # Get list of trading days (excluding weekends and holidays)
-        self.trading_days = pd.bdate_range(
-            start=df['date'].min(),
-            end=df['date'].max(),
-            freq='B'  # Business day frequency
-        )
-    
-    def validate(self) -> bool:
-        # Check for date ordering
-        if not self.df['date'].is_monotonic_increasing:
-            self.add_error("Dates are not in ascending order")
-        
-        # Check for missing trading days
-        missing_days = set(self.trading_days) - set(self.df['date'])
-        if missing_days:
-            self.add_warning(f"Missing {len(missing_days)} trading days")
-        
-        # Check for duplicate dates
-        if self.df['date'].duplicated().any():
-            self.add_error("Duplicate dates found in time series")
-        
-        return len(self.errors) == 0
-```
-
-This TimeSeriesValidator now:
-1. Uses `pd.bdate_range` to get business days (excluding weekends)
-2. Checks for missing trading days instead of calendar days
-3. Adds a check for duplicate dates
-4. Properly handles the trading day calendar 
+3. **Integration Improvements**
+   - Add CI/CD integration
+   - Add monitoring integration
+   - Add reporting integration 
