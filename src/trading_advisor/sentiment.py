@@ -15,7 +15,7 @@ from typing import Optional, Dict, List
 import logging
 from datetime import datetime
 from .sentiment.gdelt import GDELTClient
-from trading_advisor.data import fill_missing_trading_days
+from trading_advisor.data import fill_missing_trading_days, standardize_columns_and_date
 
 logger = logging.getLogger(__name__)
 
@@ -142,31 +142,24 @@ class MarketSentiment:
         
         return sentiment_features
         
-    def generate_sentiment_features(self, start_date: Optional[str] = None, days: int = 60) -> pd.DataFrame:
+    def generate_sentiment_features(self, days: int = 60) -> pd.DataFrame:
         """Generate sentiment features.
         
         Args:
-            start_date: Optional start date in YYYY-MM-DD format
             days: Number of days of historical data to download (default: 60)
             
         Returns:
             DataFrame with sentiment features
         """
-        # Determine start date for updates
-        update_start = None
-        if start_date is None:
-            # Check latest date in existing sentiment data
-            latest_date = self.get_latest_sentiment_date()
-            if latest_date is not None:
-                update_start = latest_date + pd.Timedelta(days=1)
-                logger.info(f"Found existing sentiment data through {latest_date.date()}. Will update from next day.")
-            else:
-                # No existing data, use days parameter
-                update_start = pd.Timestamp.today() - pd.Timedelta(days=days)
-                logger.info(f"No existing sentiment data found. Will generate {days} days of data.")
+        # Check latest date in existing sentiment data
+        latest_date = self.get_latest_sentiment_date()
+        if latest_date is not None:
+            update_start = latest_date + pd.Timedelta(days=1)
+            logger.info(f"Found existing sentiment data through {latest_date.date()}. Will update from next day.")
         else:
-            update_start = pd.to_datetime(start_date)
-            logger.info(f"Using provided start date: {update_start.date()}")
+            # No existing data, use days parameter
+            update_start = pd.Timestamp.today() - pd.Timedelta(days=days)
+            logger.info(f"No existing sentiment data found. Will generate {days} days of data.")
             
         # Get GDELT data for update period
         gdelt_data = self.gdelt_client.collect_sentiment_data(update_start.strftime('%Y-%m-%d'))
@@ -184,16 +177,8 @@ class MarketSentiment:
         sentiment_path = self.sentiment_dir / "market_sentiment.parquet"
         if sentiment_path.exists():
             existing_sentiment = pd.read_parquet(sentiment_path)
-            existing_sentiment.index = pd.to_datetime(existing_sentiment.index)
-            # Remove any overlapping dates from existing data
-            existing_sentiment = existing_sentiment[existing_sentiment.index < sentiment_features.index.min()]
-            # Combine old and new data
             sentiment_features = pd.concat([existing_sentiment, sentiment_features])
             sentiment_features = sentiment_features[~sentiment_features.index.duplicated(keep='last')]
             sentiment_features = sentiment_features.sort_index()
             
-        # Save updated sentiment data
-        sentiment_features.to_parquet(sentiment_path)
-        logger.info(f"Saved sentiment features to {sentiment_path}")
-        
         return sentiment_features 

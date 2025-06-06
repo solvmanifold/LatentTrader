@@ -1,8 +1,8 @@
-"""Market volatility indicators calculation."""
+"""Market volatility calculation module."""
 
 import logging
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Dict, Optional, List, Tuple
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -11,60 +11,45 @@ from trading_advisor.data import fill_missing_trading_days
 logger = logging.getLogger(__name__)
 
 def calculate_market_volatility(combined_df: pd.DataFrame) -> pd.DataFrame:
-    """Calculate market volatility indicators.
+    """Calculate market volatility metrics.
     
     Args:
         combined_df: DataFrame with combined ticker data
         
     Returns:
-        DataFrame with market volatility indicators
+        DataFrame with market volatility metrics
     """
     if combined_df.empty:
         logger.warning("No data provided for market volatility calculation")
         return pd.DataFrame()
-        
-    # Calculate market volatility indicators
-    volatility_df = pd.DataFrame()
-    
-    # VIX data
-    try:
-        vix = yf.download('^VIX', start=combined_df.index.min(), end=combined_df.index.max())
-        volatility_df['vix'] = vix['Close']
-    except Exception as e:
-        logger.error(f"Error fetching VIX data: {e}")
-    
-    # Market-wide volatility (using S&P 500)
-    try:
-        spy = yf.download('^GSPC', start=combined_df.index.min(), end=combined_df.index.max())
-        # Daily returns
-        spy_returns = spy['Close'].pct_change()
-        volatility_df['market_volatility'] = spy_returns.rolling(window=20).std() * np.sqrt(252)  # Annualized
-    except Exception as e:
-        logger.error(f"Error calculating market volatility: {e}")
-    
-    # Cross-sectional volatility (dispersion of returns)
-    daily_returns = combined_df.groupby(level=0)['Close'].apply(
-        lambda x: x.pct_change().std() * np.sqrt(252)  # Annualized
-    )
-    volatility_df['cross_sectional_vol'] = daily_returns
+
+    # If multi-ticker, group by ticker; else, treat as single ticker
+    if 'ticker' in combined_df.columns:
+        tickers = combined_df['ticker'].unique()
+        results = []
+        for ticker in tickers:
+            df = combined_df[combined_df['ticker'] == ticker].copy()
+            df = df.sort_index()
+            daily_returns = df['close'].pct_change()
+            out = pd.DataFrame(index=df.index)
+            out['daily_volatility'] = daily_returns.rolling(window=2).std()
+            out['weekly_volatility'] = daily_returns.rolling(window=5).std()
+            out['monthly_volatility'] = daily_returns.rolling(window=20).std()
+            out['avg_correlation'] = daily_returns.rolling(window=5).corr()
+            out['ticker'] = ticker
+            results.append(out)
+        volatility_df = pd.concat(results)
+    else:
+        df = combined_df.sort_index()
+        daily_returns = df['close'].pct_change()
+        volatility_df = pd.DataFrame(index=df.index)
+        volatility_df['daily_volatility'] = daily_returns.rolling(window=2).std()
+        volatility_df['weekly_volatility'] = daily_returns.rolling(window=5).std()
+        volatility_df['monthly_volatility'] = daily_returns.rolling(window=20).std()
+        volatility_df['avg_correlation'] = daily_returns.rolling(window=5).corr()
 
     # Fill in missing trading days
     volatility_df = fill_missing_trading_days(volatility_df, combined_df)
-    
-    # Calculate rolling windows after filling missing days
-    volatility_df['vix_ma20'] = volatility_df['vix'].rolling(window=20).mean()
-    volatility_df['vix_std20'] = volatility_df['vix'].rolling(window=20).std()
-    volatility_df['vol_of_vol'] = volatility_df['market_volatility'].rolling(window=20).std()
-    
-    # Check if the last row has any NaNs in key columns
-    if not volatility_df.empty:
-        last_row = volatility_df.iloc[-1]
-        key_columns = ['vix', 'market_volatility', 'cross_sectional_vol']
-        if last_row[key_columns].isna().any():
-            # Remove the last row if any key columns have NaNs
-            volatility_df = volatility_df.iloc[:-1]
-            logger.info("Removed last row due to NaNs in key columns")
-    
     return volatility_df
 
 class MarketVolatility:
@@ -77,8 +62,8 @@ class MarketVolatility:
             data_dir: Base directory for data storage
         """
         self.data_dir = data_dir
-        self.market_features_dir = data_dir / "market_features"
-        self.market_features_dir.mkdir(parents=True, exist_ok=True)
+        self.volatility_dir = data_dir / "market_features"
+        self.volatility_dir.mkdir(parents=True, exist_ok=True)
         
     def get_latest_volatility_date(self) -> Optional[pd.Timestamp]:
         """Get the most recent date in the volatility data.
@@ -86,7 +71,7 @@ class MarketVolatility:
         Returns:
             Latest date in the volatility data, or None if no data exists
         """
-        volatility_path = self.market_features_dir / "market_volatility.parquet"
+        volatility_path = self.volatility_dir / "market_volatility.parquet"
         if not volatility_path.exists():
             return None
             
@@ -105,25 +90,20 @@ class MarketVolatility:
             logger.error(f"Error reading volatility data: {e}")
             return None
         
-    def generate_volatility_features(self, combined_df: pd.DataFrame, start_date: Optional[str] = None) -> pd.DataFrame:
+    def generate_volatility_features(self, ticker_df: pd.DataFrame) -> pd.DataFrame:
         """Generate volatility features.
         
         Args:
-            combined_df: DataFrame with combined ticker data
-            start_date: Optional start date in YYYY-MM-DD format (ignored, kept for API compatibility)
+            ticker_df: DataFrame with ticker data
             
         Returns:
             DataFrame with volatility features
         """
-        # Calculate volatility features for all available data
-        volatility_df = calculate_market_volatility(combined_df)
+        # Calculate market volatility
+        volatility_df = calculate_market_volatility(ticker_df)
         
         # Save volatility data
-        volatility_path = self.market_features_dir / "market_volatility.parquet"
-        if not volatility_df.empty:
-            volatility_df.to_parquet(volatility_path)
-            logger.info(f"Saved volatility features to {volatility_path}")
-        else:
-            logger.warning(f"Did NOT overwrite {volatility_path} because new volatility DataFrame is empty.")
+        volatility_path = self.volatility_dir / "market_volatility.parquet"
+        volatility_df.to_parquet(volatility_path)
         
         return volatility_df 

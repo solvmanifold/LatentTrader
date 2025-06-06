@@ -18,7 +18,7 @@ import warnings
 import pandas as pd
 import yfinance as yf
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
-from trading_advisor.data import normalize_ticker
+from trading_advisor.data import normalize_ticker, standardize_columns_and_date
 from .market_breadth import calculate_market_breadth
 from .sector_performance import calculate_sector_performance
 from .sentiment import MarketSentiment
@@ -121,21 +121,20 @@ class MarketFeatures:
         self.market_features_dir = data_dir / "market_features"
         self.market_features_dir.mkdir(parents=True, exist_ok=True)
         
-    def generate_market_features(self, start_date: Optional[str] = None, days: int = 60, update_sector_mapping: bool = False):
+    def generate_market_features(self, days: int = 60, force_update_sector_mapping: bool = False):
         """
         Generate and save market features as separate files in data/market_features.
         Handles incremental updates by only processing new dates.
         
         Args:
-            start_date: Optional start date for data collection
             days: Number of days of historical data to download
-            update_sector_mapping: Whether to force update sector mapping (default: False)
+            force_update_sector_mapping: Whether to force update sector mapping (default: False)
         """
         # Get list of tickers and generate sector mapping if needed
         ticker_list = self.get_ticker_list()
         
         # Load or generate sector mapping
-        if update_sector_mapping:
+        if force_update_sector_mapping:
             logger.info("Generating fresh sector mapping...")
             sector_mapping = update_sector_mapping(ticker_list, str(self.market_features_dir))
         else:
@@ -167,6 +166,7 @@ class MarketFeatures:
         # Generate market breadth
         logger.info("Starting market breadth generation...")
         breadth_df = calculate_market_breadth(ticker_df)
+        breadth_df = standardize_columns_and_date(breadth_df, source_prefix="daily_breadth")
         breadth_path = self.market_features_dir / "daily_breadth.parquet"
         
         # Update breadth data
@@ -191,20 +191,23 @@ class MarketFeatures:
         sectors_dir.mkdir(exist_ok=True)
         for sector, df in sector_dfs.items():
             if sector != 'all_sectors':  # Skip the combined file
-                sector_path = sectors_dir / f"{sector}.parquet"
+                df = standardize_columns_and_date(df, source_prefix=sector.lower().replace(' ', '_'))
+                sector_path = sectors_dir / f"{sector.lower().replace(' ', '_')}.parquet"
                 df.to_parquet(sector_path)
                 logger.info(f"Saved sector performance for {sector}")
 
         # Generate market sentiment
         logger.info("Starting market sentiment generation...")
-        sentiment_df = MarketSentiment(self.data_dir).generate_sentiment_features(start_date, days)
+        sentiment_df = MarketSentiment(self.data_dir).generate_sentiment_features(days=days)
+        sentiment_df = standardize_columns_and_date(sentiment_df, source_prefix="market_sentiment")
         sentiment_path = self.market_features_dir / "market_sentiment.parquet"
         sentiment_df.to_parquet(sentiment_path)
         logger.info("Saved market sentiment")
 
         # Generate market volatility
         logger.info("Starting market volatility generation...")
-        volatility_df = MarketVolatility(self.data_dir).generate_volatility_features(ticker_df, start_date)
+        volatility_df = MarketVolatility(self.data_dir).generate_volatility_features(ticker_df)
+        volatility_df = standardize_columns_and_date(volatility_df, source_prefix="market_volatility")
         volatility_path = self.market_features_dir / "market_volatility.parquet"
         volatility_df.to_parquet(volatility_path)
         logger.info("Saved market volatility")
