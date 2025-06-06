@@ -480,12 +480,14 @@ def test_market_features_validation():
             'market_volatility_avg_correlation': np.random.randn(len(dates)),
             'market_volatility_ticker': ['^GSPC'] * len(dates)
         })
+        # Ensure ticker column is str
+        market_volatility['market_volatility_ticker'] = market_volatility['market_volatility_ticker'].astype(str)
         market_volatility.to_parquet(os.path.join(market_dir, 'market_volatility.parquet'))
         
         # Create valid daily breadth data
         daily_breadth = pd.DataFrame({
             'date': dates,
-            'daily_breadth_adv_dec_line': np.random.randn(len(dates)),
+            'daily_breadth_adv_dec_line': np.random.randn(len(dates)).astype(float),
             'daily_breadth_new_highs': np.random.randint(0, 100, len(dates)),
             'daily_breadth_new_lows': np.random.randint(0, 100, len(dates)),
             'daily_breadth_above_ma20': np.random.randn(len(dates)),
@@ -495,6 +497,8 @@ def test_market_features_validation():
             'daily_breadth_rsi_overbought': np.random.randn(len(dates)),
             'daily_breadth_macd_bullish': np.random.randn(len(dates))
         })
+        # Ensure adv_dec_line is float
+        daily_breadth['daily_breadth_adv_dec_line'] = daily_breadth['daily_breadth_adv_dec_line'].astype(float)
         daily_breadth.to_parquet(os.path.join(market_dir, 'daily_breadth.parquet'))
         
         # Create valid market sentiment data
@@ -515,39 +519,39 @@ def test_market_features_validation():
         })
         gdelt_data.to_parquet(os.path.join(market_dir, 'gdelt_raw.parquet'))
         
-        # Create sector directory and add a sector file
+        # Create sector directory and add a sector file (generic column names)
         sectors_dir = os.path.join(market_dir, 'sectors')
         os.makedirs(sectors_dir)
-        tech_sector = pd.DataFrame({
+        sector_df = pd.DataFrame({
             'date': dates,
             'sector_price': np.random.randn(len(dates)),
             'sector_volatility': np.random.randn(len(dates)),
-            'sector_volume': np.random.randint(0, 1000, len(dates)),
+            'sector_volume': np.random.randint(0, 1000, len(dates)).astype(float),
             'sector_returns_1d': np.random.randn(len(dates)),
             'sector_returns_5d': np.random.randn(len(dates)),
             'sector_returns_20d': np.random.randn(len(dates)),
             'sector_momentum_5d': np.random.randn(len(dates)),
             'sector_momentum_20d': np.random.randn(len(dates))
         })
-        tech_sector.to_parquet(os.path.join(sectors_dir, 'technology.parquet'))
+        sector_df.to_parquet(os.path.join(sectors_dir, 'sector.parquet'))
         
         # Test validation of all market features
-        assert validate_market_features()
+        assert validate_market_features(data_dir=market_dir)
         
         # Test with invalid market volatility data
         invalid_volatility = market_volatility.copy()
         invalid_volatility['market_volatility_daily_volatility'] = 'invalid'  # Wrong type
         invalid_volatility.to_parquet(os.path.join(market_dir, 'market_volatility.parquet'))
-        assert not validate_market_features()
+        assert not validate_market_features(data_dir=market_dir)
         
         # Test with missing required column
         invalid_breadth = daily_breadth.copy()
         invalid_breadth = invalid_breadth.drop('daily_breadth_adv_dec_line', axis=1)
         invalid_breadth.to_parquet(os.path.join(market_dir, 'daily_breadth.parquet'))
-        assert not validate_market_features()
+        assert not validate_market_features(data_dir=market_dir)
         
         # Test with invalid sector data
-        invalid_sector = tech_sector.copy()
+        invalid_sector = sector_df.copy()
         invalid_sector['sector_price'] = 'invalid'  # Wrong type
-        invalid_sector.to_parquet(os.path.join(sectors_dir, 'technology.parquet'))
-        assert not validate_market_features() 
+        invalid_sector.to_parquet(os.path.join(sectors_dir, 'sector.parquet'))
+        assert not validate_market_features(data_dir=market_dir) 

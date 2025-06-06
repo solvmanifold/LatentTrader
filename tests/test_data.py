@@ -23,6 +23,8 @@ class TestDataDownload(unittest.TestCase):
     def test_download_stock_data(self):
         ticker = "AAPL"
         df = download_stock_data(ticker, features_dir=self.features_dir)
+        # Ensure columns are standardized (lowercase) before any further processing
+        df = standardize_columns_and_date(df)
         self.assertFalse(df.empty)
         self.assertTrue((self.features_dir / f"{ticker}_features.parquet").exists())
 
@@ -31,6 +33,8 @@ class TestDataDownload(unittest.TestCase):
         ticker = "AAPL"
         # Use a smaller window for testing (50 days instead of 200)
         df = download_stock_data(ticker, features_dir=self.features_dir, history_days=100)
+        # Ensure columns are standardized (lowercase) before any further processing
+        df = standardize_columns_and_date(df)
         self.assertFalse(df.empty)
         
         # Check that we have enough data
@@ -58,6 +62,8 @@ class TestDataDownload(unittest.TestCase):
         
         # First download with enough history for technical indicators
         df1 = download_stock_data(ticker, features_dir=self.features_dir, history_days=100, features_filename=features_filename)
+        # Ensure columns are standardized (lowercase) before any further processing
+        df1 = standardize_columns_and_date(df1)
         self.assertFalse(df1.empty)
         
         # Get the last 3 dates from the actual data
@@ -70,6 +76,8 @@ class TestDataDownload(unittest.TestCase):
         
         # Download again with fewer retries
         df2 = download_stock_data(ticker, features_dir=self.features_dir, max_retries=1, features_filename=features_filename)
+        # Ensure columns are standardized (lowercase) before any further processing
+        df2 = standardize_columns_and_date(df2)
         
         # Only compare raw columns
         raw_cols = [col for col in ['date', 'open', 'high', 'low', 'close', 'volume', 'dividends', 'stock_splits'] if col in df1.columns]
@@ -130,7 +138,8 @@ class TestDataDownload(unittest.TestCase):
     def test_generate_volatility_features(self):
         ticker = "AAPL"
         df = download_stock_data(ticker, features_dir=self.features_dir)
-        df = standardize_columns_and_date(df)  # Ensure lowercase columns
+        # Ensure columns are standardized (lowercase) before any further processing
+        df = standardize_columns_and_date(df)
         df['ticker'] = ticker  # Ensure 'ticker' column exists for volatility calculation
         volatility = MarketVolatility(Path(self.temp_dir))
         volatility_df = volatility.generate_volatility_features(df)

@@ -53,6 +53,7 @@ SENTIMENT_FEATURE_REQUIRED = ['date', 'market_sentiment_ma5']
 def validate_market_features():
     """Validate all market feature files."""
     data_dir = Path('data/market_features')
+    all_valid = True
     
     # Validate market volatility
     print("Validating market_volatility.parquet...", end=' ')
@@ -66,6 +67,7 @@ def validate_market_features():
     except Exception as e:
         print("❌")
         print(f"  Error: {str(e)}")
+        all_valid = False
     
     # Validate daily breadth
     print("Validating daily_breadth.parquet...", end=' ')
@@ -79,6 +81,7 @@ def validate_market_features():
     except Exception as e:
         print("❌")
         print(f"  Error: {str(e)}")
+        all_valid = False
     
     # Validate market sentiment
     print("Validating market_sentiment.parquet...", end=' ')
@@ -92,6 +95,7 @@ def validate_market_features():
     except Exception as e:
         print("❌")
         print(f"  Error: {str(e)}")
+        all_valid = False
     
     # Validate GDELT raw data
     print("Validating gdelt_raw.parquet...", end=' ')
@@ -105,6 +109,7 @@ def validate_market_features():
     except Exception as e:
         print("❌")
         print(f"  Error: {str(e)}")
+        all_valid = False
     
     # Validate sector files
     sectors_dir = data_dir / 'sectors'
@@ -132,6 +137,9 @@ def validate_market_features():
             except Exception as e:
                 print("❌")
                 print(f"    Error: {str(e)}")
+                all_valid = False
+    
+    return all_valid
 
 if __name__ == '__main__':
     validate_market_features() 

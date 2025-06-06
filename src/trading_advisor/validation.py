@@ -143,10 +143,11 @@ class DataTypeValidator(DataValidator):
                 continue
             
             actual_type = self.df[col].dtype
-            if not np.issubdtype(actual_type, expected_type):
-                self.add_error(
-                    f"Column {col} has type {actual_type}, expected {expected_type}"
-                )
+            if expected_type == str:
+                if not (np.issubdtype(actual_type, np.object_) or np.issubdtype(actual_type, np.str_)):
+                    self.add_error(f"Column {col} has type {actual_type}, expected {expected_type}")
+            elif not np.issubdtype(actual_type, expected_type):
+                self.add_error(f"Column {col} has type {actual_type}, expected {expected_type}")
         
         return len(self.errors) == 0
 
@@ -427,7 +428,6 @@ def validate_parquet_file(file_path: str, expected_types: Dict[str, type] = None
         
         return True
     except Exception as e:
-        print(f"Error validating {file_path}: {e}")
         return False
 
 
@@ -474,49 +474,48 @@ SENTIMENT_FEATURE_TYPES = {
 # Define required columns for market sentiment
 SENTIMENT_FEATURE_REQUIRED = ['date', 'market_sentiment_ma5']
 
-def validate_market_features():
+def validate_market_features(data_dir: str = 'data/market_features'):
     """Validate all market feature files."""
-    data_dir = Path('data/market_features')
+    data_dir = Path(data_dir)
+    all_valid = True
     
     # Validate market volatility
-    logger.info("Validating market_volatility.parquet...")
-    validate_parquet_file(
+    if not validate_parquet_file(
         data_dir / 'market_volatility.parquet',
         expected_types=MARKET_FEATURE_TYPES,
         required_columns=MARKET_FEATURE_REQUIRED
-    )
+    ):
+        all_valid = False
     
     # Validate daily breadth
-    logger.info("Validating daily_breadth.parquet...")
-    validate_parquet_file(
+    if not validate_parquet_file(
         data_dir / 'daily_breadth.parquet',
         expected_types=BREADTH_FEATURE_TYPES,
         required_columns=BREADTH_FEATURE_REQUIRED
-    )
+    ):
+        all_valid = False
     
     # Validate market sentiment
-    logger.info("Validating market_sentiment.parquet...")
-    validate_parquet_file(
+    if not validate_parquet_file(
         data_dir / 'market_sentiment.parquet',
         expected_types=SENTIMENT_FEATURE_TYPES,
         required_columns=SENTIMENT_FEATURE_REQUIRED
-    )
+    ):
+        all_valid = False
     
     # Validate GDELT raw data
-    logger.info("Validating gdelt_raw.parquet...")
-    validate_parquet_file(
+    if not validate_parquet_file(
         data_dir / 'gdelt_raw.parquet',
         expected_types={'date': np.datetime64},
         required_columns=['date']
-    )
+    ):
+        all_valid = False
     
     # Validate sector files
     sectors_dir = data_dir / 'sectors'
     if sectors_dir.exists():
-        logger.info("Validating sector files...")
         for sector_file in sectors_dir.glob('*.parquet'):
-            logger.info(f"Validating {sector_file.name}...")
-            validate_parquet_file(
+            if not validate_parquet_file(
                 str(sector_file),
                 expected_types={
                     'date': np.datetime64,
@@ -530,4 +529,7 @@ def validate_market_features():
                     'sector_momentum_20d': np.floating
                 },
                 required_columns=['date', 'sector_price', 'sector_volume']
-            ) 
+            ):
+                all_valid = False
+    
+    return all_valid 

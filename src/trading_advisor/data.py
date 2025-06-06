@@ -174,6 +174,8 @@ def download_stock_data(
             )
             if len(new_df) > 0:
                 new_df.index = pd.to_datetime(new_df.index).tz_localize(None).normalize()
+                # Standardize column names to lowercase immediately after download
+                new_df.columns = [c.lower() for c in new_df.columns]
                 # Only keep truly new rows
                 if not df.empty:
                     new_rows = new_df[~new_df.index.isin(df.index)]
