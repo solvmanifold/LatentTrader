@@ -115,4 +115,16 @@ Feel free to explore each feature for more detailed information and their signif
 
 ## Note on Data Availability and Modeling
 
-Due to data source lags (e.g., VIX, S&P 500, GDELT sentiment), the most recent row in some market feature tables may be missing or contain NaN values. This typically occurs when the latest data is not yet published or available at the time of update. For modeling and stock selection, always use the last available non-NaN row for each feature table to ensure your models are using valid, up-to-date information. 
+Due to data source lags (e.g., VIX, S&P 500, GDELT sentiment), the most recent row in some market feature tables may be missing or contain NaN values. This typically occurs when the latest data is not yet published or available at the time of update. For modeling and stock selection, always use the last available non-NaN row for each feature table to ensure your models are using valid, up-to-date information.
+
+## Data Update Process
+
+Market features are updated using the `update-data` command, which takes a `days` parameter to specify how many days of historical data to download. The system will:
+
+1. Check for existing data and only download new data points
+2. Generate market breadth indicators for all available tickers
+3. Calculate sector performance metrics
+4. Update market sentiment using GDELT data
+5. Compute market volatility measures
+
+The update process is incremental, meaning it will only process new dates that aren't already in the feature files. This ensures efficient updates while maintaining historical data consistency. 
