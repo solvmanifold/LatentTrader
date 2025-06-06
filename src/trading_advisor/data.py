@@ -12,6 +12,8 @@ import yfinance as yf
 from functools import lru_cache
 import os
 import json
+import re
+import numpy as np
 
 from trading_advisor.config import DATA_DIR, LOOKBACK_DAYS, REQUIRED_COLUMNS
 from trading_advisor.analysis import calculate_technical_indicators, get_analyst_targets
@@ -182,19 +184,25 @@ def download_stock_data(
                     return df
                 # Merge with existing data
                 merged_df = pd.concat([df, new_rows])
+                # Set columns to canonical list from new_rows, then deduplicate
+                merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
+                merged_df = merged_df[new_rows.columns.tolist()]
                 merged_df = merged_df[~merged_df.index.duplicated(keep='last')]
                 merged_df = merged_df.sort_index()
                 logger.info(f"Appended {len(new_rows)} new rows for {ticker} (now {len(merged_df)} total rows).")
-                # Recalculate technical indicators for all (or just new rows if you want to optimize)
+                # Drop all technical indicator columns before recalculating
+                indicator_cols = [
+                    'rsi', 'macd', 'macd_signal', 'macd_hist',
+                    'bb_upper', 'bb_lower', 'bb_middle', 'bb_pband',
+                    'sma_20', 'sma_50', 'sma_100', 'sma_200',
+                    'ema_100', 'ema_200'
+                ]
+                merged_df = merged_df.drop(columns=[col for col in indicator_cols if col in merged_df.columns], errors='ignore')
+                # Recalculate technical indicators
                 merged_df = calculate_technical_indicators(merged_df)
-                # Add Volume_Prev, using last known volume for holidays/gaps
-                merged_df['Volume_Prev'] = merged_df['Volume'].shift(1).ffill()
-                # Reorder columns to place Volume_Prev right after Volume
-                cols = merged_df.columns.tolist()
-                volume_idx = cols.index('Volume')
-                cols.remove('Volume_Prev')
-                cols.insert(volume_idx + 1, 'Volume_Prev')
-                merged_df = merged_df[cols]
+                # Final deduplication to be safe
+                merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
+                
                 # Get analyst targets before saving
                 analyst_targets = get_analyst_targets(ticker)
                 # --- Analyst targets propagation fix ---
@@ -211,6 +219,19 @@ def download_stock_data(
                     merged_df.at[idx, 'analyst_targets'] = None
                 if analyst_targets and not merged_df.empty:
                     merged_df.at[merged_df.index[-1], 'analyst_targets'] = json.dumps(analyst_targets)
+                
+                # Standardize columns and date before saving
+                merged_df = standardize_columns_and_date(merged_df)
+                
+                # Add volume_prev using shift(1) without ffill to preserve gaps
+                merged_df['volume_prev'] = merged_df['volume'].shift(1)
+                # Reorder columns to place volume_prev right after volume
+                cols = merged_df.columns.tolist()
+                volume_idx = cols.index('volume')
+                cols.remove('volume_prev')
+                cols.insert(volume_idx + 1, 'volume_prev')
+                merged_df = merged_df[cols]
+                
                 merged_df.to_parquet(features_path)
                 return merged_df
             else:
@@ -349,3 +370,52 @@ def load_ticker_features(tickers: List[str], features_dir: str) -> pd.DataFrame:
     combined_df = pd.concat(dfs, ignore_index=False)
     
     return combined_df 
+
+def standardize_columns_and_date(df: pd.DataFrame, source_prefix: str = None) -> pd.DataFrame:
+    """
+    Standardize DataFrame columns to lowercase with underscores, no spaces, and ensure a 'date' column exists.
+    Optionally prefix columns with a source name (for market features).
+    """
+    def clean_col(col):
+        # Convert to string and lowercase
+        col = str(col).lower()
+        # Replace spaces and special characters with underscores
+        col = re.sub(r'[^a-z0-9]+', '_', col)
+        # Remove leading/trailing underscores
+        col = col.strip('_')
+        return col
+    
+    # Create a copy to avoid modifying the original
+    df = df.copy()
+    
+    # Handle date column first
+    if isinstance(df.index, pd.DatetimeIndex):
+        df['date'] = df.index
+    elif 'Date' in df.columns:
+        df = df.rename(columns={'Date': 'date'})
+    elif 'date' not in df.columns:
+        raise ValueError("DataFrame must have either a DatetimeIndex or a 'date'/'Date' column")
+    
+    # Standardize all column names
+    cols = df.columns.tolist()
+    new_cols = []
+    for col in cols:
+        if col == 'date':
+            new_cols.append('date')
+            continue
+        base = clean_col(col)
+        if source_prefix and not base.startswith(source_prefix + '_'):
+            base = f"{source_prefix}_{base}"
+        new_cols.append(base)
+    
+    df.columns = new_cols
+    
+    # Ensure date column is datetime and normalized
+    df['date'] = pd.to_datetime(df['date']).dt.normalize()
+    
+    # Reorder so 'date' is first
+    cols = df.columns.tolist()
+    cols.insert(0, cols.pop(cols.index('date')))
+    df = df[cols]
+    
+    return df 
