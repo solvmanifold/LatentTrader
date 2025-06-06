@@ -44,4 +44,4 @@ data/
 yarn-error.log
 output/
 logs/
-*.log 
+*.log *.ipynb_checkpoints/

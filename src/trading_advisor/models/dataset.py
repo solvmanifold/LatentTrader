@@ -154,6 +154,11 @@ class DatasetGenerator:
         if 'Date' not in df.columns and isinstance(df.index, pd.DatetimeIndex):
             df = df.copy()
             df['Date'] = df.index
+        elif 'Date' in df.columns:
+            # Ensure Date column is datetime
+            df['Date'] = pd.to_datetime(df['Date'])
+        else:
+            raise ValueError("DataFrame must have a 'Date' column or DatetimeIndex")
 
         # Sort by date to ensure correct future return calculation
         df = df.sort_values('Date')

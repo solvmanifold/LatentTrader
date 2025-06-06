@@ -40,9 +40,9 @@ def calculate_sector_performance(ticker_df: pd.DataFrame, market_features_dir: s
     for sector, group in ticker_df.groupby('sector'):
         # Calculate sector metrics
         sector_df = pd.DataFrame()
-        sector_df['price'] = group.groupby(level=0)['Close'].mean()
-        sector_df['volatility'] = group.groupby(level=0)['Close'].std()
-        sector_df['volume'] = group.groupby(level=0)['Volume'].sum()
+        sector_df['price'] = group.groupby(level=0)['close'].mean()
+        sector_df['volatility'] = group.groupby(level=0)['close'].std()
+        sector_df['volume'] = group.groupby(level=0)['volume'].sum()
         
         # Calculate returns
         sector_df['returns_1d'] = sector_df['price'].pct_change()
@@ -52,6 +52,9 @@ def calculate_sector_performance(ticker_df: pd.DataFrame, market_features_dir: s
         # Calculate momentum
         sector_df['momentum_5d'] = sector_df['returns_1d'].rolling(window=5).mean()
         sector_df['momentum_20d'] = sector_df['returns_1d'].rolling(window=20).mean()
+        
+        # Calculate relative strength (vs S&P 500)
+        sector_df['relative_strength'] = sector_df['returns_20d'] / sector_df['returns_20d'].rolling(window=20).mean()
         
         # Fill in missing trading days
         sector_df = fill_missing_trading_days(sector_df, ticker_df)

@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 import pandas as pd
-from trading_advisor.data import download_stock_data, normalize_ticker
+from trading_advisor.data import download_stock_data, normalize_ticker, standardize_columns_and_date
 from trading_advisor.analysis import calculate_technical_indicators
 
 logger = logging.getLogger(__name__)
@@ -56,6 +56,9 @@ def update_features(ticker: str, features_dir: str = "data/ticker_features") -> 
     
     # Calculate technical indicators
     df = calculate_technical_indicators(df)
+    
+    # Standardize columns and date before saving
+    df = standardize_columns_and_date(df)
     
     # Save to parquet
     features_path = Path(features_dir) / f"{ticker}_features.parquet"

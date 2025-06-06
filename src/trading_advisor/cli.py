@@ -55,7 +55,7 @@ file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s:
 
 # Terminal handler (RichHandler for pretty output)
 console_handler = RichHandler(rich_tracebacks=True)
-console_handler.setLevel(logging.INFO)
+console_handler.setLevel(logging.ERROR)
 
 # Configure logging
 logging.basicConfig(
@@ -726,7 +726,6 @@ def update_data(
     ),
     days: int = typer.Option(60, help="Number of days of historical data to download"),
     features_dir: str = typer.Option("data/ticker_features", help="Directory to store feature files"),
-    start_date: Optional[str] = typer.Option(None, help="Start date for data collection"),
     update_tickers: bool = typer.Option(
         True,
         "--update-tickers/--no-update-tickers",
@@ -780,7 +779,7 @@ def update_data(
     if update_market:
         logger.info("Updating market features...")
         market_features = MarketFeatures(data_path)
-        market_features.generate_market_features(start_date, days, update_sector_mapping)
+        market_features.generate_market_features(days=days, force_update_sector_mapping=update_sector_mapping)
 
 @app.command()
 def run_model(

@@ -18,28 +18,28 @@ def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Insufficient data points for calculating technical indicators. Need at least 50 days of data.")
 
     # RSI
-    df['RSI'] = ta.momentum.RSIIndicator(df['Close']).rsi()
+    df['rsi'] = ta.momentum.RSIIndicator(df['close']).rsi()
     
     # MACD
-    macd = ta.trend.MACD(df['Close'])
-    df['MACD'] = macd.macd()
-    df['MACD_Signal'] = macd.macd_signal()
-    df['MACD_Hist'] = macd.macd_diff()
+    macd = ta.trend.MACD(df['close'])
+    df['macd'] = macd.macd()
+    df['macd_signal'] = macd.macd_signal()
+    df['macd_hist'] = macd.macd_diff()
     
     # Bollinger Bands
-    bollinger = ta.volatility.BollingerBands(df['Close'])
-    df['BB_Upper'] = bollinger.bollinger_hband()
-    df['BB_Lower'] = bollinger.bollinger_lband()
-    df['BB_Middle'] = bollinger.bollinger_mavg()
-    df['BB_Pband'] = (df['Close'] - df['BB_Lower']) / (df['BB_Upper'] - df['BB_Lower'])
+    bollinger = ta.volatility.BollingerBands(df['close'])
+    df['bb_upper'] = bollinger.bollinger_hband()
+    df['bb_lower'] = bollinger.bollinger_lband()
+    df['bb_middle'] = bollinger.bollinger_mavg()
+    df['bb_pband'] = (df['close'] - df['bb_lower']) / (df['bb_upper'] - df['bb_lower'])
     
     # Moving Averages
-    df['SMA_20'] = ta.trend.sma_indicator(df['Close'], window=20)
-    df['SMA_50'] = ta.trend.sma_indicator(df['Close'], window=50)
-    df['SMA_100'] = ta.trend.sma_indicator(df['Close'], window=100)
-    df['SMA_200'] = ta.trend.sma_indicator(df['Close'], window=200)
-    df['EMA_100'] = ta.trend.ema_indicator(df['Close'], window=100)
-    df['EMA_200'] = ta.trend.ema_indicator(df['Close'], window=200)
+    df['sma_20'] = ta.trend.sma_indicator(df['close'], window=20)
+    df['sma_50'] = ta.trend.sma_indicator(df['close'], window=50)
+    df['sma_100'] = ta.trend.sma_indicator(df['close'], window=100)
+    df['sma_200'] = ta.trend.sma_indicator(df['close'], window=200)
+    df['ema_100'] = ta.trend.ema_indicator(df['close'], window=100)
+    df['ema_200'] = ta.trend.ema_indicator(df['close'], window=200)
     
     return df
 
@@ -72,7 +72,7 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
         score_details = {}
         
         # RSI Score
-        rsi = row.get('RSI', float('nan'))
+        rsi = row.get('rsi', float('nan'))
         if pd.notna(rsi):
             if rsi < 30:
                 score += min(SCORE_WEIGHTS['rsi_oversold'], 2.0)
@@ -86,9 +86,9 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
             score_details['rsi'] = 0.0
             
         # Bollinger Bands Score
-        bb_lower = row.get('BB_Lower', float('nan'))
-        bb_upper = row.get('BB_Upper', float('nan'))
-        bb_pband = row.get('BB_Pband', float('nan'))
+        bb_lower = row.get('bb_lower', float('nan'))
+        bb_upper = row.get('bb_upper', float('nan'))
+        bb_pband = row.get('bb_pband', float('nan'))
         if pd.notna(bb_pband):
             if bb_pband < 0.05:
                 weight = SCORE_WEIGHTS['bollinger_low']
@@ -104,9 +104,9 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
             score_details['bollinger'] = 0.0
             
         # MACD Score
-        macd = row.get('MACD', float('nan'))
-        macd_signal = row.get('MACD_Signal', float('nan'))
-        macd_hist = row.get('MACD_Hist', float('nan'))
+        macd = row.get('macd', float('nan'))
+        macd_signal = row.get('macd_signal', float('nan'))
+        macd_hist = row.get('macd_hist', float('nan'))
         if pd.notna(macd_hist) and pd.notna(macd) and pd.notna(macd_signal):
             if macd_hist > MACD_STRONG_DIVERGENCE and macd > macd_signal:
                 score += min(SCORE_WEIGHTS['macd_strong_divergence'], 2.0)
@@ -123,9 +123,9 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
             score_details['macd'] = 0.0
             
         # Moving Averages Score
-        sma_20 = row.get('SMA_20', float('nan'))
-        sma_50 = row.get('SMA_50', float('nan'))
-        price = row.get('Close', float('nan'))
+        sma_20 = row.get('sma_20', float('nan'))
+        sma_50 = row.get('sma_50', float('nan'))
+        price = row.get('close', float('nan'))
         if pd.notna(price) and pd.notna(sma_20):
             if price > sma_20 * 1.02:
                 weight = SCORE_WEIGHTS.get('sma_strong_above', 2.0)
@@ -192,8 +192,8 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
             return 0.0, {}
         window_df = df_or_row.iloc[-window:]
         row = window_df.mean(numeric_only=True)
-        # For non-numeric columns (e.g., 'Close'), take the last value
-        for col in ['Close', 'Volume', 'SMA_20', 'SMA_50', 'BB_Lower', 'BB_Upper', 'BB_Pband']:
+        # For non-numeric columns (e.g., 'close'), take the last value
+        for col in ['close', 'Volume', 'sma_20', 'sma_50', 'bb_lower', 'bb_upper', 'bb_pband']:
             if col in window_df.columns:
                 row[col] = window_df[col].iloc[-1]
         return score_row(row, analyst_targets)
