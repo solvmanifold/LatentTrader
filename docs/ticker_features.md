@@ -2,6 +2,16 @@
 
 This document provides detailed descriptions of the features computed for individual tickers in the LatentTrader project.
 
+## Directory Structure
+
+All ticker features are stored in the `data/ticker_features/` directory:
+
+```
+data/ticker_features/
+├── {ticker}.parquet              # Individual ticker features
+└── all_tickers.parquet           # Combined dataset
+```
+
 ## Technical Indicators
 
 - **Moving Averages:**
@@ -70,6 +80,53 @@ This document provides detailed descriptions of the features computed for indivi
   - `short_interest_change`: Change in short interest from previous period
     - Formula: Change = (Current - Previous) / Previous
 
-The data is stored in `data/ticker_features/{ticker}.parquet` for individual tickers and `data/ticker_features/all_tickers.parquet` for the combined dataset.
+## Data Validation
+
+All ticker feature files are subject to rigorous validation:
+
+1. **File Validation:**
+   - Consistent naming conventions (lowercase with underscores)
+   - Proper file extensions (.parquet)
+   - Correct directory structure
+
+2. **Column Validation:**
+   - Required columns present
+   - Column naming conventions
+   - Data type consistency
+   - Feature-specific validations
+
+3. **Data Quality Checks:**
+   - Missing value detection
+   - Outlier detection
+   - Data range validation
+   - Consistency across related features
+
+4. **Feature-Specific Validation:**
+   - Technical indicators
+   - Price/volume metrics
+   - Returns calculations
+   - Analyst targets
+   - Short interest data
+
+For detailed information about the validation framework, see `validation.md`.
+
+## Data Update Process
+
+Ticker features are updated using the `update-data` command, which takes a `days` parameter to specify how many days of historical data to download. The system will:
+
+1. Check for existing data and only download new data points
+2. Calculate technical indicators
+3. Compute price/volume metrics
+4. Generate returns and volatility measures
+5. Update analyst targets and short interest data
+6. Run data validation checks:
+   - File naming conventions
+   - Column naming standards
+   - Data type validation
+   - Required column checks
+   - Data quality metrics
+   - Feature consistency validation
+
+The update process is incremental, meaning it will only process new dates that aren't already in the feature files. This ensures efficient updates while maintaining historical data consistency.
 
 Feel free to explore each feature for more detailed information and their significance in trading strategies. 

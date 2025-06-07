@@ -2,6 +2,22 @@
 
 This document provides detailed descriptions of the market-wide features computed in the LatentTrader project.
 
+## Directory Structure
+
+All market features are stored in the `data/market_features/` directory:
+
+```
+data/market_features/
+├── metadata/
+│   └── sector_mapping.parquet    # Ticker -> Sector mapping
+├── daily_breadth.parquet         # Market breadth indicators
+├── market_volatility.parquet     # Market volatility measures
+├── market_sentiment.parquet      # Market sentiment indicators
+├── gdelt_raw.parquet             # Raw GDELT sentiment data
+└── sectors/
+    └── {sector_name}.parquet     # Sector-level metrics
+```
+
 ## Market Breadth
 
 Market breadth indicators are calculated daily and include:
@@ -28,7 +44,7 @@ Market breadth indicators are calculated daily and include:
 - **MACD Indicators:** Percentage of stocks with bullish MACD signals (`daily_breadth_macd_bullish`)
   - Formula: % Bullish = (Count of stocks with positive MACD histogram / Total stocks) × 100
 
-The data is stored in `data/ticker_features/daily_breadth.parquet`
+The data is stored in `data/market_features/daily_breadth.parquet`
 
 ## S&P 500 Data
 
@@ -66,7 +82,7 @@ Each sector's performance is tracked through the following metrics (columns pref
     - Formula: Momentum = SMA(20) of daily returns
 
 The data is stored in the following format:
-- Individual sector files: `data/ticker_features/sectors/{sector_name}.parquet`
+- Individual sector files: `data/market_features/sectors/{sector_name}.parquet`
 
 ## Market Volatility
 
@@ -89,7 +105,7 @@ Market volatility features include:
   - `market_volatility_cross_sectional_vol`: Daily dispersion of returns across all stocks (annualized)
     - Formula: σ = √(252 × Variance of cross-sectional returns)
 
-The data is stored in `data/ticker_features/market_volatility.parquet`
+The data is stored in `data/market_features/market_volatility.parquet`
 
 ## Market Sentiment
 
@@ -115,18 +131,10 @@ Market sentiment is derived from GDELT news data and includes the following metr
 Note: The raw daily GDELT sentiment score is not included as a feature because it is highly noisy and subject to significant day-to-day fluctuations. Instead, moving averages, momentum, and volatility measures are used to provide more robust and stable indicators of market sentiment, which are generally more useful for modeling and analysis.
 
 The data is stored in two formats:
-1. Raw GDELT data: `data/ticker_features/gdelt_raw.parquet`
-2. Processed sentiment features: `data/ticker_features/market_sentiment.parquet`
+1. Raw GDELT data: `data/market_features/gdelt_raw.parquet`
+2. Processed sentiment features: `data/market_features/market_sentiment.parquet`
 
 Note: Put/Call ratios, short interest trends, and analyst sentiment aggregation are planned for future implementation.
-
-Feel free to explore each feature for more detailed information and their significance in market analysis. 
-
----
-
-## Note on Data Availability and Modeling
-
-Due to data source lags (e.g., VIX, S&P 500, GDELT sentiment), the most recent row in some market feature tables may be missing or contain NaN values. This typically occurs when the latest data is not yet published or available at the time of update. For modeling and stock selection, always use the last available non-NaN row for each feature table to ensure your models are using valid, up-to-date information.
 
 ## Data Update Process
 
@@ -137,8 +145,44 @@ Market features are updated using the `update-data` command, which takes a `days
 3. Calculate sector performance metrics
 4. Update market sentiment using GDELT data
 5. Compute market volatility measures
+6. Run data validation checks:
+   - File naming conventions
+   - Column naming standards
+   - Data type validation
+   - Required column checks
+   - Data quality metrics
+   - Feature consistency validation
 
 The update process is incremental, meaning it will only process new dates that aren't already in the feature files. This ensures efficient updates while maintaining historical data consistency.
+
+## Data Validation
+
+All market feature files are subject to rigorous validation:
+
+1. **File Validation:**
+   - Consistent naming conventions (lowercase with underscores)
+   - Proper file extensions (.parquet)
+   - Correct directory structure
+
+2. **Column Validation:**
+   - Required columns present
+   - Column naming conventions
+   - Data type consistency
+   - Feature-specific validations
+
+3. **Data Quality Checks:**
+   - Missing value detection
+   - Outlier detection
+   - Data range validation
+   - Consistency across related features
+
+4. **Feature-Specific Validation:**
+   - Market breadth indicators
+   - Sector performance metrics
+   - Volatility measures
+   - Sentiment indicators
+
+For detailed information about the validation framework, see `validation.md`.
 
 ## Date Handling
 

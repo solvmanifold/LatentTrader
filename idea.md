@@ -93,11 +93,17 @@ data/market_features/
   - Enable consistent normalization for new predictions
   - Support incremental updates with existing normalization
 
-- **Normalization Storage**
-  - Store normalization stats per feature type
-  - Include metadata about normalization method
-  - Version control for normalization parameters
-  - Support for different normalization strategies
+- **Implementation Tasks**
+  - [ ] Move normalization to dataset generation
+  - [ ] Create normalization statistics storage
+  - [ ] Implement normalization for new predictions
+  - [ ] Add validation for normalization consistency
+  - [ ] Create migration script for existing datasets
+  - [ ] Add support for different normalization strategies
+  - [ ] Implement normalization versioning
+  - [ ] Document feature normalization dependencies
+  - [ ] Add data quality checks for normalization
+  - [ ] Create normalization monitoring system
 
 ### 3. Dataset Generation Enhancement
 - **Feature Collection**
@@ -125,20 +131,28 @@ data/market_features/
 
 ### Implementation Plan
 
-1. **Data Standardization** (Priority: High)
+1. **Phase 1: Data Standardization** ✅
+   - [x] Create new data structure
+   - [x] Write migration scripts
+   - [x] Test with subset of data
+   - [x] Full data migration
    - [x] Update `update-data` to enforce naming conventions
    - [x] Add column name standardization
    - [x] Implement consistent date column handling
    - [x] Add validation for file and column names
    - [x] Create data validation framework
-   - [ ] Integrate validation into data pipeline:
-     - Add validation during data loading
-     - Add validation before processing
-     - Add validation before storage
-     - Add validation during updates
-   - [ ] Establish data quality metrics and monitoring
+   - [x] Integrate validation into data pipeline:
+     - [x] Add validation during data loading
+     - [x] Add validation before processing
+     - [x] Add validation before storage
+     - [x] Add validation during updates
+   - [x] Establish data quality metrics and monitoring
 
-2. **Feature Normalization** (Priority: High)
+2. **Phase 2: Feature Normalization** (In Progress)
+   - [ ] Implement new normalization
+   - [ ] Create statistics storage
+   - [ ] Test with existing models
+   - [ ] Update prediction pipeline
    - [ ] Move normalization to dataset generation
    - [ ] Create normalization statistics storage
    - [ ] Implement normalization for new predictions
@@ -150,7 +164,11 @@ data/market_features/
    - [ ] Add data quality checks for normalization
    - [ ] Create normalization monitoring system
 
-3. **Dataset Generation Enhancement** (Priority: High)
+3. **Phase 3: Dataset Generation** (Next Up)
+   - [ ] Update feature collection
+   - [ ] Implement single-row support
+   - [ ] Test with existing models
+   - [ ] Update documentation
    - [ ] Update feature collection interface
    - [ ] Implement single-row prediction support
    - [ ] Add feature validation and error handling
@@ -161,7 +179,7 @@ data/market_features/
    - [ ] Create feature quality metrics
    - [ ] Implement automated feature validation
 
-4. **Prediction Pipeline** (Priority: High)
+4. **Phase 4: Prediction Pipeline**
    - [ ] Create unified prediction interface
    - [ ] Implement feature validation in predictions
    - [ ] Add support for feature imputation
@@ -170,132 +188,50 @@ data/market_features/
    - [ ] Add support for batch predictions
    - [ ] Create prediction validation system
 
-### Migration Strategy
-1. **Phase 1: Data Standardization**
-   - Create new data structure
-   - Write migration scripts
-   - Test with subset of data
-   - Full data migration
-
-2. **Phase 2: Feature Normalization**
-   - Implement new normalization
-   - Create statistics storage
-   - Test with existing models
-   - Update prediction pipeline
-
-3. **Phase 3: Dataset Generation**
-   - Update feature collection
-   - Implement single-row support
-   - Test with existing models
-   - Update documentation
-
-## Progress and Next Steps
-
-### ✅ Completed
-1. **Data Layer**
-   - Market data collection and storage
-   - Market breadth indicators
-   - Sector performance analysis
-   - Sentiment analysis (GDELT)
-   - Incremental updates for market features
-   - Feature mapping and preprocessing
-   - ML dataset generation with time-series splits
-   - **Data standardization:**
-     - Enforced naming conventions for files and columns
-     - Standardized all column names to lowercase with underscores
-     - Ensured consistent date column handling and normalization
-     - Added robust tests for future data handling and lagged columns
-     - Fixed lagged column calculation to be robust and consistent
-
-2. **Model Layer (Basic Infrastructure)**
-   - Model interface definition
-   - Model registry structure
-   - Model output storage
-   - Basic model runner implementation
-   - Initial logistic regression model implementation
-
-3. **Reporting Layer**
-   - Daily Markdown reports
-   - Historical tracking in Parquet
-   - Report generation from model outputs
-
-4. **CLI Implementation**
-   - `update-data` for feature updates
-   - `run-model` for model execution
-   - `report-daily` for report generation
-   - `prompt-daily` for prompt generation
-   - `generate-dataset` for ML datasets
-
-### 🚧 Implementation Plan
-
-1. **Dataset Generation Optimization** (Priority: High)
-   - [ ] Fix progress bar to show progress across all splits
-   - [ ] Implement dynamic dataset generation during training
-   - [ ] Add memory-efficient batch processing
-   - [ ] Implement feature caching for frequently used features
-   - [ ] Add parallel processing for feature generation
-   - [ ] Create dataset validation and quality checks
-
-2. **Model Training Scripts** (Priority: High)
+5. **Phase 5: Model Training Enhancement**
    - [ ] Enhance `train_logistic2.py`:
-     - Add hyperparameter tuning
-     - Implement cross-validation
-     - Add early stopping
-     - Improve logging and visualization
+     - [ ] Add hyperparameter tuning
+     - [ ] Implement cross-validation
+     - [ ] Add early stopping
+     - [ ] Improve logging and visualization
    - [ ] Create `train_ensemble.py`:
-     - Implement bagging/boosting
-     - Add model stacking
-     - Support multiple base models
-   - [ ] Add model evaluation scripts:
-     - Performance metrics
-     - Feature importance analysis
-     - Confusion matrix generation
-   - [ ] Create model management utilities:
-     - Model versioning
-     - Model comparison
-     - Model deployment
+     - [ ] Implement bagging/boosting
+     - [ ] Add model stacking
+     - [ ] Support multiple base models
+   - [ ] Add model evaluation:
+     - [ ] Performance metrics
+     - [ ] Feature importance analysis
+     - [ ] Confusion matrix generation
+   - [ ] Create model management:
+     - [ ] Model versioning
+     - [ ] Model comparison
+     - [ ] Model deployment
 
-3. **Codebase Cleanup** (Priority: Medium)
-   - [ ] Remove unused files:
-     - Old technical scorer outputs
-     - Deprecated model files
-     - Unused scripts
-   - [ ] Standardize file organization:
-     - Consistent directory structure
-     - Clear naming conventions
-     - Proper module organization
+6. **Phase 6: Testing and Validation**
+   - [ ] Expand test coverage:
+     - [ ] Add unit tests for new functionality
+     - [ ] Implement integration tests
+     - [ ] Add performance benchmarks
+   - [ ] Create validation datasets:
+     - [ ] Implement cross-validation framework
+     - [ ] Add data quality checks
+     - [ ] Create validation reports
+
+7. **Phase 7: Documentation and Examples**
    - [ ] Update documentation:
-     - Code comments
-     - Function docstrings
-     - README updates
-     - Usage examples
-
-4. **Model Improvements** (Priority: Medium)
-   - [ ] Implement model versioning
-   - [ ] Add model performance tracking
-   - [ ] Create model comparison tools
-   - [ ] Add ensemble model support
-   - [ ] Implement parameter sweep functionality
-
-5. **Testing and Validation** (Priority: High)
-   - [ ] Add unit tests for new functionality
-   - [ ] Implement integration tests
-   - [ ] Add performance benchmarks
-   - [ ] Create validation datasets
-   - [ ] Implement cross-validation framework
-
-6. **Documentation and Examples** (Priority: Medium)
-   - [ ] Update README with new features
-   - [ ] Create usage examples
-   - [ ] Add API documentation
-   - [ ] Create tutorial notebooks
-   - [ ] Document best practices
+     - [ ] Code comments
+     - [ ] Function docstrings
+     - [ ] README updates
+   - [ ] Create examples:
+     - [ ] Usage examples
+     - [ ] Tutorial notebooks
+     - [ ] Best practices guide
 
 ### Timeline
-- **Week 1**: Dataset Generation Optimization & Model Training Scripts
-- **Week 2**: Codebase Cleanup & Model Improvements
-- **Week 3**: Testing and Validation
-- **Week 4**: Documentation and Examples
+- **Week 1**: Complete Phase 2 (Feature Normalization)
+- **Week 2**: Complete Phase 3 (Dataset Generation)
+- **Week 3**: Complete Phase 4 (Prediction Pipeline) & Phase 5 (Model Training)
+- **Week 4**: Complete Phase 6 (Testing) & Phase 7 (Documentation)
 
 ---
 
