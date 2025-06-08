@@ -154,6 +154,13 @@ class MarketFeatures:
                     progress.update(task, advance=1)
                     continue
                 df = pd.read_parquet(features_path)
+                # Ensure date is the index
+                if not isinstance(df.index, pd.DatetimeIndex):
+                    if 'Date' in df.columns:
+                        df = df.set_index('Date')
+                    elif 'date' in df.columns:
+                        df = df.set_index('date')
+                df.index = pd.to_datetime(df.index).normalize()
                 df['ticker'] = ticker
                 df['sector'] = sector_mapping.get(ticker, 'Unknown')
                 ticker_df = pd.concat([ticker_df, df])
@@ -166,12 +173,18 @@ class MarketFeatures:
         # Generate market breadth
         logger.info("Starting market breadth generation...")
         breadth_df = calculate_market_breadth(ticker_df)
-        breadth_df = standardize_columns_and_date(breadth_df, source_prefix="daily_breadth")
+        breadth_df = standardize_columns_and_date(breadth_df)
         breadth_path = self.market_features_dir / "daily_breadth.parquet"
         
         # Update breadth data
         if breadth_path.exists():
             existing_breadth = pd.read_parquet(breadth_path)
+            if not isinstance(existing_breadth.index, pd.DatetimeIndex):
+                if 'Date' in existing_breadth.columns:
+                    existing_breadth = existing_breadth.set_index('Date')
+                elif 'date' in existing_breadth.columns:
+                    existing_breadth = existing_breadth.set_index('date')
+            existing_breadth.index = pd.to_datetime(existing_breadth.index).normalize()
             latest_dates = breadth_df.index.difference(existing_breadth.index)
             if not latest_dates.empty:
                 combined_df = pd.concat([existing_breadth, breadth_df.loc[latest_dates]])
@@ -191,7 +204,7 @@ class MarketFeatures:
         sectors_dir.mkdir(exist_ok=True)
         for sector, df in sector_dfs.items():
             if sector != 'all_sectors':  # Skip the combined file
-                df = standardize_columns_and_date(df, source_prefix=sector.lower().replace(' ', '_'))
+                df = standardize_columns_and_date(df)
                 sector_path = sectors_dir / f"{sector.lower().replace(' ', '_')}.parquet"
                 df.to_parquet(sector_path)
                 logger.info(f"Saved sector performance for {sector}")
@@ -207,7 +220,7 @@ class MarketFeatures:
         # Generate market volatility
         logger.info("Starting market volatility generation...")
         volatility_df = MarketVolatility(self.data_dir).generate_volatility_features(ticker_df)
-        volatility_df = standardize_columns_and_date(volatility_df, source_prefix="market_volatility")
+        volatility_df = standardize_columns_and_date(volatility_df)
         volatility_path = self.market_features_dir / "market_volatility.parquet"
         volatility_df.to_parquet(volatility_path)
         logger.info("Saved market volatility")
