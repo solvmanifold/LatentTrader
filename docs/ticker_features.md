@@ -80,6 +80,34 @@ data/ticker_features/
   - `short_interest_change`: Change in short interest from previous period
     - Formula: Change = (Current - Previous) / Previous
 
+## Data Structure
+
+All ticker feature files follow these structural requirements:
+
+1. **Date Indexing:**
+   - All data must be indexed by date using a DatetimeIndex
+   - No duplicate date columns are allowed
+   - Dates are normalized (time set to midnight)
+   - Missing trading days are filled with NaN values to preserve data integrity
+
+2. **Column Naming:**
+   - All column names are lowercase with underscores
+   - No spaces or special characters allowed
+   - Feature-specific prefixes are used where appropriate
+
+3. **Handling Missing Trading Days:**
+   - Missing trading days are preserved as NaN values in the raw data
+   - When forward filling is needed for analysis:
+     - Use `df.ffill()` for price data
+     - Use `df.ffill(limit=1)` for returns data to prevent artificial smoothing
+     - Use `df.ffill(limit=5)` for sentiment data to maintain recent context
+   - Always document when forward filling is applied
+   - Consider the impact of forward filling on your analysis:
+     - Price data: Forward filling is generally acceptable
+     - Returns data: Forward filling can create false patterns
+     - Volume data: Forward filling is not recommended
+     - Sentiment data: Forward filling should be limited to recent context
+
 ## Data Validation
 
 All ticker feature files are subject to rigorous validation:
@@ -88,12 +116,14 @@ All ticker feature files are subject to rigorous validation:
    - Consistent naming conventions (lowercase with underscores)
    - Proper file extensions (.parquet)
    - Correct directory structure
+   - Proper date indexing (DatetimeIndex, no duplicate date columns)
 
 2. **Column Validation:**
    - Required columns present
    - Column naming conventions
    - Data type consistency
    - Feature-specific validations
+   - No duplicate date columns
 
 3. **Data Quality Checks:**
    - Missing value detection

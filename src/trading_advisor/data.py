@@ -85,15 +85,16 @@ def normalize_ticker(ticker: str) -> str:
 def get_features_path(ticker, features_dir="data/ticker_features"):
     return Path(features_dir) / f"{ticker}_features.parquet"
 
-def fill_missing_trading_days(df: pd.DataFrame, reference_df: pd.DataFrame) -> pd.DataFrame:
+def fill_missing_trading_days(df: pd.DataFrame, reference_df: pd.DataFrame, data_type: str = 'price') -> pd.DataFrame:
     """Fill in missing trading days in the DataFrame based on the reference DataFrame.
     
     Args:
         df: DataFrame to fill missing trading days in.
         reference_df: Reference DataFrame with the set of trading days.
+        data_type: Type of data being filled ('price', 'returns', 'volume', or 'sentiment').
         
     Returns:
-        DataFrame with missing trading days filled in.
+        DataFrame with missing trading days filled in according to data type rules.
     """
     if df.empty or reference_df.empty:
         return df
@@ -113,6 +114,18 @@ def fill_missing_trading_days(df: pd.DataFrame, reference_df: pd.DataFrame) -> p
     # Combine the original DataFrame with the missing days DataFrame
     filled_df = pd.concat([df, missing_df])
     filled_df = filled_df.sort_index()
+    
+    # Apply appropriate forward filling based on data type
+    if data_type == 'price':
+        # Forward fill price data
+        filled_df = filled_df.ffill()
+    elif data_type == 'returns':
+        # Forward fill returns data with limit=1 to prevent artificial smoothing
+        filled_df = filled_df.ffill(limit=1)
+    elif data_type == 'sentiment':
+        # Forward fill sentiment data with limit=5 to maintain recent context
+        filled_df = filled_df.ffill(limit=5)
+    # For volume data, we don't forward fill (keep NaN values)
     
     return filled_df
 
@@ -176,6 +189,22 @@ def download_stock_data(
                 new_df.index = pd.to_datetime(new_df.index).tz_localize(None).normalize()
                 # Standardize column names to lowercase immediately after download
                 new_df.columns = [c.lower() for c in new_df.columns]
+                
+                # Ensure required columns exist
+                required_cols = ['open', 'high', 'low', 'close', 'volume']
+                missing_cols = [col for col in required_cols if col not in new_df.columns]
+                if missing_cols:
+                    logger.error(f"Missing required columns for {ticker}: {missing_cols}")
+                    raise ValueError(f"Missing required columns: {missing_cols}")
+                
+                # Handle adj_close column (optional)
+                if 'adj close' in new_df.columns:
+                    new_df['adj_close'] = new_df['adj close']
+                    new_df = new_df.drop(columns=['adj close'])
+                elif 'adj_close' not in new_df.columns:
+                    # If adj_close is missing, use close price
+                    new_df['adj_close'] = new_df['close']
+                
                 # Only keep truly new rows
                 if not df.empty:
                     new_rows = new_df[~new_df.index.isin(df.index)]
@@ -184,6 +213,7 @@ def download_stock_data(
                 if new_rows.empty:
                     logger.info(f"No new rows to append for {ticker}. Data is already up to date.")
                     return df
+                
                 # Merge with existing data
                 merged_df = pd.concat([df, new_rows])
                 # Set columns to canonical list from new_rows, then deduplicate
@@ -192,6 +222,24 @@ def download_stock_data(
                 merged_df = merged_df[~merged_df.index.duplicated(keep='last')]
                 merged_df = merged_df.sort_index()
                 logger.info(f"Appended {len(new_rows)} new rows for {ticker} (now {len(merged_df)} total rows).")
+                
+                # Handle missing trading days for different data types
+                # Price data: Forward fill
+                price_cols = ['open', 'high', 'low', 'close', 'adj_close']
+                price_df = merged_df[price_cols].copy()
+                price_df = fill_missing_trading_days(price_df, merged_df, data_type='price')
+                
+                # Volume data: Keep NaN values
+                volume_cols = ['volume']
+                volume_df = merged_df[volume_cols].copy()
+                volume_df = fill_missing_trading_days(volume_df, merged_df, data_type='volume')
+                
+                # Returns data: Forward fill with limit=1
+                returns_cols = [col for col in merged_df.columns if 'returns' in col]
+                if returns_cols:
+                    returns_df = merged_df[returns_cols].copy()
+                    returns_df = fill_missing_trading_days(returns_df, merged_df, data_type='returns')
+                
                 # Drop all technical indicator columns before recalculating
                 indicator_cols = [
                     'rsi', 'macd', 'macd_signal', 'macd_hist',
@@ -200,8 +248,10 @@ def download_stock_data(
                     'ema_100', 'ema_200'
                 ]
                 merged_df = merged_df.drop(columns=[col for col in indicator_cols if col in merged_df.columns], errors='ignore')
+                
                 # Recalculate technical indicators
                 merged_df = calculate_technical_indicators(merged_df)
+                
                 # Final deduplication to be safe
                 merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
                 
@@ -373,51 +423,190 @@ def load_ticker_features(tickers: List[str], features_dir: str) -> pd.DataFrame:
     
     return combined_df 
 
-def standardize_columns_and_date(df: pd.DataFrame, source_prefix: str = None) -> pd.DataFrame:
-    """
-    Standardize DataFrame columns to lowercase with underscores, no spaces, and ensure a 'date' column exists.
-    Optionally prefix columns with a source name (for market features).
-    """
-    def clean_col(col):
-        # Convert to string and lowercase
-        col = str(col).lower()
-        # Replace spaces and special characters with underscores
-        col = re.sub(r'[^a-z0-9]+', '_', col)
-        # Remove leading/trailing underscores
-        col = col.strip('_')
-        return col
+def standardize_columns_and_date(df: pd.DataFrame) -> pd.DataFrame:
+    """Standardize DataFrame columns and date handling.
     
-    # Create a copy to avoid modifying the original
-    df = df.copy()
-    
+    Args:
+        df: Input DataFrame
+        
+    Returns:
+        DataFrame with standardized columns and date index
+    """
     # Handle date column first
-    if isinstance(df.index, pd.DatetimeIndex):
-        df['date'] = df.index
+    if 'date' in df.columns:
+        df = df.set_index('date')
     elif 'Date' in df.columns:
-        df = df.rename(columns={'Date': 'date'})
-    elif 'date' not in df.columns:
+        df = df.set_index('Date')
+    elif not isinstance(df.index, pd.DatetimeIndex):
         raise ValueError("DataFrame must have either a DatetimeIndex or a 'date'/'Date' column")
     
-    # Standardize all column names
-    cols = df.columns.tolist()
-    new_cols = []
-    for col in cols:
-        if col == 'date':
-            new_cols.append('date')
-            continue
-        base = clean_col(col)
-        if source_prefix and not base.startswith(source_prefix + '_'):
-            base = f"{source_prefix}_{base}"
-        new_cols.append(base)
+    # Drop any other date columns
+    date_cols = [col for col in df.columns if col.lower() in ['date', 'dates', 'datetime', 'timestamp']]
+    if date_cols:
+        df = df.drop(columns=date_cols)
     
-    df.columns = new_cols
+    # Standardize column names
+    df.columns = [col.lower().replace(' ', '_') for col in df.columns]
     
-    # Ensure date column is datetime and normalized
-    df['date'] = pd.to_datetime(df['date']).dt.normalize()
+    # Ensure index is DatetimeIndex
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index)
     
-    # Reorder so 'date' is first
-    cols = df.columns.tolist()
-    cols.insert(0, cols.pop(cols.index('date')))
-    df = df[cols]
+    # Normalize dates (set time to midnight)
+    df.index = df.index.normalize()
     
-    return df 
+    return df
+
+def calculate_market_features(
+    tickers: List[str],
+    days: int = LOOKBACK_DAYS,
+    features_dir: str = "data/market_features",
+    start_date: pd.Timestamp = None,
+    end_date: pd.Timestamp = None
+) -> pd.DataFrame:
+    """Calculate market-wide features from ticker data."""
+    features_dir = Path(features_dir)
+    features_dir.mkdir(exist_ok=True)
+    features_path = features_dir / "market_features.parquet"
+    
+    # Try to load existing data first
+    df = pd.DataFrame()
+    if features_path.exists():
+        try:
+            df = pd.read_parquet(features_path)
+            if not df.empty:
+                df.index = pd.to_datetime(df.index).normalize()
+        except Exception as e:
+            logger.warning(f"Error reading {features_path}: {e}")
+    
+    # Calculate date range for new data
+    if end_date is not None:
+        fetch_end = pd.to_datetime(end_date).normalize()
+    else:
+        fetch_end = pd.Timestamp.today().normalize()
+    if not df.empty:
+        last_date = df.index.max().normalize()
+        fetch_start = last_date + pd.Timedelta(days=1)
+    else:
+        if start_date is not None:
+            fetch_start = pd.to_datetime(start_date).normalize()
+        else:
+            fetch_start = fetch_end - pd.Timedelta(days=days)
+    
+    # If we have data and it's up to date, return it
+    if not df.empty and fetch_start > fetch_end:
+        logger.info(f"No new market data to calculate. Data is up to date through {df.index.max().date()}.")
+        return df
+    
+    # Download data for all tickers
+    ticker_data = {}
+    for ticker in tickers:
+        ticker_df = download_stock_data(
+            ticker,
+            history_days=days,
+            features_dir="data/ticker_features",
+            start_date=fetch_start,
+            end_date=fetch_end
+        )
+        if not ticker_df.empty:
+            ticker_data[ticker] = ticker_df
+    
+    if not ticker_data:
+        logger.warning("No ticker data available for market feature calculation.")
+        return df
+    
+    # Calculate market features
+    market_features = {}
+    
+    # Market breadth indicators
+    market_features['advancing_stocks'] = calculate_advancing_stocks(ticker_data)
+    market_features['declining_stocks'] = calculate_declining_stocks(ticker_data)
+    market_features['adv_dec_ratio'] = calculate_adv_dec_ratio(ticker_data)
+    market_features['new_highs'] = calculate_new_highs(ticker_data)
+    market_features['new_lows'] = calculate_new_lows(ticker_data)
+    market_features['high_low_ratio'] = calculate_high_low_ratio(ticker_data)
+    
+    # S&P 500 data
+    sp500_data = download_stock_data(
+        '^GSPC',
+        history_days=days,
+        features_dir="data/ticker_features",
+        start_date=fetch_start,
+        end_date=fetch_end
+    )
+    if not sp500_data.empty:
+        market_features['sp500_close'] = sp500_data['close']
+        market_features['sp500_volume'] = sp500_data['volume']
+        market_features['sp500_returns'] = sp500_data['returns']
+    
+    # Sector performance
+    sector_performance = calculate_sector_performance(ticker_data)
+    market_features.update(sector_performance)
+    
+    # Market volatility
+    market_features['market_volatility'] = calculate_market_volatility(ticker_data)
+    
+    # Market sentiment
+    market_features['market_sentiment'] = calculate_market_sentiment(ticker_data)
+    
+    # Create DataFrame from market features
+    new_df = pd.DataFrame(market_features)
+    new_df.index = pd.to_datetime(new_df.index).normalize()
+    
+    # Handle missing trading days for different data types
+    # Price data: Forward fill
+    price_cols = ['sp500_close']
+    price_df = new_df[price_cols].copy()
+    price_df = fill_missing_trading_days(price_df, new_df, data_type='price')
+    
+    # Volume data: Keep NaN values
+    volume_cols = ['sp500_volume']
+    volume_df = new_df[volume_cols].copy()
+    volume_df = fill_missing_trading_days(volume_df, new_df, data_type='volume')
+    
+    # Returns data: Forward fill with limit=1
+    returns_cols = ['sp500_returns']
+    returns_df = new_df[returns_cols].copy()
+    returns_df = fill_missing_trading_days(returns_df, new_df, data_type='returns')
+    
+    # Sentiment data: Forward fill with limit=5
+    sentiment_cols = ['market_sentiment']
+    sentiment_df = new_df[sentiment_cols].copy()
+    sentiment_df = fill_missing_trading_days(sentiment_df, new_df, data_type='sentiment')
+    
+    # Market breadth indicators: Keep NaN values
+    breadth_cols = [
+        'advancing_stocks', 'declining_stocks', 'adv_dec_ratio',
+        'new_highs', 'new_lows', 'high_low_ratio'
+    ]
+    breadth_df = new_df[breadth_cols].copy()
+    breadth_df = fill_missing_trading_days(breadth_df, new_df, data_type='volume')
+    
+    # Sector performance: Keep NaN values
+    sector_cols = [col for col in new_df.columns if col.startswith('sector_')]
+    sector_df = new_df[sector_cols].copy()
+    sector_df = fill_missing_trading_days(sector_df, new_df, data_type='volume')
+    
+    # Market volatility: Keep NaN values
+    volatility_cols = ['market_volatility']
+    volatility_df = new_df[volatility_cols].copy()
+    volatility_df = fill_missing_trading_days(volatility_df, new_df, data_type='volume')
+    
+    # Merge all dataframes
+    new_df = pd.concat([
+        price_df, volume_df, returns_df, sentiment_df,
+        breadth_df, sector_df, volatility_df
+    ], axis=1)
+    
+    # Merge with existing data
+    if not df.empty:
+        merged_df = pd.concat([df, new_df])
+        merged_df = merged_df[~merged_df.index.duplicated(keep='last')]
+        merged_df = merged_df.sort_index()
+    else:
+        merged_df = new_df
+    
+    # Save to parquet
+    merged_df.to_parquet(features_path)
+    
+    return merged_df 

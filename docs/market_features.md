@@ -188,18 +188,34 @@ For detailed information about the validation framework, see `validation.md`.
 
 All market feature files follow a consistent date handling approach:
 
-1. **Date Storage:**
-   - Dates are stored either as a DatetimeIndex (preferred) or as a 'date' column
-   - All dates are normalized (time set to midnight)
-   - The date column is always placed first in the column order
+1. **Date Indexing:**
+   - All data must be indexed by date using a DatetimeIndex
+   - No duplicate date columns are allowed
+   - Dates are normalized (time set to midnight)
+   - Missing trading days are filled with NaN values to preserve data integrity
 
 2. **Date Format:**
    - All dates are stored in YYYY-MM-DD format
    - No timezone information is included
    - Missing trading days are filled with NaN values
 
-3. **Date Alignment:**
-   - When combining features from different sources, dates are aligned using the nearest available date
-   - For market features, if a specific date is not available, the system uses the most recent available date
+3. **Data Validation:**
+   - Files must have a DatetimeIndex
+   - No duplicate date columns allowed
+   - Dates must be properly normalized
+   - Missing trading days must be properly handled with NaN values
+
+4. **Handling Missing Trading Days:**
+   - Missing trading days are preserved as NaN values in the raw data
+   - When forward filling is needed for analysis:
+     - Use `df.ffill()` for price data
+     - Use `df.ffill(limit=1)` for returns data to prevent artificial smoothing
+     - Use `df.ffill(limit=5)` for sentiment data to maintain recent context
+   - Always document when forward filling is applied
+   - Consider the impact of forward filling on your analysis:
+     - Price data: Forward filling is generally acceptable
+     - Returns data: Forward filling can create false patterns
+     - Volume data: Forward filling is not recommended
+     - Sentiment data: Forward filling should be limited to recent context
 
 This standardized date handling ensures consistent data alignment across all market features and simplifies the process of combining different feature sets for analysis. 

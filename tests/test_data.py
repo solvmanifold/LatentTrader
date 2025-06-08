@@ -24,7 +24,7 @@ class TestDataDownload(unittest.TestCase):
         ticker = "AAPL"
         df = download_stock_data(ticker, features_dir=self.features_dir)
         # Ensure columns are standardized (lowercase) before any further processing
-        df = standardize_columns_and_date(df)
+        df = standardize_columns_and_date(df, keep_date_column=True)
         self.assertFalse(df.empty)
         self.assertTrue((self.features_dir / f"{ticker}_features.parquet").exists())
 
@@ -34,7 +34,7 @@ class TestDataDownload(unittest.TestCase):
         # Use a smaller window for testing (50 days instead of 200)
         df = download_stock_data(ticker, features_dir=self.features_dir, history_days=100)
         # Ensure columns are standardized (lowercase) before any further processing
-        df = standardize_columns_and_date(df)
+        df = standardize_columns_and_date(df, keep_date_column=True)
         self.assertFalse(df.empty)
         
         # Check that we have enough data
@@ -63,7 +63,7 @@ class TestDataDownload(unittest.TestCase):
         # First download with enough history for technical indicators
         df1 = download_stock_data(ticker, features_dir=self.features_dir, history_days=100, features_filename=features_filename)
         # Ensure columns are standardized (lowercase) before any further processing
-        df1 = standardize_columns_and_date(df1)
+        df1 = standardize_columns_and_date(df1, keep_date_column=True)
         self.assertFalse(df1.empty)
         
         # Get the last 3 dates from the actual data
@@ -77,7 +77,7 @@ class TestDataDownload(unittest.TestCase):
         # Download again with fewer retries
         df2 = download_stock_data(ticker, features_dir=self.features_dir, max_retries=1, features_filename=features_filename)
         # Ensure columns are standardized (lowercase) before any further processing
-        df2 = standardize_columns_and_date(df2)
+        df2 = standardize_columns_and_date(df2, keep_date_column=True)
         
         # Only compare raw columns
         raw_cols = [col for col in ['date', 'open', 'high', 'low', 'close', 'volume', 'dividends', 'stock_splits'] if col in df1.columns]
@@ -94,7 +94,7 @@ class TestDataDownload(unittest.TestCase):
         ticker = "AAPL"
         df = download_stock_data(ticker, features_dir=self.features_dir)
         # Ensure we have the required columns in lowercase
-        df = standardize_columns_and_date(df)
+        df = standardize_columns_and_date(df, keep_date_column=True)
         breadth_df = calculate_market_breadth(df)
         self.assertFalse(breadth_df.empty)
         # Verify we have the expected breadth indicators
@@ -108,7 +108,7 @@ class TestDataDownload(unittest.TestCase):
         ticker = "AAPL"
         df = download_stock_data(ticker, features_dir=self.features_dir)
         # Ensure we have the required columns in lowercase
-        df = standardize_columns_and_date(df)
+        df = standardize_columns_and_date(df, keep_date_column=True)
         df['sector'] = 'Technology'  # Ensure 'sector' column exists
         sector_dfs = calculate_sector_performance(df, self.features_dir)
         self.assertIn('all_sectors', sector_dfs)
@@ -139,7 +139,7 @@ class TestDataDownload(unittest.TestCase):
         ticker = "AAPL"
         df = download_stock_data(ticker, features_dir=self.features_dir)
         # Ensure columns are standardized (lowercase) before any further processing
-        df = standardize_columns_and_date(df)
+        df = standardize_columns_and_date(df, keep_date_column=True)
         df['ticker'] = ticker  # Ensure 'ticker' column exists for volatility calculation
         volatility = MarketVolatility(Path(self.temp_dir))
         volatility_df = volatility.generate_volatility_features(df)
@@ -154,16 +154,16 @@ class TestDataDownload(unittest.TestCase):
             'Volume (Shares)': [1000, 2000, 3000, 4000, 5000]
         })
         
-        # Test without source prefix
-        standardized_df = standardize_columns_and_date(df)
+        # Test without source prefix, keeping date column
+        standardized_df = standardize_columns_and_date(df, keep_date_column=True)
         self.assertIn('date', standardized_df.columns)
         self.assertIn('open_price', standardized_df.columns)
         self.assertIn('close_price', standardized_df.columns)
         self.assertIn('volume_shares', standardized_df.columns)
         self.assertEqual(standardized_df.columns[0], 'date')
         
-        # Test with source prefix
-        standardized_df = standardize_columns_and_date(df, source_prefix='market')
+        # Test with source prefix, keeping date column
+        standardized_df = standardize_columns_and_date(df, source_prefix='market', keep_date_column=True)
         self.assertIn('market_open_price', standardized_df.columns)
         self.assertIn('market_close_price', standardized_df.columns)
         self.assertIn('market_volume_shares', standardized_df.columns)
@@ -171,6 +171,12 @@ class TestDataDownload(unittest.TestCase):
         # Test date handling
         self.assertTrue(pd.api.types.is_datetime64_any_dtype(standardized_df['date']))
         self.assertTrue(all(standardized_df['date'].dt.hour == 0))  # All dates should be normalized
+        
+        # Test without keeping date column
+        standardized_df = standardize_columns_and_date(df)
+        self.assertNotIn('date', standardized_df.columns)
+        self.assertTrue(isinstance(standardized_df.index, pd.DatetimeIndex))
+        self.assertTrue(all(standardized_df.index.hour == 0))  # All dates should be normalized
 
     def test_standardize_columns_with_special_chars(self):
         # Test with special characters in column names
