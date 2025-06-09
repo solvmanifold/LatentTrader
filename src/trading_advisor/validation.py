@@ -310,38 +310,41 @@ class SectorDataValidator(DataValidator):
     
     REQUIRED_COLUMNS = [
         'date',
-        '{sector}_price',
-        '{sector}_volatility',
-        '{sector}_volume',
-        '{sector}_returns_1d',
-        '{sector}_returns_5d',
-        '{sector}_returns_20d',
-        '{sector}_momentum_5d',
-        '{sector}_momentum_20d',
-        '{sector}_relative_strength'
+        '{sector}_sector_performance_price',
+        '{sector}_sector_performance_volatility',
+        '{sector}_sector_performance_volume',
+        '{sector}_sector_performance_returns_1d',
+        '{sector}_sector_performance_returns_5d',
+        '{sector}_sector_performance_returns_20d',
+        '{sector}_sector_performance_momentum_5d',
+        '{sector}_sector_performance_momentum_20d',
+        '{sector}_sector_performance_relative_strength',
+        '{sector}_sector_performance_relative_strength_ratio'
     ]
     
     EXPECTED_TYPES = {
         'date': np.datetime64,
-        '{sector}_price': np.float64,
-        '{sector}_volatility': np.float64,
-        '{sector}_volume': (np.float64, np.int64),  # Allow both float and int for volume
-        '{sector}_returns_1d': np.float64,
-        '{sector}_returns_5d': np.float64,
-        '{sector}_returns_20d': np.float64,
-        '{sector}_momentum_5d': np.float64,
-        '{sector}_momentum_20d': np.float64,
-        '{sector}_relative_strength': np.float64
+        '{sector}_sector_performance_price': np.float64,
+        '{sector}_sector_performance_volatility': np.float64,
+        '{sector}_sector_performance_volume': (np.float64, np.int64),  # Allow both float and int for volume
+        '{sector}_sector_performance_returns_1d': np.float64,
+        '{sector}_sector_performance_returns_5d': np.float64,
+        '{sector}_sector_performance_returns_20d': np.float64,
+        '{sector}_sector_performance_momentum_5d': np.float64,
+        '{sector}_sector_performance_momentum_20d': np.float64,
+        '{sector}_sector_performance_relative_strength': np.float64,
+        '{sector}_sector_performance_relative_strength_ratio': np.float64
     }
     
     # Expected missing values for time series calculations
     EXPECTED_MISSING = {
-        '{sector}_returns_1d': 1,
-        '{sector}_returns_5d': 5,
-        '{sector}_returns_20d': 20,
-        '{sector}_momentum_5d': 5,
-        '{sector}_momentum_20d': 20,
-        '{sector}_relative_strength': 39  # Based on validation results
+        '{sector}_sector_performance_returns_1d': 1,  # First day has no returns
+        '{sector}_sector_performance_returns_5d': 5,  # First 5 days have no 5d returns
+        '{sector}_sector_performance_returns_20d': 20,  # First 20 days have no 20d returns
+        '{sector}_sector_performance_momentum_5d': 5,  # First 5 days have no momentum
+        '{sector}_sector_performance_momentum_20d': 20,  # First 20 days have no momentum
+        '{sector}_sector_performance_relative_strength': 1,  # First day has no relative strength
+        '{sector}_sector_performance_relative_strength_ratio': 5  # First 5 days have no relative strength ratio
     }
     
     def __init__(self, df: pd.DataFrame, sector: str):
@@ -350,36 +353,37 @@ class SectorDataValidator(DataValidator):
         self.sector = sector
     
     def validate(self) -> bool:
-        """Validate sector data."""
-        # Format required columns with sector name
-        required_cols = [col.format(sector=self.sector) for col in self.REQUIRED_COLUMNS]
+        """Validate sector data file."""
+        # Replace sector placeholder in required columns
+        required_columns = [col.format(sector=self.sector) for col in self.REQUIRED_COLUMNS]
         expected_types = {col.format(sector=self.sector): dtype for col, dtype in self.EXPECTED_TYPES.items()}
         expected_missing = {col.format(sector=self.sector): count for col, count in self.EXPECTED_MISSING.items()}
         
-        # Check required columns
-        missing_cols = [col for col in required_cols if col not in self.df.columns]
-        if missing_cols:
-            self.add_error(f"Missing required columns: {', '.join(missing_cols)}")
+        # Validate required columns
+        missing_columns = [col for col in required_columns if col not in self.df.columns]
+        if missing_columns:
+            self.add_error(f"Missing required columns: {', '.join(missing_columns)}")
         
-        # Check data types
+        # Validate data types
         for col, expected_type in expected_types.items():
-            if col in self.df.columns:
-                actual_type = self.df[col].dtype
-                if isinstance(expected_type, tuple):
-                    if not any(np.issubdtype(actual_type, t) for t in expected_type):
-                        self.add_error(f"Column {col} has type {actual_type}, expected one of {expected_type}")
-                elif not np.issubdtype(actual_type, expected_type):
-                    self.add_error(f"Column {col} has type {actual_type}, expected {expected_type}")
+            if col not in self.df.columns:
+                continue
+            
+            actual_type = self.df[col].dtype
+            if isinstance(expected_type, tuple):
+                if not any(np.issubdtype(actual_type, t) for t in expected_type):
+                    self.add_error(f"Column {col} has type {actual_type}, expected one of {expected_type}")
+            elif not np.issubdtype(actual_type, expected_type):
+                self.add_error(f"Column {col} has type {actual_type}, expected {expected_type}")
         
-        # Check for missing values
-        null_counts = self.df.isnull().sum()
-        if null_counts.any():
-            for col in null_counts[null_counts > 0].index:
-                if col in expected_missing:
-                    if null_counts[col] > expected_missing[col]:
-                        self.add_warning(f"Column {col} has {null_counts[col]} missing values, expected at most {expected_missing[col]}")
-                else:
-                    self.add_warning(f"Column {col} has {null_counts[col]} missing values")
+        # Validate missing values
+        for col, expected_count in expected_missing.items():
+            if col not in self.df.columns:
+                continue
+            
+            actual_missing = self.df[col].isnull().sum()
+            if actual_missing > expected_count:
+                self.add_error(f"Column {col} has {actual_missing} missing values, expected at most {expected_count}")
         
         return len(self.errors) == 0
 

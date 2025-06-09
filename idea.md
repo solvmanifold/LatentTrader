@@ -90,7 +90,7 @@ data/market_features/
   - [x] Add `daily_breadth_` prefix to market breadth columns
   - [x] Add `market_volatility_` prefix to volatility columns
   - [x] Add `market_sentiment_` prefix to sentiment columns
-  - [ ] Add sector prefix to sector performance columns
+  - [x] Add sector prefix to sector performance columns
   - [x] Update validation rules to enforce prefixes
 
 - **Implementation Tasks**
