@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 from datetime import datetime
 import json
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
 from trading_advisor.sector_mapping import load_sector_mapping
 
@@ -172,77 +173,86 @@ class DatasetGenerator:
         
         # Load and process data for each ticker
         all_data = []
-        for ticker in tickers:
-            try:
-                # Load ticker features
-                ticker_file = self.ticker_features_dir / f"{ticker}_features.parquet"
-                if not ticker_file.exists():
-                    logger.warning(f"No features found for {ticker}")
-                    continue
-                
-                ticker_data = pd.read_parquet(ticker_file)
-                
-                # Ensure date is the index
-                if not isinstance(ticker_data.index, pd.DatetimeIndex):
-                    if 'Date' in ticker_data.columns:
-                        ticker_data = ticker_data.set_index('Date')
-                    elif 'date' in ticker_data.columns:
-                        ticker_data = ticker_data.set_index('date')
-                    else:
-                        logger.warning(f"No date column found in ticker features for {ticker}")
+        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
+            task = progress.add_task("Loading ticker data...", total=len(tickers))
+            for ticker in tickers:
+                try:
+                    # Load ticker features
+                    ticker_file = self.ticker_features_dir / f"{ticker}_features.parquet"
+                    if not ticker_file.exists():
+                        logger.warning(f"No features found for {ticker}")
+                        progress.update(task, advance=1)
                         continue
-                
-                # Filter date range
-                ticker_data = ticker_data[
-                    (ticker_data.index >= pd.Timestamp(start_date)) & 
-                    (ticker_data.index <= pd.Timestamp(end_date))
-                ]
-                
-                if len(ticker_data) < min_samples:
-                    logger.warning(f"Insufficient samples for {ticker}: {len(ticker_data)} < {min_samples}")
-                    continue
-                
-                # Normalize column names to lowercase
-                ticker_data.columns = ticker_data.columns.str.lower()
-                
-                # Calculate future returns using 'close' price
-                if 'close' not in ticker_data.columns:
-                    logger.error(f"No 'close' column found in ticker features for {ticker}. Available columns: {ticker_data.columns.tolist()}")
-                    continue
                     
-                future_returns = ticker_data['close'].shift(-target_days) / ticker_data['close'] - 1
-                ticker_data['label'] = (future_returns >= target_return).astype(int)
-                
-                # Drop rows with NaN labels
-                ticker_data = ticker_data.dropna(subset=['label'])
-                
-                if len(ticker_data) < min_samples:
-                    logger.warning(f"Insufficient samples after label generation for {ticker}: {len(ticker_data)} < {min_samples}")
+                    ticker_data = pd.read_parquet(ticker_file)
+                    
+                    # Ensure date is the index
+                    if not isinstance(ticker_data.index, pd.DatetimeIndex):
+                        if 'Date' in ticker_data.columns:
+                            ticker_data = ticker_data.set_index('Date')
+                        elif 'date' in ticker_data.columns:
+                            ticker_data = ticker_data.set_index('date')
+                        else:
+                            logger.warning(f"No date column found in ticker features for {ticker}")
+                            progress.update(task, advance=1)
+                            continue
+                    
+                    # Filter date range
+                    ticker_data = ticker_data[
+                        (ticker_data.index >= pd.Timestamp(start_date)) & 
+                        (ticker_data.index <= pd.Timestamp(end_date))
+                    ]
+                    
+                    if len(ticker_data) < min_samples:
+                        logger.warning(f"Insufficient samples for {ticker}: {len(ticker_data)} < {min_samples}")
+                        progress.update(task, advance=1)
+                        continue
+                    
+                    # Normalize column names to lowercase
+                    ticker_data.columns = ticker_data.columns.str.lower()
+                    
+                    # Calculate future returns using 'close' price
+                    if 'close' not in ticker_data.columns:
+                        logger.error(f"No 'close' column found in ticker features for {ticker}. Available columns: {ticker_data.columns.tolist()}")
+                        progress.update(task, advance=1)
+                        continue
+                        
+                    future_returns = ticker_data['close'].shift(-target_days) / ticker_data['close'] - 1
+                    ticker_data['label'] = (future_returns >= target_return).astype(int)
+                    
+                    # Drop rows with NaN labels
+                    ticker_data = ticker_data.dropna(subset=['label'])
+                    
+                    if len(ticker_data) < min_samples:
+                        logger.warning(f"Insufficient samples after label generation for {ticker}: {len(ticker_data)} < {min_samples}")
+                        progress.update(task, advance=1)
+                        continue
+                    
+                    # Add ticker column
+                    ticker_data['ticker'] = ticker
+                    
+                    # Load and merge sector features
+                    for date in ticker_data.index:
+                        sector_features = self._load_sector_features(ticker, date)
+                        if not sector_features.empty:
+                            for col in sector_features.columns:
+                                ticker_data.loc[date, col] = sector_features[col].iloc[0]
+                    
+                    # Validate features
+                    missing_features = self._validate_features(ticker_data, ticker)
+                    if missing_features:
+                        logger.warning(f"Missing features for {ticker}: {missing_features}")
+                        # Fill missing features with NaN
+                        for feature in missing_features:
+                            ticker_data[feature] = np.nan
+                    
+                    all_data.append(ticker_data)
+                    progress.update(task, advance=1)
+                    
+                except Exception as e:
+                    logger.error(f"Error processing {ticker}: {str(e)}")
+                    progress.update(task, advance=1)
                     continue
-                
-                # Add ticker column
-                ticker_data['ticker'] = ticker
-                
-                # Load and merge sector features
-                for date in ticker_data.index:
-                    sector_features = self._load_sector_features(ticker, date)
-                    if not sector_features.empty:
-                        for col in sector_features.columns:
-                            ticker_data.loc[date, col] = sector_features[col].iloc[0]
-                
-                # Validate features
-                missing_features = self._validate_features(ticker_data, ticker)
-                if missing_features:
-                    logger.warning(f"Missing features for {ticker}: {missing_features}")
-                    # Fill missing features with NaN
-                    for feature in missing_features:
-                        ticker_data[feature] = np.nan
-                
-                all_data.append(ticker_data)
-                
-            except Exception as e:
-                logger.error(f"Error processing {ticker}: {str(e)}")
-                continue
         
         if not all_data:
             raise ValueError("No valid data was generated for any ticker")
@@ -321,10 +331,41 @@ class DatasetGenerator:
 The dataset includes the following features:
 
 ### Ticker Features
-{chr(10).join(f"- {feature}" for feature in self.EXPECTED_TICKER_FEATURES)}
+#### Price/Volume Metrics
+- open, high, low, close
+- volume, volume_prev
+- dividends, stock_splits
+- adj_close
+
+#### Technical Indicators
+- RSI (14-day)
+- MACD (macd, macd_signal, macd_hist)
+- Bollinger Bands (bb_upper, bb_lower, bb_middle, bb_pband)
+
+#### Moving Averages
+- Simple Moving Averages: sma_20, sma_50, sma_100, sma_200
+- Exponential Moving Averages: ema_100, ema_200
+
+#### Analyst Information
+- analyst_targets: JSON string containing current price and median target
 
 ### Sector Features
-{chr(10).join(f"- {feature}" for feature in self.EXPECTED_SECTOR_FEATURES)}
+#### Generic Sector Performance
+- Price, Volatility, Volume
+- Returns: 1-day, 5-day, 20-day
+- Momentum: 5-day, 20-day
+- Relative Strength and Ratio
+
+#### Sector-Specific Features
+For each sector (e.g., healthcare, technology), the following metrics are included:
+- Price, Volatility, Volume
+- Returns: 1-day, 5-day, 20-day
+- Momentum: 5-day, 20-day
+- Relative Strength and Ratio
+
+### Additional Fields
+- label: Binary classification target (1 for positive returns, 0 otherwise)
+- ticker: Ticker symbol
 
 ## Usage Notes
 1. Loading the Dataset:
@@ -344,6 +385,7 @@ test_df = pd.read_parquet(data_dir / "test.parquet")
    - Use appropriate time-series cross-validation
    - Consider feature importance and correlation
    - Account for the time-series nature of the data
+   - Note that sector-specific features may contain NaN values for tickers not in that sector
 """
         
         readme_path = output_dir / "README.md"
