@@ -95,21 +95,21 @@ class MarketSentiment:
         sentiment_features = pd.DataFrame(index=gdelt_data.index)
         
         # 5-day moving average of sentiment
-        sentiment_features['sentiment_ma5'] = gdelt_data['avg_tone'].rolling(window=5).mean()
+        sentiment_features['market_sentiment_ma5'] = gdelt_data['avg_tone'].rolling(window=5).mean()
         
         # 20-day moving average of sentiment
-        sentiment_features['sentiment_ma20'] = gdelt_data['avg_tone'].rolling(window=20).mean()
+        sentiment_features['market_sentiment_ma20'] = gdelt_data['avg_tone'].rolling(window=20).mean()
         
         # Sentiment momentum (5-day change)
-        sentiment_features['sentiment_momentum'] = gdelt_data['avg_tone'].diff(5)
+        sentiment_features['market_sentiment_momentum'] = gdelt_data['avg_tone'].diff(5)
         
         # Sentiment volatility (20-day standard deviation)
-        sentiment_features['sentiment_volatility'] = gdelt_data['avg_tone'].rolling(window=20).std()
+        sentiment_features['market_sentiment_volatility'] = gdelt_data['avg_tone'].rolling(window=20).std()
         
         # Sentiment z-score (20-day)
-        sentiment_features['sentiment_zscore'] = (
-            (gdelt_data['avg_tone'] - sentiment_features['sentiment_ma20']) / 
-            sentiment_features['sentiment_volatility']
+        sentiment_features['market_sentiment_zscore'] = (
+            (gdelt_data['avg_tone'] - sentiment_features['market_sentiment_ma20']) / 
+            sentiment_features['market_sentiment_volatility']
         )
         
         return sentiment_features

@@ -462,13 +462,20 @@ BREADTH_FEATURE_TYPES = {
 BREADTH_FEATURE_REQUIRED = ['date', 'daily_breadth_adv_dec_line']
 
 # Define expected types for market sentiment
+SENTIMENT_FEATURES = [
+    'market_sentiment_ma5',
+    'market_sentiment_ma20',
+    'market_sentiment_momentum',
+    'market_sentiment_volatility',
+    'market_sentiment_zscore'
+]
+
 SENTIMENT_FEATURE_TYPES = {
-    'date': np.datetime64,
-    'market_sentiment_ma5': np.floating,
-    'market_sentiment_ma20': np.floating,
-    'market_sentiment_momentum': np.floating,
-    'market_sentiment_volatility': np.floating,
-    'market_sentiment_zscore': np.floating
+    'market_sentiment_ma5': np.float64,
+    'market_sentiment_ma20': np.float64,
+    'market_sentiment_momentum': np.float64,
+    'market_sentiment_volatility': np.float64,
+    'market_sentiment_zscore': np.float64
 }
 
 # Define required columns for market sentiment
