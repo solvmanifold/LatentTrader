@@ -8,24 +8,15 @@ All market features are stored in the `data/market_features/` directory:
 
 ```
 data/market_features/
-├── sector_mapping.json           # Ticker -> Sector mapping
+├── metadata/
+│   └── sector_mapping.json       # Ticker -> Sector mapping
 ├── daily_breadth.parquet         # Market breadth indicators
 ├── market_volatility.parquet     # Market volatility measures
 ├── market_sentiment.parquet      # Market sentiment indicators
 ├── gdelt_raw.parquet             # Raw GDELT sentiment data
 ├── sp500.parquet                 # S&P 500 index data
-└── sectors/                      # Sector-level metrics
-    ├── basic_materials.parquet
-    ├── communication_services.parquet
-    ├── consumer_cyclical.parquet
-    ├── consumer_defensive.parquet
-    ├── energy.parquet
-    ├── financial_services.parquet
-    ├── healthcare.parquet
-    ├── industrials.parquet
-    ├── real_estate.parquet
-    ├── technology.parquet
-    └── utilities.parquet
+└── sectors/
+    └── {sector_name}.parquet     # Sector-level metrics
 ```
 
 ## Market Breadth
@@ -70,120 +61,117 @@ Market breadth indicators are calculated daily and include:
 
 The data is stored in `data/market_features/daily_breadth.parquet`
 
-## S&P 500 Data
-
-The S&P 500 data provides key market benchmark metrics:
-
-- **Price Data:**
-  - `sp500_price`: Daily closing price of the S&P 500 index
-  - `sp500_returns_20d`: 20-day returns of the S&P 500 index
-    - Formula: Returns = (Price(today) - Price(20 days ago)) / Price(20 days ago)
-
-The data is stored in `data/market_features/sp500.parquet`
-
-## Sector Performance
-
-Each sector's performance is tracked through the following metrics (columns prefixed with sector name, e.g. `technology_price` for Technology sector):
-
-- **Price Metrics:**
-  - `{sector}_price`: Mean price of stocks in the sector
-    - Formula: Mean Price = Σ(Stock Prices) / Number of Stocks
-  - `{sector}_volatility`: Standard deviation of prices within the sector
-    - Formula: σ = √(Σ(x - μ)² / n)
-  - `{sector}_volume`: Total trading volume of stocks in the sector
-    - Formula: Total Volume = Σ(Individual Stock Volumes)
-
-- **Returns:**
-  - `{sector}_returns_1d`: Daily returns
-    - Formula: r = (P₁ - P₀) / P₀
-  - `{sector}_returns_5d`: 5-day returns
-  - `{sector}_returns_20d`: 20-day returns
-
-- **Momentum Indicators:**
-  - `{sector}_momentum_5d`: 5-day rolling average of returns
-    - Formula: Momentum = SMA(5) of daily returns
-  - `{sector}_momentum_20d`: 20-day rolling average of returns
-    - Formula: Momentum = SMA(20) of daily returns
-
-- **Relative Strength:**
-  - `{sector}_relative_strength`: Ratio of cumulative returns vs S&P 500
-    - Formula: RS = (1 + r_sector).cumprod() / (1 + r_sp500).cumprod()
-    - Where r_sector and r_sp500 are daily returns
-  - `{sector}_relative_strength_ratio`: Difference in 5-day returns vs S&P 500
-    - Formula: RSR = r_sector_5d - r_sp500_5d
-    - Where r_sector_5d and r_sp500_5d are 5-day returns
-
-The data is stored in the following format:
-- Individual sector files: `data/market_features/sectors/{sector_name}.parquet`
-
 ## Market Volatility
 
-Market volatility features include:
+Market volatility features are calculated daily and include:
 
-- **VIX Indicator:**
-  - `market_volatility_vix`: Daily VIX closing price
-    - Formula: Raw VIX index value from CBOE
-    - Mathematical representation: VIX = σ × √(252) × 100
-      where σ is the implied volatility of S&P 500 options
+- **VIX:** The CBOE Volatility Index (`market_volatility_vix`)
+  - Raw VIX value from CBOE
+  - Measures market's expectation of 30-day forward-looking volatility
 
-- **Short-term Volatility Measures:**
-  - `market_volatility_daily_volatility`: 2-day rolling standard deviation of returns
-    - Formula: σ = √(Σ(x - μ)² / n) over 2-day window
-    - Mathematical representation: σ(t) = √(Σ(r(t-i) - μ)² / 2) for i = 0,1
-      where r is the daily return and μ is the 2-day mean return
-  - `market_volatility_weekly_volatility`: 5-day rolling standard deviation of returns
-    - Formula: σ = √(Σ(x - μ)² / n) over 5-day window
-    - Mathematical representation: σ(t) = √(Σ(r(t-i) - μ)² / 5) for i = 0,1,2,3,4
-  - `market_volatility_monthly_volatility`: 20-day rolling standard deviation of returns
-    - Formula: σ = √(Σ(x - μ)² / n) over 20-day window
-    - Mathematical representation: σ(t) = √(Σ(r(t-i) - μ)² / 20) for i = 0 to 19
+- **Market-wide Volatility Measures:**
+  - Daily Volatility (`market_volatility_daily_volatility`)
+    - Formula: Standard deviation of daily returns across all stocks
+    - Mathematical representation: σ = √(Σ(r - μ)² / (n-1))
+      where r = daily returns, μ = mean return, n = number of stocks
+  - Weekly Volatility (`market_volatility_weekly_volatility`)
+    - Formula: Standard deviation of weekly returns across all stocks
+    - Uses 5-day rolling window
+  - Monthly Volatility (`market_volatility_monthly_volatility`)
+    - Formula: Standard deviation of monthly returns across all stocks
+    - Uses 21-day rolling window
 
-- **Correlation Measures:**
-  - `market_volatility_avg_correlation`: 5-day rolling correlation between stocks
-    - Formula: Average pairwise correlation over 5-day window
-    - Mathematical representation: 
-      ρ(t) = (1/n) × Σ[ρ(i,j,t)] for all pairs (i,j)
-      where ρ(i,j,t) = Cov(r_i, r_j) / (σ_i × σ_j) over 5-day window
-      and n is the number of unique pairs
+- **Average Correlation:** (`market_volatility_avg_correlation`)
+  - Formula: Average pairwise correlation between stock returns
+  - Mathematical representation: ρ = Σ(ρᵢⱼ) / (n(n-1)/2)
+    where ρᵢⱼ = correlation between stocks i and j
+  - Uses 20-day rolling window for correlation calculation
 
-Note: While the original design included additional VIX-based indicators and cross-sectional measures, we currently use these volatility measures as they:
-1. Provide more granular timeframes (2-day, 5-day, 20-day)
-2. Include correlation metrics which capture market relationships
-3. Include raw VIX as a market fear gauge
-4. Are more direct measures of actual market volatility
-
-Future enhancements may include:
-- Additional VIX indicators (VIX MA20, VIX std20)
-- Market-wide volatility (20-day S&P 500 volatility)
-- Volatility of volatility measures
-- Cross-sectional volatility measures
+- **Ticker-specific Volatility:** (`market_volatility_ticker`)
+  - Individual stock volatility relative to market
+  - Formula: σᵢ / σₘ
+    where σᵢ = stock volatility, σₘ = market volatility
+  - Uses 20-day rolling window
 
 The data is stored in `data/market_features/market_volatility.parquet`
 
 ## Market Sentiment
 
-Market sentiment is derived from GDELT news data and includes the following metrics:
-
-- **What is GDELT?**
-  - The Global Database of Events, Language, and Tone (GDELT) is an open-source project that monitors the world's news media in real time, extracting information about events, people, organizations, locations, counts, themes, sources, emotions, counts, quotes, images, and events. In this project, GDELT is used to quantify daily news sentiment related to the market.
+Market sentiment features are calculated daily and include:
 
 - **Moving Averages:**
-  - `market_sentiment_ma5`: 5-day moving average of sentiment
-    - Formula: Sentiment MA5 = SMA(5) of daily sentiment
-  - `market_sentiment_ma20`: 20-day moving average of sentiment
-    - Formula: Sentiment MA20 = SMA(20) of daily sentiment
+  - 5-day Moving Average (`market_sentiment_ma5`)
+    - Formula: MA5(t) = (Price(t) + Price(t-1) + Price(t-2) + Price(t-3) + Price(t-4)) / 5
+    - Mathematical representation: MA5(t) = Σ(P(t-i)) / 5 for i = 0 to 4
+  - 20-day Moving Average (`market_sentiment_ma20`)
+    - Formula: MA20(t) = Σ(Price(t-i)) / 20 for i = 0 to 19
+    - Mathematical representation: MA20(t) = Σ(P(t-i)) / 20 for i = 0 to 19
 
-- **Momentum and Volatility:**
-  - `market_sentiment_momentum`: 5-day change in sentiment
-    - Formula: Momentum = Sentiment(today) - Sentiment(5 days ago)
-  - `market_sentiment_volatility`: 20-day standard deviation of sentiment
-    - Formula: σ = √(Σ(x - μ)² / n)
-  - `market_sentiment_zscore`: Standardized sentiment score relative to 20-day mean
-    - Formula: z = (x - μ) / σ
+- **Momentum:** (`market_sentiment_momentum`)
+  - Price change over 5 days
+  - Formula: (Price(t) - Price(t-5)) / Price(t-5)
+  - Mathematical representation: M(t) = (P(t) - P(t-5)) / P(t-5)
 
-The data is stored in two formats:
-1. Raw GDELT data: `data/market_features/gdelt_raw.parquet`
-2. Processed sentiment features: `data/market_features/market_sentiment.parquet`
+- **Volatility:** (`market_sentiment_volatility`)
+  - 20-day rolling standard deviation of returns
+  - Formula: σ = √(Σ(r - μ)² / (n-1))
+  - Mathematical representation: σ(t) = √(Σ(r(t-i) - μ)² / 19) for i = 0 to 19
+    where r = daily returns, μ = mean return over 20 days
+
+- **Z-Score:** (`market_sentiment_zscore`)
+  - Standardized measure of current price relative to its moving average
+  - Formula: (Price(t) - MA20(t)) / σ(t)
+  - Mathematical representation: Z(t) = (P(t) - MA20(t)) / σ(t)
+    where σ(t) is the 20-day standard deviation
+
+The data is stored in `data/market_features/market_sentiment.parquet`
+
+## Sector Performance
+
+Sector performance features are calculated daily and stored in individual files under `data/market_features/sectors/`:
+
+- **Price:** (`sector_performance_price`)
+  - Sector index price level
+  - Weighted average of constituent stock prices
+
+- **Volatility:** (`sector_performance_volatility`)
+  - 20-day rolling volatility of sector returns
+  - Formula: Standard deviation of daily returns
+
+- **Volume:** (`sector_performance_volume`)
+  - Total trading volume across sector
+  - Normalized by market cap
+
+- **Returns:**
+  - 1-day returns (`sector_performance_returns_1d`)
+  - 5-day returns (`sector_performance_returns_5d`)
+  - 20-day returns (`sector_performance_returns_20d`)
+
+- **Momentum:**
+  - 5-day momentum (`sector_performance_momentum_5d`)
+    - Price change over 5 days
+  - 20-day momentum (`sector_performance_momentum_20d`)
+    - Price change over 20 days
+
+- **Relative Strength:**
+  - Raw relative strength (`sector_performance_relative_strength`)
+    - Sector return vs S&P 500 return
+  - Relative strength ratio (`sector_performance_relative_strength_ratio`)
+    - Sector return / S&P 500 return
+
+Each sector's data is stored in its own file: `data/market_features/sectors/{sector_name}.parquet`
+
+## S&P 500 Index Data
+
+The S&P 500 index data is stored in `data/market_features/sp500.parquet` and includes:
+
+- **Price:** (`sp500_price`) Daily closing price of the S&P 500 index
+- **Returns:** (`sp500_returns_20d`) 20-day returns of the index
+  - Formula: (Price(t) - Price(t-20)) / Price(t-20)
+  - Mathematical representation: r₂₀(t) = (P(t) - P(t-20)) / P(t-20)
+  - Where P(t) is the closing price at time t
+
+This data serves as a benchmark for relative performance calculations and market regime analysis.
 
 ## Date Handling
 
