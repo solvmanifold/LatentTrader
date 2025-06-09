@@ -29,39 +29,39 @@ def calculate_market_breadth(combined_df: pd.DataFrame) -> pd.DataFrame:
     breadth_df = pd.DataFrame()
     
     # Advance/Decline Line
-    breadth_df['adv_dec_line'] = combined_df.groupby(level=0)['close'].apply(
+    breadth_df['daily_breadth_adv_dec_line'] = combined_df.groupby(level=0)['close'].apply(
         lambda x: (x > x.shift(1)).sum() - (x < x.shift(1)).sum()
     )
     
     # New Highs/Lows
-    breadth_df['new_highs'] = combined_df.groupby(level=0)['close'].apply(
+    breadth_df['daily_breadth_new_highs'] = combined_df.groupby(level=0)['close'].apply(
         lambda x: (x > x.rolling(20).max().shift(1)).sum()
     )
-    breadth_df['new_lows'] = combined_df.groupby(level=0)['close'].apply(
+    breadth_df['daily_breadth_new_lows'] = combined_df.groupby(level=0)['close'].apply(
         lambda x: (x < x.rolling(20).min().shift(1)).sum()
     )
     
     # Moving Average Indicators
-    breadth_df['above_ma20'] = combined_df.groupby(level=0)['close'].apply(
+    breadth_df['daily_breadth_above_ma20'] = combined_df.groupby(level=0)['close'].apply(
         lambda x: (x > x.rolling(20).mean()).mean() * 100
     )
-    breadth_df['above_ma50'] = combined_df.groupby(level=0)['close'].apply(
+    breadth_df['daily_breadth_above_ma50'] = combined_df.groupby(level=0)['close'].apply(
         lambda x: (x > x.rolling(50).mean()).mean() * 100
     )
     
     # RSI Indicators
-    breadth_df['rsi_bullish'] = combined_df.groupby(level=0)['rsi'].apply(
+    breadth_df['daily_breadth_rsi_bullish'] = combined_df.groupby(level=0)['rsi'].apply(
         lambda x: (x > 50).mean() * 100
     )
-    breadth_df['rsi_oversold'] = combined_df.groupby(level=0)['rsi'].apply(
+    breadth_df['daily_breadth_rsi_oversold'] = combined_df.groupby(level=0)['rsi'].apply(
         lambda x: (x < 30).mean() * 100
     )
-    breadth_df['rsi_overbought'] = combined_df.groupby(level=0)['rsi'].apply(
+    breadth_df['daily_breadth_rsi_overbought'] = combined_df.groupby(level=0)['rsi'].apply(
         lambda x: (x > 70).mean() * 100
     )
     
     # MACD Indicators
-    breadth_df['macd_bullish'] = combined_df.groupby(level=0)['macd'].apply(
+    breadth_df['daily_breadth_macd_bullish'] = combined_df.groupby(level=0)['macd'].apply(
         lambda x: (x > 0).mean() * 100
     )
     
