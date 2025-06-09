@@ -50,6 +50,62 @@ SENTIMENT_FEATURE_TYPES = {
 # Define required columns for market sentiment
 SENTIMENT_FEATURE_REQUIRED = ['date', 'market_sentiment_ma5']
 
+# Define expected types for ticker features
+TICKER_FEATURE_TYPES = {
+    'date': np.datetime64,
+    'open': np.floating,
+    'high': np.floating,
+    'low': np.floating,
+    'close': np.floating,
+    'adj_close': np.floating,
+    'volume': (np.float64, np.int64),
+    'sma_20': np.floating,
+    'sma_50': np.floating,
+    'sma_100': np.floating,
+    'sma_200': np.floating,
+    'ema_100': np.floating,
+    'ema_200': np.floating,
+    'rsi': np.floating,
+    'macd': np.floating,
+    'macd_signal': np.floating,
+    'macd_hist': np.floating,
+    'bb_upper': np.floating,
+    'bb_middle': np.floating,
+    'bb_lower': np.floating,
+    'bb_pband': np.floating
+}
+
+# Define required columns for ticker features
+TICKER_FEATURE_REQUIRED = ['date', 'open', 'high', 'low', 'close', 'volume']
+
+def validate_ticker_features():
+    """Validate all ticker feature files."""
+    data_dir = Path('data/ticker_features')
+    all_valid = True
+    
+    # Get all ticker feature files
+    ticker_files = list(data_dir.glob('*_features.parquet'))
+    if not ticker_files:
+        print("No ticker feature files found")
+        return False
+    
+    print(f"\nValidating {len(ticker_files)} ticker feature files:")
+    for ticker_file in ticker_files:
+        print(f"  {ticker_file.name}...", end=' ')
+        try:
+            validate_parquet_file(
+                str(ticker_file),
+                expected_types=TICKER_FEATURE_TYPES,
+                required_columns=TICKER_FEATURE_REQUIRED
+            )
+            print("✅")
+        except Exception as e:
+            print("❌")
+            print(f"    Error: {str(e)}")
+            all_valid = False
+    
+    return all_valid
+
 def validate_market_features():
     """Validate all market feature files."""
     data_dir = Path('data/market_features')
@@ -141,5 +197,65 @@ def validate_market_features():
     
     return all_valid
 
+def validate_data_consistency():
+    """Validate consistency across all data files."""
+    all_valid = True
+    
+    # Get all parquet files
+    market_files = list(Path('data/market_features').glob('**/*.parquet'))
+    ticker_files = list(Path('data/ticker_features').glob('*_features.parquet'))
+    all_files = market_files + ticker_files
+    
+    if not all_files:
+        print("No data files found")
+        return False
+    
+    # Get date ranges for all files
+    date_ranges = {}
+    for file in all_files:
+        try:
+            df = pd.read_parquet(file)
+            if 'date' in df.columns:
+                date_ranges[file] = (df['date'].min(), df['date'].max())
+        except Exception as e:
+            print(f"Error reading {file}: {str(e)}")
+            all_valid = False
+    
+    # Check for overlapping date ranges
+    if date_ranges:
+        print("\nChecking date ranges:")
+        min_date = max(d[0] for d in date_ranges.values())
+        max_date = min(d[1] for d in date_ranges.values())
+        print(f"  Common date range: {min_date} to {max_date}")
+        
+        # Check for missing dates in each file
+        for file, (start, end) in date_ranges.items():
+            if start > min_date or end < max_date:
+                print(f"  Warning: {file} has incomplete date range ({start} to {end})")
+                all_valid = False
+    
+    return all_valid
+
+def validate_all():
+    """Run all validations."""
+    print("Running data validation...")
+    
+    # Validate ticker features
+    ticker_valid = validate_ticker_features()
+    
+    # Validate market features
+    market_valid = validate_market_features()
+    
+    # Validate data consistency
+    consistency_valid = validate_data_consistency()
+    
+    # Print summary
+    print("\nValidation Summary:")
+    print(f"  Ticker Features: {'✅' if ticker_valid else '❌'}")
+    print(f"  Market Features: {'✅' if market_valid else '❌'}")
+    print(f"  Data Consistency: {'✅' if consistency_valid else '❌'}")
+    
+    return all([ticker_valid, market_valid, consistency_valid])
+
 if __name__ == '__main__':
-    validate_market_features() 
+    validate_all() 

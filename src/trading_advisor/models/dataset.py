@@ -198,10 +198,7 @@ class DatasetGenerator:
                     df = df.set_index('Date')
                 elif 'date' in df.columns:
                     df = df.set_index('date')
-                else:
-                    continue
-            df.index = pd.to_datetime(df.index)
-            df = self.drop_date_column(df)
+            df.index = pd.to_datetime(df.index).normalize()
             # Filter for target date or nearest previous date
             if date in df.index:
                 row = df.loc[date]
@@ -279,11 +276,9 @@ class DatasetGenerator:
             else:
                 logger.warning(f"No date column found in ticker features for {ticker}")
                 return pd.DataFrame()
-        ticker_features.index = pd.to_datetime(ticker_features.index)
-        ticker_features = self.drop_date_column(ticker_features)
-        ticker_features.index.name = None
+        ticker_features.index = pd.to_datetime(ticker_features.index).normalize()
         # Filter for target date
-        target_date = pd.to_datetime(date)
+        target_date = pd.to_datetime(date).normalize()
         ticker_features = ticker_features[ticker_features.index == target_date]
         if ticker_features.empty:
             logger.warning(f"No ticker features found for {ticker} on {date}")
@@ -294,17 +289,10 @@ class DatasetGenerator:
         if market_features.empty:
             logger.warning(f"No market features found for {date}")
             return pd.DataFrame()
-        # Load sector features if requested (using cache)
-        if include_sector:
-            sector_features = self._load_sector_features(ticker, target_date)
-            if not sector_features.empty:
-                features = pd.concat([ticker_features, market_features, sector_features], axis=1)
-            else:
-                features = pd.concat([ticker_features, market_features], axis=1)
-        else:
-            features = pd.concat([ticker_features, market_features], axis=1)
-        # No suffix or config-based filtering, just return all features
-        features = self.drop_date_column(features)
+        # Combine features
+        features = pd.concat([ticker_features, market_features], axis=1)
+        # Add ticker column
+        features['ticker'] = ticker
         return features
 
     def _format_feature_list(self, features: List[str]) -> str:

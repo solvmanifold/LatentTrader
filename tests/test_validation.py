@@ -411,7 +411,7 @@ def test_data_pipeline():
     
     # Test data processing
     df = standardize_columns_and_date(df)
-    assert 'date' in df.columns, "Standardized DataFrame should have 'date' column"
+    assert isinstance(df.index, pd.DatetimeIndex), "Standardized DataFrame should have DatetimeIndex"
     
     # Test sector performance calculation
     df['sector'] = 'Technology'

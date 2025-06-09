@@ -6,7 +6,7 @@ from typing import Dict, Optional, List, Tuple
 import pandas as pd
 import numpy as np
 import yfinance as yf
-from trading_advisor.data import fill_missing_trading_days
+from trading_advisor.data import fill_missing_trading_days, download_stock_data
 
 logger = logging.getLogger(__name__)
 
@@ -32,21 +32,21 @@ def calculate_market_volatility(combined_df: pd.DataFrame) -> pd.DataFrame:
             df = df.sort_index()
             daily_returns = df['close'].pct_change()
             out = pd.DataFrame(index=df.index)
-            out['daily_volatility'] = daily_returns.rolling(window=2).std()
-            out['weekly_volatility'] = daily_returns.rolling(window=5).std()
-            out['monthly_volatility'] = daily_returns.rolling(window=20).std()
-            out['avg_correlation'] = daily_returns.rolling(window=5).corr()
-            out['ticker'] = ticker
+            out['market_volatility_daily_volatility'] = daily_returns.rolling(window=2).std()
+            out['market_volatility_weekly_volatility'] = daily_returns.rolling(window=5).std()
+            out['market_volatility_monthly_volatility'] = daily_returns.rolling(window=20).std()
+            out['market_volatility_avg_correlation'] = daily_returns.rolling(window=5).corr()
+            out['market_volatility_ticker'] = ticker
             results.append(out)
         volatility_df = pd.concat(results)
     else:
         df = combined_df.sort_index()
         daily_returns = df['close'].pct_change()
         volatility_df = pd.DataFrame(index=df.index)
-        volatility_df['daily_volatility'] = daily_returns.rolling(window=2).std()
-        volatility_df['weekly_volatility'] = daily_returns.rolling(window=5).std()
-        volatility_df['monthly_volatility'] = daily_returns.rolling(window=20).std()
-        volatility_df['avg_correlation'] = daily_returns.rolling(window=5).corr()
+        volatility_df['market_volatility_daily_volatility'] = daily_returns.rolling(window=2).std()
+        volatility_df['market_volatility_weekly_volatility'] = daily_returns.rolling(window=5).std()
+        volatility_df['market_volatility_monthly_volatility'] = daily_returns.rolling(window=20).std()
+        volatility_df['market_volatility_avg_correlation'] = daily_returns.rolling(window=5).corr()
 
     # Fill in missing trading days
     volatility_df = fill_missing_trading_days(volatility_df, combined_df)
@@ -89,6 +89,34 @@ class MarketVolatility:
         except Exception as e:
             logger.error(f"Error reading volatility data: {e}")
             return None
+
+    def get_vix_data(self, start_date: Optional[pd.Timestamp] = None) -> pd.DataFrame:
+        """Get VIX data.
+        
+        Args:
+            start_date: Optional start date for data collection
+            
+        Returns:
+            DataFrame with VIX data
+        """
+        # Download VIX data using our standard function
+        vix_df = download_stock_data(
+            '^VIX',
+            history_days=2200,  # Use a large number to ensure we get all data
+            features_dir="data/market_features",
+            start_date=start_date,
+            features_filename="vix.parquet"
+        )
+        
+        if vix_df.empty:
+            logger.warning("No VIX data downloaded")
+            return pd.DataFrame()
+            
+        # Extract just the close price and rename to our standard column name
+        vix_df = vix_df[['close']].copy()
+        vix_df.columns = ['market_volatility_vix']
+        
+        return vix_df
         
     def generate_volatility_features(self, ticker_df: pd.DataFrame) -> pd.DataFrame:
         """Generate volatility features.
@@ -101,6 +129,13 @@ class MarketVolatility:
         """
         # Calculate market volatility
         volatility_df = calculate_market_volatility(ticker_df)
+        
+        # Get VIX data
+        vix_df = self.get_vix_data(start_date=volatility_df.index.min())
+        
+        # Merge VIX data with volatility data
+        if not vix_df.empty:
+            volatility_df = volatility_df.join(vix_df, how='left')
         
         # Save volatility data
         volatility_path = self.volatility_dir / "market_volatility.parquet"
