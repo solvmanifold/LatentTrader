@@ -8,14 +8,24 @@ All market features are stored in the `data/market_features/` directory:
 
 ```
 data/market_features/
-├── metadata/
-│   └── sector_mapping.parquet    # Ticker -> Sector mapping
+├── sector_mapping.json           # Ticker -> Sector mapping
 ├── daily_breadth.parquet         # Market breadth indicators
 ├── market_volatility.parquet     # Market volatility measures
 ├── market_sentiment.parquet      # Market sentiment indicators
 ├── gdelt_raw.parquet             # Raw GDELT sentiment data
-└── sectors/
-    └── {sector_name}.parquet     # Sector-level metrics
+├── sp500.parquet                 # S&P 500 index data
+└── sectors/                      # Sector-level metrics
+    ├── basic_materials.parquet
+    ├── communication_services.parquet
+    ├── consumer_cyclical.parquet
+    ├── consumer_defensive.parquet
+    ├── energy.parquet
+    ├── financial_services.parquet
+    ├── healthcare.parquet
+    ├── industrials.parquet
+    ├── real_estate.parquet
+    ├── technology.parquet
+    └── utilities.parquet
 ```
 
 ## Market Breadth
@@ -25,17 +35,27 @@ Market breadth indicators are calculated daily and include:
 - **Advance/Decline Line:** Net difference between advancing and declining stocks (`daily_breadth_adv_dec_line`)
   - Formula: ADL = Σ(Advances - Declines) for each day
   - Cumulative sum of daily net advances/declines
+  - Mathematical representation: ADL(t) = ADL(t-1) + (Advances(t) - Declines(t))
 
 - **New Highs/Lows:** Number of stocks making new 20-day highs (`daily_breadth_new_highs`) and lows (`daily_breadth_new_lows`)
   - Formula: New Highs = Count of stocks at 20-day high
+    - Mathematical representation: New Highs(t) = Σ[Price(t) > max(Price(t-20:t-1))]
   - Formula: New Lows = Count of stocks at 20-day low
+    - Mathematical representation: New Lows(t) = Σ[Price(t) < min(Price(t-20:t-1))]
 
 - **Moving Average Indicators:** Percentage of stocks above 20-day (`daily_breadth_above_ma20`) and 50-day (`daily_breadth_above_ma50`) moving averages
   - Formula: % Above MA = (Count of stocks above MA / Total stocks) × 100
+  - Mathematical representation: 
+    - MA20(t) = SMA(20) of price
+    - % Above MA20(t) = (Σ[Price(t) > MA20(t)] / N) × 100
+    - MA50(t) = SMA(50) of price
+    - % Above MA50(t) = (Σ[Price(t) > MA50(t)] / N) × 100
 
 - **RSI Indicators:** 
   - Percentage of stocks with bullish RSI (`daily_breadth_rsi_bullish`)
     - Formula: % Bullish = (Count of stocks with RSI > 50 / Total stocks) × 100
+    - Mathematical representation: RSI = 100 - (100 / (1 + RS))
+      where RS = Average Gain / Average Loss over 14 days
   - Percentage of stocks in oversold condition (`daily_breadth_rsi_oversold`)
     - Formula: % Oversold = (Count of stocks with RSI < 30 / Total stocks) × 100
   - Percentage of stocks in overbought condition (`daily_breadth_rsi_overbought`)
@@ -43,6 +63,10 @@ Market breadth indicators are calculated daily and include:
 
 - **MACD Indicators:** Percentage of stocks with bullish MACD signals (`daily_breadth_macd_bullish`)
   - Formula: % Bullish = (Count of stocks with positive MACD histogram / Total stocks) × 100
+  - Mathematical representation:
+    - MACD Line = EMA(12) - EMA(26)
+    - Signal Line = EMA(9) of MACD Line
+    - Histogram = MACD Line - Signal Line
 
 The data is stored in `data/market_features/daily_breadth.parquet`
 
@@ -88,22 +112,43 @@ The data is stored in the following format:
 
 Market volatility features include:
 
-- **VIX Indicators:**
+- **VIX Indicator:**
   - `market_volatility_vix`: Daily VIX closing price
-  - `market_volatility_vix_ma20`: 20-day moving average of VIX
-    - Formula: VIX MA20 = SMA(20) of VIX
-  - `market_volatility_vix_std20`: 20-day standard deviation of VIX
-    - Formula: σ = √(Σ(x - μ)² / n)
+    - Formula: Raw VIX index value from CBOE
+    - Mathematical representation: VIX = σ × √(252) × 100
+      where σ is the implied volatility of S&P 500 options
 
-- **Market-Wide Volatility:**
-  - `market_volatility_market_volatility`: 20-day rolling volatility of S&P 500 returns (annualized)
-    - Formula: σ = √(252 × Variance of daily returns)
-  - `market_volatility_vol_of_vol`: Volatility of the market volatility (20-day standard deviation)
-    - Formula: Vol of Vol = σ of 20-day rolling volatility
+- **Short-term Volatility Measures:**
+  - `market_volatility_daily_volatility`: 2-day rolling standard deviation of returns
+    - Formula: σ = √(Σ(x - μ)² / n) over 2-day window
+    - Mathematical representation: σ(t) = √(Σ(r(t-i) - μ)² / 2) for i = 0,1
+      where r is the daily return and μ is the 2-day mean return
+  - `market_volatility_weekly_volatility`: 5-day rolling standard deviation of returns
+    - Formula: σ = √(Σ(x - μ)² / n) over 5-day window
+    - Mathematical representation: σ(t) = √(Σ(r(t-i) - μ)² / 5) for i = 0,1,2,3,4
+  - `market_volatility_monthly_volatility`: 20-day rolling standard deviation of returns
+    - Formula: σ = √(Σ(x - μ)² / n) over 20-day window
+    - Mathematical representation: σ(t) = √(Σ(r(t-i) - μ)² / 20) for i = 0 to 19
 
-- **Cross-Sectional Measures:**
-  - `market_volatility_cross_sectional_vol`: Daily dispersion of returns across all stocks (annualized)
-    - Formula: σ = √(252 × Variance of cross-sectional returns)
+- **Correlation Measures:**
+  - `market_volatility_avg_correlation`: 5-day rolling correlation between stocks
+    - Formula: Average pairwise correlation over 5-day window
+    - Mathematical representation: 
+      ρ(t) = (1/n) × Σ[ρ(i,j,t)] for all pairs (i,j)
+      where ρ(i,j,t) = Cov(r_i, r_j) / (σ_i × σ_j) over 5-day window
+      and n is the number of unique pairs
+
+Note: While the original design included additional VIX-based indicators and cross-sectional measures, we currently use these volatility measures as they:
+1. Provide more granular timeframes (2-day, 5-day, 20-day)
+2. Include correlation metrics which capture market relationships
+3. Include raw VIX as a market fear gauge
+4. Are more direct measures of actual market volatility
+
+Future enhancements may include:
+- Additional VIX indicators (VIX MA20, VIX std20)
+- Market-wide volatility (20-day S&P 500 volatility)
+- Volatility of volatility measures
+- Cross-sectional volatility measures
 
 The data is stored in `data/market_features/market_volatility.parquet`
 
