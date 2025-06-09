@@ -63,9 +63,11 @@ def get_sp500_data(start_date: Optional[str] = None) -> pd.DataFrame:
             if start_dt > last_date:
                 fetch_start = start_date
             else:
-                fetch_start = (last_date + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+                # Use next business day after last_date
+                fetch_start = pd.bdate_range(start=last_date + pd.Timedelta(days=1), periods=1)[0].strftime('%Y-%m-%d')
         else:
-            fetch_start = (last_date + pd.Timedelta(days=1)).strftime('%Y-%m-%d')
+            # Use next business day after last_date
+            fetch_start = pd.bdate_range(start=last_date + pd.Timedelta(days=1), periods=1)[0].strftime('%Y-%m-%d')
         
         # Use today's date as end date, normalized to midnight
         fetch_end = pd.Timestamp.today().normalize()
