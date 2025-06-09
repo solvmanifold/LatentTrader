@@ -339,7 +339,8 @@ def load_positions(positions_file: Optional[Path]) -> Dict[str, Dict]:
 def load_tickers(tickers_input: Optional[Path]) -> list[str]:
     """Load tickers from input file or use default."""
     if tickers_input is None:
-        return ["AAPL"]  # Default to AAPL if no tickers provided
+        # Default to "all" to get S&P 500 tickers
+        return load_tickers("all")
     elif str(tickers_input) == "all":
         # Fetch all S&P 500 tickers from Wikipedia
         try:
@@ -446,7 +447,14 @@ def standardize_columns_and_date(df: pd.DataFrame) -> pd.DataFrame:
         df = df.drop(columns=date_cols)
     
     # Standardize column names
+    # First convert to lowercase and replace spaces with underscores
     df.columns = [col.lower().replace(' ', '_') for col in df.columns]
+    # Then replace any remaining special characters with underscores
+    df.columns = [''.join(c if c.isalnum() else '_' for c in col) for col in df.columns]
+    # Remove consecutive underscores
+    df.columns = [col.replace('__', '_') for col in df.columns]
+    # Remove leading/trailing underscores
+    df.columns = [col.strip('_') for col in df.columns]
     
     # Ensure index is DatetimeIndex
     if not isinstance(df.index, pd.DatetimeIndex):

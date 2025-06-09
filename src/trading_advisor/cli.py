@@ -722,7 +722,7 @@ def prompt_daily(
 def update_data(
     tickers_input: Optional[Path] = typer.Argument(
         None,
-        help="Path to file with tickers, or 'all' for S&P 500. If omitted, only tickers with existing feature files will be updated."
+        help="Path to file with tickers, or 'all' for S&P 500. If omitted, defaults to 'all' to update all S&P 500 tickers."
     ),
     days: int = typer.Option(60, help="Number of days of historical data to download"),
     features_dir: str = typer.Option("data/ticker_features", help="Directory to store feature files"),
@@ -747,7 +747,13 @@ def update_data(
         help="Run data validation after updates (default: false)"
     )
 ):
-    """Update ticker and market features.\n\nTICKERS_INPUT can be a path to a file with tickers (one per line), or 'all' for S&P 500. If omitted, only tickers with existing feature files will be updated."""
+    """Update ticker and market features.
+    
+    If no tickers file is provided, defaults to updating all S&P 500 tickers.
+    TICKERS_INPUT can be:
+    - A path to a file with tickers (one per line)
+    - 'all' to update all S&P 500 tickers
+    - Omitted to default to 'all'"""
     ticker_list = load_tickers(tickers_input)
     features_dir = Path(features_dir)
     features_dir.mkdir(exist_ok=True)
@@ -789,8 +795,10 @@ def update_data(
     # Run validation if requested
     if validate:
         logger.info("Running data validation...")
-        from scripts.validate_data import validate_market_features
-        validate_market_features()
+        from scripts.validate_data import validate_all
+        if not validate_all():
+            logger.error("Data validation failed")
+            raise typer.Exit(1)
 
 @app.command()
 def run_model(
