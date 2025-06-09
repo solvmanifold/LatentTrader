@@ -1,6 +1,6 @@
 # Ticker Features
 
-This document provides detailed descriptions of the features computed for individual tickers in the LatentTrader project.
+This document provides detailed descriptions of the features computed for individual tickers in the LatentTrader project. These ticker-level features are used as building blocks for market-wide features, which are documented in `market_features.md`.
 
 ## Directory Structure
 
@@ -14,30 +14,56 @@ data/ticker_features/
 
 ## Technical Indicators
 
+All technical indicators are calculated using the `ta` (Technical Analysis) library, which provides efficient and well-tested implementations of common technical analysis functions.
+
 - **Moving Averages:**
   - `sma_20`: 20-day Simple Moving Average
     - Formula: SMA(n) = (P₁ + P₂ + ... + Pₙ) / n
+    - where Pₙ is the price at day n
   - `sma_50`: 50-day Simple Moving Average
+  - `sma_100`: 100-day Simple Moving Average
   - `sma_200`: 200-day Simple Moving Average
-  - `ema_20`: 20-day Exponential Moving Average
+  - `ema_100`: 100-day Exponential Moving Average
     - Formula: EMA(today) = α × Price(today) + (1-α) × EMA(yesterday)
-    - where α = 2/(n+1), n = 20
-  - `ema_50`: 50-day Exponential Moving Average
+    - where α = 2/(n+1), n = 100
+    - Initial EMA = SMA(n)
   - `ema_200`: 200-day Exponential Moving Average
+    - Same formula as EMA(100) with n = 200
 
 - **Relative Strength Index (RSI):**
-  - `rsi_14`: 14-day RSI value
+  - `rsi`: 14-day RSI value
     - Formula: RSI = 100 - (100 / (1 + RS))
     - where RS = Average Gain / Average Loss over 14 days
-  - `rsi_signal`: Binary signal indicating if RSI is bullish (>50) or bearish (<50)
+    - Average Gain = Sum of gains over 14 days / 14
+    - Average Loss = Sum of losses over 14 days / 14
+    - Gains and losses are calculated as positive price changes
 
 - **MACD (Moving Average Convergence Divergence):**
   - `macd`: MACD line (12-day EMA - 26-day EMA)
     - Formula: MACD = EMA(12) - EMA(26)
+    - where EMA(12) uses α = 2/(12+1) = 0.1538
+    - and EMA(26) uses α = 2/(26+1) = 0.0741
   - `macd_signal`: Signal line (9-day EMA of MACD)
     - Formula: Signal = EMA(9) of MACD
+    - where α = 2/(9+1) = 0.2
   - `macd_hist`: MACD histogram (MACD - Signal)
-  - `macd_signal_binary`: Binary signal indicating if MACD is bullish (histogram > 0) or bearish (histogram < 0)
+    - Formula: Histogram = MACD - Signal
+    - Positive values indicate bullish momentum
+    - Negative values indicate bearish momentum
+
+- **Bollinger Bands:**
+  - `bb_upper`: Upper Bollinger Band
+    - Formula: BB_upper = SMA(20) + (2 × σ)
+    - where σ is the 20-day standard deviation of prices
+  - `bb_middle`: Middle Bollinger Band
+    - Formula: BB_middle = SMA(20)
+  - `bb_lower`: Lower Bollinger Band
+    - Formula: BB_lower = SMA(20) - (2 × σ)
+  - `bb_pband`: Percentage B (position within the bands)
+    - Formula: %B = (Price - BB_lower) / (BB_upper - BB_lower)
+    - Values > 1 indicate price above upper band
+    - Values < 0 indicate price below lower band
+    - Values between 0 and 1 indicate position within bands
 
 ## Price/Volume Metrics
 
@@ -47,116 +73,41 @@ data/ticker_features/
   - `low`: Lowest price
   - `close`: Closing price
   - `adj_close`: Adjusted closing price (adjusted for splits and dividends)
+    - Formula: Adj_Close = Close × Split Factor × Dividend Adjustment Factor
 
 - **Volume:**
   - `volume`: Trading volume
-  - `volume_ma20`: 20-day moving average of volume
-  - `volume_ratio`: Current volume / 20-day average volume
-    - Formula: Volume Ratio = Volume(today) / SMA(20) of Volume
+  - `volume_prev`: Previous day's trading volume
+    - Formula: Volume_prev = Volume(t-1)
+    - where t is the current day
 
-- **Returns:**
-  - `returns_1d`: Daily returns
-    - Formula: r = (P₁ - P₀) / P₀
-  - `returns_5d`: 5-day returns
-  - `returns_20d`: 20-day returns
-  - `volatility_20d`: 20-day rolling volatility (annualized)
-    - Formula: σ = √(252 × Variance of daily returns)
-    - where 252 is the number of trading days in a year
+- **Corporate Actions:**
+  - `dividends`: Dividend payments
+    - Raw dividend amounts paid per share
+    - Used internally for calculating adjusted close prices
+  - `stock_splits`: Stock split events
+    - Format: "N:M" where N is the new number of shares and M is the old number
+    - Used internally for calculating adjusted close prices
 
-## Additional Features
+## Analyst Targets
 
-- **Analyst Targets:**
-  - `price_target_mean`: Mean analyst price target
-    - Formula: Mean = Σ(targets) / n
-  - `price_target_median`: Median analyst price target
-  - `price_target_std`: Standard deviation of price targets
-    - Formula: σ = √(Σ(x - μ)² / n)
-  - `recommendation_mean`: Mean recommendation score (1=Strong Buy, 5=Strong Sell)
+- **Analyst Information:**
+  - `analyst_targets`: JSON string containing analyst target information
+    - Includes current price and median target price
+    - Format: `{"current_price": float, "median_target": float}`
+    - Upside potential = (median_target - current_price) / current_price × 100%
 
-- **Short Interest:**
-  - `short_interest`: Number of shares sold short
-  - `short_interest_ratio`: Short interest / Average daily volume
-    - Formula: Ratio = Short Interest / (20-day Average Volume)
-  - `short_interest_change`: Change in short interest from previous period
-    - Formula: Change = (Current - Previous) / Previous
-
-## Data Structure
+## Date Handling
 
 All ticker feature files follow these structural requirements:
 
 1. **Date Indexing:**
    - All data must be indexed by date using a DatetimeIndex
-   - No duplicate date columns are allowed
    - Dates are normalized (time set to midnight)
    - Missing trading days are filled with NaN values to preserve data integrity
 
-2. **Column Naming:**
-   - All column names are lowercase with underscores
-   - No spaces or special characters allowed
-   - Feature-specific prefixes are used where appropriate
+2. **Date Format:**
+   - All dates are stored in YYYY-MM-DD format
+   - No timezone information is included
 
-3. **Handling Missing Trading Days:**
-   - Missing trading days are preserved as NaN values in the raw data
-   - When forward filling is needed for analysis:
-     - Use `df.ffill()` for price data
-     - Use `df.ffill(limit=1)` for returns data to prevent artificial smoothing
-     - Use `df.ffill(limit=5)` for sentiment data to maintain recent context
-   - Always document when forward filling is applied
-   - Consider the impact of forward filling on your analysis:
-     - Price data: Forward filling is generally acceptable
-     - Returns data: Forward filling can create false patterns
-     - Volume data: Forward filling is not recommended
-     - Sentiment data: Forward filling should be limited to recent context
-
-## Data Validation
-
-All ticker feature files are subject to rigorous validation:
-
-1. **File Validation:**
-   - Consistent naming conventions (lowercase with underscores)
-   - Proper file extensions (.parquet)
-   - Correct directory structure
-   - Proper date indexing (DatetimeIndex, no duplicate date columns)
-
-2. **Column Validation:**
-   - Required columns present
-   - Column naming conventions
-   - Data type consistency
-   - Feature-specific validations
-   - No duplicate date columns
-
-3. **Data Quality Checks:**
-   - Missing value detection
-   - Outlier detection
-   - Data range validation
-   - Consistency across related features
-
-4. **Feature-Specific Validation:**
-   - Technical indicators
-   - Price/volume metrics
-   - Returns calculations
-   - Analyst targets
-   - Short interest data
-
-For detailed information about the validation framework, see `validation.md`.
-
-## Data Update Process
-
-Ticker features are updated using the `update-data` command, which takes a `days` parameter to specify how many days of historical data to download. The system will:
-
-1. Check for existing data and only download new data points
-2. Calculate technical indicators
-3. Compute price/volume metrics
-4. Generate returns and volatility measures
-5. Update analyst targets and short interest data
-6. Run data validation checks:
-   - File naming conventions
-   - Column naming standards
-   - Data type validation
-   - Required column checks
-   - Data quality metrics
-   - Feature consistency validation
-
-The update process is incremental, meaning it will only process new dates that aren't already in the feature files. This ensures efficient updates while maintaining historical data consistency.
-
-Feel free to explore each feature for more detailed information and their significance in trading strategies. 
+For detailed information about data validation and processing, see `validation.md` and `data_processing.md`. 

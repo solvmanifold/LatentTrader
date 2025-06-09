@@ -1,6 +1,6 @@
 # Market Features
 
-This document provides detailed descriptions of the market-wide features computed in the LatentTrader project.
+This document provides detailed descriptions of the market-wide features computed in the LatentTrader project. These market features are derived from individual ticker features, which are documented in `ticker_features.md`.
 
 ## Directory Structure
 
@@ -105,6 +105,14 @@ Each sector's performance is tracked through the following metrics (columns pref
   - `{sector}_momentum_20d`: 20-day rolling average of returns
     - Formula: Momentum = SMA(20) of daily returns
 
+- **Relative Strength:**
+  - `{sector}_relative_strength`: Ratio of cumulative returns vs S&P 500
+    - Formula: RS = (1 + r_sector).cumprod() / (1 + r_sp500).cumprod()
+    - Where r_sector and r_sp500 are daily returns
+  - `{sector}_relative_strength_ratio`: Difference in 5-day returns vs S&P 500
+    - Formula: RSR = r_sector_5d - r_sp500_5d
+    - Where r_sector_5d and r_sp500_5d are 5-day returns
+
 The data is stored in the following format:
 - Individual sector files: `data/market_features/sectors/{sector_name}.parquet`
 
@@ -160,74 +168,22 @@ Market sentiment is derived from GDELT news data and includes the following metr
   - The Global Database of Events, Language, and Tone (GDELT) is an open-source project that monitors the world's news media in real time, extracting information about events, people, organizations, locations, counts, themes, sources, emotions, counts, quotes, images, and events. In this project, GDELT is used to quantify daily news sentiment related to the market.
 
 - **Moving Averages:**
-  - `market_sentiment_sentiment_ma5`: 5-day moving average of sentiment
+  - `market_sentiment_ma5`: 5-day moving average of sentiment
     - Formula: Sentiment MA5 = SMA(5) of daily sentiment
-  - `market_sentiment_sentiment_ma20`: 20-day moving average of sentiment
+  - `market_sentiment_ma20`: 20-day moving average of sentiment
     - Formula: Sentiment MA20 = SMA(20) of daily sentiment
 
 - **Momentum and Volatility:**
-  - `market_sentiment_sentiment_momentum`: 5-day change in sentiment
+  - `market_sentiment_momentum`: 5-day change in sentiment
     - Formula: Momentum = Sentiment(today) - Sentiment(5 days ago)
-  - `market_sentiment_sentiment_volatility`: 20-day standard deviation of sentiment
+  - `market_sentiment_volatility`: 20-day standard deviation of sentiment
     - Formula: σ = √(Σ(x - μ)² / n)
-  - `market_sentiment_sentiment_zscore`: Standardized sentiment score relative to 20-day mean
+  - `market_sentiment_zscore`: Standardized sentiment score relative to 20-day mean
     - Formula: z = (x - μ) / σ
-
-Note: The raw daily GDELT sentiment score is not included as a feature because it is highly noisy and subject to significant day-to-day fluctuations. Instead, moving averages, momentum, and volatility measures are used to provide more robust and stable indicators of market sentiment, which are generally more useful for modeling and analysis.
 
 The data is stored in two formats:
 1. Raw GDELT data: `data/market_features/gdelt_raw.parquet`
 2. Processed sentiment features: `data/market_features/market_sentiment.parquet`
-
-Note: Put/Call ratios, short interest trends, and analyst sentiment aggregation are planned for future implementation.
-
-## Data Update Process
-
-Market features are updated using the `update-data` command, which takes a `days` parameter to specify how many days of historical data to download. The system will:
-
-1. Check for existing data and only download new data points
-2. Generate market breadth indicators for all available tickers
-3. Calculate sector performance metrics
-4. Update market sentiment using GDELT data
-5. Compute market volatility measures
-6. Run data validation checks:
-   - File naming conventions
-   - Column naming standards
-   - Data type validation
-   - Required column checks
-   - Data quality metrics
-   - Feature consistency validation
-
-The update process is incremental, meaning it will only process new dates that aren't already in the feature files. This ensures efficient updates while maintaining historical data consistency.
-
-## Data Validation
-
-All market feature files are subject to rigorous validation:
-
-1. **File Validation:**
-   - Consistent naming conventions (lowercase with underscores)
-   - Proper file extensions (.parquet)
-   - Correct directory structure
-
-2. **Column Validation:**
-   - Required columns present
-   - Column naming conventions
-   - Data type consistency
-   - Feature-specific validations
-
-3. **Data Quality Checks:**
-   - Missing value detection
-   - Outlier detection
-   - Data range validation
-   - Consistency across related features
-
-4. **Feature-Specific Validation:**
-   - Market breadth indicators
-   - Sector performance metrics
-   - Volatility measures
-   - Sentiment indicators
-
-For detailed information about the validation framework, see `validation.md`.
 
 ## Date Handling
 
@@ -235,32 +191,11 @@ All market feature files follow a consistent date handling approach:
 
 1. **Date Indexing:**
    - All data must be indexed by date using a DatetimeIndex
-   - No duplicate date columns are allowed
    - Dates are normalized (time set to midnight)
    - Missing trading days are filled with NaN values to preserve data integrity
 
 2. **Date Format:**
    - All dates are stored in YYYY-MM-DD format
    - No timezone information is included
-   - Missing trading days are filled with NaN values
 
-3. **Data Validation:**
-   - Files must have a DatetimeIndex
-   - No duplicate date columns allowed
-   - Dates must be properly normalized
-   - Missing trading days must be properly handled with NaN values
-
-4. **Handling Missing Trading Days:**
-   - Missing trading days are preserved as NaN values in the raw data
-   - When forward filling is needed for analysis:
-     - Use `df.ffill()` for price data
-     - Use `df.ffill(limit=1)` for returns data to prevent artificial smoothing
-     - Use `df.ffill(limit=5)` for sentiment data to maintain recent context
-   - Always document when forward filling is applied
-   - Consider the impact of forward filling on your analysis:
-     - Price data: Forward filling is generally acceptable
-     - Returns data: Forward filling can create false patterns
-     - Volume data: Forward filling is not recommended
-     - Sentiment data: Forward filling should be limited to recent context
-
-This standardized date handling ensures consistent data alignment across all market features and simplifies the process of combining different feature sets for analysis. 
+For detailed information about data validation and processing, see `validation.md` and `data_processing.md`. 
