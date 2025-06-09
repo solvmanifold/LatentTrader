@@ -3,7 +3,7 @@
 ## Project Vision
 LatentTrader aims to be a machine learning-powered trading assistant that generates actionable, short-term trading playbooks designed to beat the market. The system leverages both traditional technical analysis features and modern ML models to create, test, and iterate on predictive models. The ultimate goal is to support robust experimentation, backtesting, and rapid iteration to discover and deploy the most effective trading strategies.
 
-## Architecture Overview
+## System Architecture
 
 ### 1. Data Layer (Features)
 - **Per-Ticker Features:** All raw and engineered features (technical indicators, price/volume, etc.) are stored in Parquet files, one per ticker (e.g., `ticker_features/AAPL_features.parquet`).
@@ -27,7 +27,7 @@ LatentTrader aims to be a machine learning-powered trading assistant that genera
 - **Prompt Generation:** The `prompt-daily` command generates LLM prompts from daily reports.
 - **Historical Tracking:** Prompts are saved as both text files and Parquet tables.
 
-## Market Features
+## Feature Architecture
 
 ### Directory Structure
 ```
@@ -67,39 +67,50 @@ data/market_features/
    - Analyst sentiment aggregation
    - GDELT news sentiment
 
-## Data Layer Improvements
+## Implementation Status
 
-### 1. Data Standardization (Priority: High)
+### Completed Features ✅
+
+#### 1. Data Standardization
 - **File Naming Convention**
-  - All filenames should be lowercase with underscores
+  - All filenames are lowercase with underscores
   - Example: `communication_services.parquet` instead of `Communication Services.parquet`
   - Consistent naming across all feature files
 
 - **Column Naming Convention**
-  - All column names should be lowercase with underscores
-  - No spaces allowed in column names
-  - Market feature columns should include source filename as prefix
+  - All column names are lowercase with underscores
+  - No spaces in column names
+  - Market feature columns include source filename as prefix
   - Example: `daily_breadth_above_ma20` instead of `Above MA20`
 
 - **DataFrame Structure**
-  - Always include a `date` column (even when using date as index)
-  - Consistent datetime format across all files
+  - `date` column included in all files
+  - Consistent datetime format
   - Clear separation between index and columns
 
 - **Market Features Standardization**
-  - [x] Add `daily_breadth_` prefix to market breadth columns
-  - [x] Add `market_volatility_` prefix to volatility columns
-  - [x] Add `market_sentiment_` prefix to sentiment columns
-  - [x] Add sector prefix to sector performance columns
-  - [x] Update validation rules to enforce prefixes
+  - Added `daily_breadth_` prefix to market breadth columns
+  - Added `market_volatility_` prefix to volatility columns
+  - Added `market_sentiment_` prefix to sentiment columns
+  - Added sector prefix to sector performance columns
+  - Updated validation rules to enforce prefixes
 
-- **Implementation Tasks**
-  - [x] Create migration script for existing data
-  - [x] Update feature calculation code
-  - [x] Add tests for new column names
-  - [x] Update documentation to reflect changes
+#### 2. VIX Integration
+- Added VIX data download and storage
+- Implemented VIX indicators:
+  - `market_volatility_vix`
+- Added VIX validation rules
+- Updated documentation
 
-### 2. Feature Normalization (Priority: High)
+#### 3. Market-Wide Volatility
+- Implemented market-wide volatility measures:
+  - `market_volatility_market_volatility`
+- Added validation rules
+- Updated documentation
+
+### In Progress Features 🔄
+
+#### 1. Feature Normalization
 - **Normalization Process**
   - Move normalization to dataset generation phase
   - Store normalization statistics (mean, std) in a pickle file
@@ -118,7 +129,7 @@ data/market_features/
   - [ ] Add data quality checks for normalization
   - [ ] Create normalization monitoring system
 
-### 3. Dataset Generation Enhancement
+#### 2. Dataset Generation Enhancement
 - **Feature Collection**
   - Single interface for gathering features
   - Support for both batch and single-row predictions
@@ -142,136 +153,60 @@ data/market_features/
   - Clear error messages for missing or invalid features
   - Support for feature subset selection
 
-### 4. Market Features Enhancement (Priority: Medium)
-- **VIX Integration**
-  - [x] Add VIX data download and storage
-  - [x] Implement VIX indicators:
-    - [x] `market_volatility_vix`
-    - [ ] `market_volatility_vix_ma20`
-    - [ ] `market_volatility_vix_std20`
-  - [x] Add VIX validation rules
-  - [x] Update documentation
+### Pending Features ⏳
 
-- **Market-Wide Volatility**
-  - [x] Implement market-wide volatility measures:
-    - [x] `market_volatility_market_volatility`
-    - [ ] `market_volatility_vol_of_vol`
-  - [ ] Add cross-sectional measures:
-    - [ ] `market_volatility_cross_sectional_vol`
-  - [x] Add validation rules
-  - [x] Update documentation
+#### 1. VIX Integration (Remaining)
+- [ ] `market_volatility_vix_ma20`
+- [ ] `market_volatility_vix_std20`
 
-- **Implementation Tasks**
-  - [x] Create VIX data pipeline
-  - [x] Implement new volatility calculations
-  - [x] Add validation for new features
-  - [x] Update feature calculation code
-  - [x] Add tests for new features
-  - [x] Create migration plan for existing data
+#### 2. Market-Wide Volatility (Remaining)
+- [ ] `market_volatility_vol_of_vol`
+- [ ] `market_volatility_cross_sectional_vol`
 
-### Implementation Plan
+#### 3. Model Training Enhancement
+- [ ] Enhance `train_logistic2.py`:
+  - [ ] Add hyperparameter tuning
+  - [ ] Implement cross-validation
+  - [ ] Add early stopping
+  - [ ] Improve logging and visualization
+- [ ] Create `train_ensemble.py`:
+  - [ ] Implement bagging/boosting
+  - [ ] Add model stacking
+  - [ ] Support multiple base models
+- [ ] Add model evaluation:
+  - [ ] Performance metrics
+  - [ ] Feature importance analysis
+  - [ ] Confusion matrix generation
+- [ ] Create model management:
+  - [ ] Model versioning
+  - [ ] Model comparison
+  - [ ] Model deployment
 
-1. **Phase 1: Data Standardization** ✅
-   - [x] Create new data structure
-   - [x] Write migration scripts
-   - [x] Test with subset of data
-   - [x] Full data migration
-   - [x] Update `update-data` to enforce naming conventions
-   - [x] Add column name standardization
-   - [x] Implement consistent date column handling
-   - [x] Add validation for file and column names
-   - [x] Create data validation framework
-   - [x] Integrate validation into data pipeline:
-     - [x] Add validation during data loading
-     - [x] Add validation before processing
-     - [x] Add validation before storage
-     - [x] Add validation during updates
-   - [x] Establish data quality metrics and monitoring
+#### 4. Testing and Validation
+- [ ] Expand test coverage:
+  - [ ] Add unit tests for new functionality
+  - [ ] Implement integration tests
+  - [ ] Add performance benchmarks
+- [ ] Create validation datasets:
+  - [ ] Implement cross-validation framework
+  - [ ] Add data quality checks
+  - [ ] Create validation reports
 
-2. **Phase 2: Dataset Generation & Feature Normalization** (In Progress)
-   - [ ] Core Dataset Infrastructure
-     - [ ] Create unified feature collection interface
-     - [ ] Implement feature validation framework
-     - [ ] Add support for both batch and single-row predictions
-     - [ ] Create feature versioning system
-     - [ ] Implement feature subset selection
-     - [ ] Add data quality metrics and monitoring
+#### 5. Documentation and Examples
+- [ ] Update documentation:
+  - [ ] Code comments
+  - [ ] Function docstrings
+  - [ ] README updates
+- [ ] Create examples:
+  - [ ] Usage examples
+  - [ ] Tutorial notebooks
+  - [ ] Best practices guide
 
-   - [ ] Feature Normalization
-     - [ ] Implement normalization during dataset generation
-     - [ ] Create normalization statistics storage
-     - [ ] Add support for different normalization strategies
-     - [ ] Implement normalization versioning
-     - [ ] Add validation for normalization consistency
-     - [ ] Create migration script for existing datasets
-
-   - [ ] Prediction Support
-     - [ ] Enable single-row predictions using dataset metadata
-     - [ ] Support for new data points outside training set
-     - [ ] Implement feature imputation with stored statistics
-     - [ ] Add clear error handling for missing features
-     - [ ] Create prediction validation system
-     - [ ] Add support for batch predictions
-
-   - [ ] Documentation & Testing
-     - [ ] Document feature requirements and dependencies
-     - [ ] Create usage examples and tutorials
-     - [ ] Add comprehensive test coverage
-     - [ ] Create validation datasets and reports
-
-3. **Phase 3: Prediction Pipeline**
-   - [ ] Create unified prediction interface
-   - [ ] Implement feature validation in predictions
-   - [ ] Add support for feature imputation
-   - [ ] Create prediction quality metrics
-   - [ ] Implement prediction logging
-   - [ ] Add support for batch predictions
-   - [ ] Create prediction validation system
-
-4. **Phase 4: Model Training Enhancement**
-   - [ ] Enhance `train_logistic2.py`:
-     - [ ] Add hyperparameter tuning
-     - [ ] Implement cross-validation
-     - [ ] Add early stopping
-     - [ ] Improve logging and visualization
-   - [ ] Create `train_ensemble.py`:
-     - [ ] Implement bagging/boosting
-     - [ ] Add model stacking
-     - [ ] Support multiple base models
-   - [ ] Add model evaluation:
-     - [ ] Performance metrics
-     - [ ] Feature importance analysis
-     - [ ] Confusion matrix generation
-   - [ ] Create model management:
-     - [ ] Model versioning
-     - [ ] Model comparison
-     - [ ] Model deployment
-
-5. **Phase 5: Testing and Validation**
-   - [ ] Expand test coverage:
-     - [ ] Add unit tests for new functionality
-     - [ ] Implement integration tests
-     - [ ] Add performance benchmarks
-   - [ ] Create validation datasets:
-     - [ ] Implement cross-validation framework
-     - [ ] Add data quality checks
-     - [ ] Create validation reports
-
-6. **Phase 6: Documentation and Examples**
-   - [ ] Update documentation:
-     - [ ] Code comments
-     - [ ] Function docstrings
-     - [ ] README updates
-   - [ ] Create examples:
-     - [ ] Usage examples
-     - [ ] Tutorial notebooks
-     - [ ] Best practices guide
-
-### Timeline
-- **Week 1**: Complete Phase 2 (Feature Normalization)
-- **Week 2**: Complete Phase 3 (Dataset Generation)
-- **Week 3**: Complete Phase 4 (Prediction Pipeline) & Phase 5 (Model Training)
-- **Week 4**: Complete Phase 6 (Testing) & Phase 7 (Documentation)
+## Timeline
+- **Week 1**: Complete Feature Normalization
+- **Week 2**: Complete Dataset Generation
+- **Week 3**: Complete Prediction Pipeline & Model Training
+- **Week 4**: Complete Testing & Documentation
 
 ---
 
