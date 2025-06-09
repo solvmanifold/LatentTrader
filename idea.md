@@ -86,6 +86,19 @@ data/market_features/
   - Consistent datetime format across all files
   - Clear separation between index and columns
 
+- **Market Features Standardization**
+  - [x] Add `daily_breadth_` prefix to market breadth columns
+  - [x] Add `market_volatility_` prefix to volatility columns
+  - [x] Add `market_sentiment_` prefix to sentiment columns
+  - [ ] Add sector prefix to sector performance columns
+  - [x] Update validation rules to enforce prefixes
+
+- **Implementation Tasks**
+  - [x] Create migration script for existing data
+  - [x] Update feature calculation code
+  - [x] Add tests for new column names
+  - [x] Update documentation to reflect changes
+
 ### 2. Feature Normalization (Priority: High)
 - **Normalization Process**
   - Move normalization to dataset generation phase
@@ -129,6 +142,33 @@ data/market_features/
   - Clear error messages for missing or invalid features
   - Support for feature subset selection
 
+### 4. Market Features Enhancement (Priority: Medium)
+- **VIX Integration**
+  - [x] Add VIX data download and storage
+  - [x] Implement VIX indicators:
+    - [x] `market_volatility_vix`
+    - [ ] `market_volatility_vix_ma20`
+    - [ ] `market_volatility_vix_std20`
+  - [x] Add VIX validation rules
+  - [x] Update documentation
+
+- **Market-Wide Volatility**
+  - [x] Implement market-wide volatility measures:
+    - [x] `market_volatility_market_volatility`
+    - [ ] `market_volatility_vol_of_vol`
+  - [ ] Add cross-sectional measures:
+    - [ ] `market_volatility_cross_sectional_vol`
+  - [x] Add validation rules
+  - [x] Update documentation
+
+- **Implementation Tasks**
+  - [x] Create VIX data pipeline
+  - [x] Implement new volatility calculations
+  - [x] Add validation for new features
+  - [x] Update feature calculation code
+  - [x] Add tests for new features
+  - [x] Create migration plan for existing data
+
 ### Implementation Plan
 
 1. **Phase 1: Data Standardization** ✅
@@ -148,38 +188,38 @@ data/market_features/
      - [x] Add validation during updates
    - [x] Establish data quality metrics and monitoring
 
-2. **Phase 2: Feature Normalization** (In Progress)
-   - [ ] Implement new normalization
-   - [ ] Create statistics storage
-   - [ ] Test with existing models
-   - [ ] Update prediction pipeline
-   - [ ] Move normalization to dataset generation
-   - [ ] Create normalization statistics storage
-   - [ ] Implement normalization for new predictions
-   - [ ] Add validation for normalization consistency
-   - [ ] Create migration script for existing datasets
-   - [ ] Add support for different normalization strategies
-   - [ ] Implement normalization versioning
-   - [ ] Document feature normalization dependencies
-   - [ ] Add data quality checks for normalization
-   - [ ] Create normalization monitoring system
+2. **Phase 2: Dataset Generation & Feature Normalization** (In Progress)
+   - [ ] Core Dataset Infrastructure
+     - [ ] Create unified feature collection interface
+     - [ ] Implement feature validation framework
+     - [ ] Add support for both batch and single-row predictions
+     - [ ] Create feature versioning system
+     - [ ] Implement feature subset selection
+     - [ ] Add data quality metrics and monitoring
 
-3. **Phase 3: Dataset Generation** (Next Up)
-   - [ ] Update feature collection
-   - [ ] Implement single-row support
-   - [ ] Test with existing models
-   - [ ] Update documentation
-   - [ ] Update feature collection interface
-   - [ ] Implement single-row prediction support
-   - [ ] Add feature validation and error handling
-   - [ ] Create documentation for feature requirements
-   - [ ] Add tests for feature consistency
-   - [ ] Implement feature versioning system
-   - [ ] Add support for feature subset selection
-   - [ ] Create feature quality metrics
-   - [ ] Implement automated feature validation
+   - [ ] Feature Normalization
+     - [ ] Implement normalization during dataset generation
+     - [ ] Create normalization statistics storage
+     - [ ] Add support for different normalization strategies
+     - [ ] Implement normalization versioning
+     - [ ] Add validation for normalization consistency
+     - [ ] Create migration script for existing datasets
 
-4. **Phase 4: Prediction Pipeline**
+   - [ ] Prediction Support
+     - [ ] Enable single-row predictions using dataset metadata
+     - [ ] Support for new data points outside training set
+     - [ ] Implement feature imputation with stored statistics
+     - [ ] Add clear error handling for missing features
+     - [ ] Create prediction validation system
+     - [ ] Add support for batch predictions
+
+   - [ ] Documentation & Testing
+     - [ ] Document feature requirements and dependencies
+     - [ ] Create usage examples and tutorials
+     - [ ] Add comprehensive test coverage
+     - [ ] Create validation datasets and reports
+
+3. **Phase 3: Prediction Pipeline**
    - [ ] Create unified prediction interface
    - [ ] Implement feature validation in predictions
    - [ ] Add support for feature imputation
@@ -188,7 +228,7 @@ data/market_features/
    - [ ] Add support for batch predictions
    - [ ] Create prediction validation system
 
-5. **Phase 5: Model Training Enhancement**
+4. **Phase 4: Model Training Enhancement**
    - [ ] Enhance `train_logistic2.py`:
      - [ ] Add hyperparameter tuning
      - [ ] Implement cross-validation
@@ -207,7 +247,7 @@ data/market_features/
      - [ ] Model comparison
      - [ ] Model deployment
 
-6. **Phase 6: Testing and Validation**
+5. **Phase 5: Testing and Validation**
    - [ ] Expand test coverage:
      - [ ] Add unit tests for new functionality
      - [ ] Implement integration tests
@@ -217,7 +257,7 @@ data/market_features/
      - [ ] Add data quality checks
      - [ ] Create validation reports
 
-7. **Phase 7: Documentation and Examples**
+6. **Phase 6: Documentation and Examples**
    - [ ] Update documentation:
      - [ ] Code comments
      - [ ] Function docstrings
