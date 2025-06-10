@@ -4,7 +4,7 @@ import logging
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from datetime import datetime, timedelta
 import json
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
@@ -100,6 +100,94 @@ class DatasetGenerator:
         self.val_size = val_size
         self.random_state = random_state
     
+    def _track_feature_importance(self, df: pd.DataFrame) -> None:
+        """Track feature importance based on correlation with target.
+        
+        Args:
+            df: DataFrame containing features and target
+        """
+        if 'label' not in df.columns:
+            logger.warning("No label column found for feature importance tracking")
+            return
+            
+        try:
+            # Calculate correlations with target
+            correlations = df.corr()['label'].abs().sort_values(ascending=False)
+            
+            # Save to file
+            importance_path = self.output_dir / "feature_importance.json"
+            correlations.to_json(importance_path)
+            
+            logger.info(f"Saved feature importance metrics to {importance_path}")
+        except Exception as e:
+            logger.error(f"Error calculating feature importance: {e}")
+
+    def _calculate_outliers(self, df: pd.DataFrame) -> Dict[str, float]:
+        """Calculate outlier percentages for numeric columns.
+        
+        Args:
+            df: DataFrame to analyze
+            
+        Returns:
+            Dictionary of column names to outlier percentages
+        """
+        outliers = {}
+        numeric_cols = df.select_dtypes(include=np.number).columns
+        
+        for col in numeric_cols:
+            if col in ['ticker', 'label']:
+                continue
+                
+            # Calculate IQR
+            Q1 = df[col].quantile(0.25)
+            Q3 = df[col].quantile(0.75)
+            IQR = Q3 - Q1
+            
+            # Define outlier bounds
+            lower_bound = Q1 - 1.5 * IQR
+            upper_bound = Q3 + 1.5 * IQR
+            
+            # Calculate percentage of outliers
+            outliers_count = ((df[col] < lower_bound) | (df[col] > upper_bound)).sum()
+            outliers_pct = (outliers_count / len(df)) * 100
+            
+            outliers[f"outliers_pct_{col}"] = outliers_pct
+            
+        return outliers
+
+    def _generate_quality_metrics(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """Generate comprehensive data quality metrics.
+        
+        Args:
+            df: DataFrame to analyze
+            
+        Returns:
+            Dictionary containing various quality metrics
+        """
+        metrics = {
+            'missing_values_pct': (df.isnull().sum() / len(df) * 100).to_dict(),
+            'infinite_values_pct': (np.isinf(df.select_dtypes(include=np.number)).sum() / len(df) * 100).to_dict(),
+            'outliers_pct': self._calculate_outliers(df),
+            'feature_correlations': df.corr().to_dict(),
+            'feature_stats': df.describe().to_dict(),
+            'dataset_info': {
+                'total_samples': len(df),
+                'feature_count': len(df.columns),
+                'numeric_features': len(df.select_dtypes(include=np.number).columns),
+                'categorical_features': len(df.select_dtypes(include=['object', 'category']).columns),
+                'date_range': {
+                    'start': df.index.min().isoformat() if isinstance(df.index, pd.DatetimeIndex) else None,
+                    'end': df.index.max().isoformat() if isinstance(df.index, pd.DatetimeIndex) else None
+                }
+            }
+        }
+        
+        # Add target distribution if label exists
+        if 'label' in df.columns:
+            metrics['target_distribution'] = df['label'].value_counts(normalize=True).to_dict()
+            
+        return metrics
+
     def _load_sector_features(self, ticker: str, date: datetime) -> pd.DataFrame:
         """Load sector-specific features for a ticker.
         
@@ -124,11 +212,31 @@ class DatasetGenerator:
             
         try:
             df = pd.read_parquet(sector_file)
+            
+            # Validate data quality
+            if df.empty:
+                logger.warning(f"Empty sector data for {sector}")
+                return pd.DataFrame()
+                
             # Convert date to pandas Timestamp if it's a datetime
             if isinstance(date, datetime):
                 date = pd.Timestamp(date)
+                
+            # Filter by date
             df = df[df.index == date]
+            
+            # Validate filtered data
+            if df.empty:
+                logger.warning(f"No sector data for {sector} on {date}")
+                return pd.DataFrame()
+                
+            # Check for required features
+            missing_features = [f for f in self.EXPECTED_SECTOR_FEATURES if f not in df.columns]
+            if missing_features:
+                logger.warning(f"Missing sector features for {sector}: {missing_features}")
+                
             return df
+            
         except Exception as e:
             logger.error(f"Error loading sector features for {sector}: {e}")
             return pd.DataFrame()
@@ -240,16 +348,35 @@ class DatasetGenerator:
         # Split into train/val/test
         train_df, val_df, test_df = self._split_dataset(df)
         
+        # Track feature importance
+        self._track_feature_importance(train_df)
+        
+        # Generate quality metrics
+        quality_metrics = {
+            'train': self._generate_quality_metrics(train_df),
+            'val': self._generate_quality_metrics(val_df),
+            'test': self._generate_quality_metrics(test_df)
+        }
+        
+        # Save quality metrics
+        metrics_path = self.output_dir / "quality_metrics.json"
+        with open(metrics_path, 'w') as f:
+            json.dump(quality_metrics, f, indent=2)
+        
         # Identify columns to normalize (numeric, excluding 'ticker', 'date', 'analyst_targets')
         exclude_cols = {'ticker', 'date', 'analyst_targets'}
         numeric_cols = [col for col in train_df.columns if col not in exclude_cols and pd.api.types.is_numeric_dtype(train_df[col])]
+        
         # Fit normalizer only on numeric columns
         self.normalizer.fit(train_df[numeric_cols])
+        
         # Normalize numeric columns, keep others unchanged
         def normalize_df(df):
             df_norm = df.copy()
             df_norm[numeric_cols] = self.normalizer.transform(df[numeric_cols])
             return df_norm
+            
+        # Apply normalization
         train_df = normalize_df(train_df)
         val_df = normalize_df(val_df)
         test_df = normalize_df(test_df)
@@ -265,7 +392,7 @@ class DatasetGenerator:
         # Generate README
         self._generate_readme(output_path, tickers)
         
-        logger.info(f"Dataset generated at {output_path}")
+        logger.info(f"Dataset generation complete. Output saved to {output_path}")
     
     def _split_dataset(
         self,
@@ -313,96 +440,98 @@ class DatasetGenerator:
         )
     
     def _generate_readme(self, output_path: Path, tickers: List[str]) -> None:
-        """Generate README file for the dataset.
+        """Generate a README file for the dataset.
         
         Args:
-            output_path: Path to save README
-            tickers: List of tickers in dataset
+            output_path: Path to save the README
+            tickers: List of tickers included in the dataset
         """
         readme_content = f"""# Machine Learning Dataset
 
-## Generation Parameters
-- Start Date: {self.start_date.strftime('%Y-%m-%d')}
-- End Date: {self.end_date.strftime('%Y-%m-%d')}
-- Target Days: {self.target_days}
-- Minimum Samples per Ticker: {self.min_samples_per_ticker}
-- Test Size: {self.test_size:.1%}
-- Validation Size: {self.val_size:.1%}
-- Random State: {self.random_state}
-- Normalization Version: {self.normalizer.version}
+## Overview
+This dataset was generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} using the following parameters:
+- Number of tickers: {len(tickers)}
+- Date range: {self.start_date.strftime('%Y-%m-%d')} to {self.end_date.strftime('%Y-%m-%d')}
+- Target days: {self.target_days}
+- Minimum samples per ticker: {self.min_samples_per_ticker}
+- Test size: {self.test_size}
+- Validation size: {self.val_size}
+- Normalization version: {self.normalizer.version}
 
-## Dataset Statistics
-- Number of Tickers: {len(tickers)}
-- Tickers: {', '.join(tickers)}
-- Training Set Size: {len(pd.read_parquet(output_path / 'train.parquet'))}
-- Validation Set Size: {len(pd.read_parquet(output_path / 'val.parquet'))}
-- Test Set Size: {len(pd.read_parquet(output_path / 'test.parquet'))}
+## Included Tickers
+{', '.join(tickers)}
 
-## Feature Information
+## Dataset Structure
+The dataset is split into three parts:
+1. Training set (train.parquet)
+2. Validation set (val.parquet)
+3. Test set (test.parquet)
 
-### Ticker Features
-1. Price/Volume Metrics:
-   - open, high, low, close, volume, volume_prev
-   - dividends, stock_splits, adj_close
+## Features
+The dataset includes the following feature categories:
+1. Price/Volume Features
+   - OHLCV data
+   - Adjusted prices
+   - Volume metrics
 
-2. Technical Indicators:
-   - RSI (Relative Strength Index)
-   - MACD (Moving Average Convergence Divergence)
-   - Bollinger Bands (upper, lower, middle, %b)
+2. Technical Indicators
+   - RSI
+   - MACD
+   - Bollinger Bands
+   - Moving Averages
 
-3. Moving Averages:
-   - SMA (Simple Moving Average): 20, 50, 100, 200 days
-   - EMA (Exponential Moving Average): 100, 200 days
+3. Sector Features
+   - Sector performance metrics
+   - Sector volatility
+   - Sector momentum
+   - Relative strength indicators
 
-4. Analyst Information:
-   - analyst_targets: JSON string containing current price and median target
+4. Market Features
+   - Market breadth indicators
+   - Market volatility
+   - Market sentiment
+   - S&P 500 metrics
 
-### Sector Features
-1. Generic Sector Performance:
-   - Price, Volatility, Volume
-   - Returns: 1-day, 5-day, 20-day
-   - Momentum: 5-day, 20-day
-   - Relative Strength and Ratio
+## Data Quality
+Comprehensive data quality metrics are available in quality_metrics.json, including:
+- Missing value percentages
+- Infinite value percentages
+- Outlier percentages (using IQR method)
+- Feature correlations
+- Feature statistics
+- Dataset information (sample counts, feature types, date ranges)
+- Target distribution (if applicable)
 
-2. Sector-Specific Features
-For each sector (e.g., healthcare, technology), the following metrics are included:
-- Price, Volatility, Volume
-- Returns: 1-day, 5-day, 20-day
-- Momentum: 5-day, 20-day
-- Relative Strength and Ratio
-
-Note: Sector-specific features are prefixed with the sector name (e.g., 'technology_performance_1d').
+## Feature Importance
+Feature importance metrics based on correlation with the target variable are available in feature_importance.json.
 
 ## Normalization
-The dataset uses feature-specific normalization strategies:
+Features are normalized using version {self.normalizer.version} of the normalization strategy:
+- Price/volume features: Robust scaling
+- Technical indicators: Standard scaling
+- Bollinger Bands: Min-max scaling
 
-1. Price/Volume Features:
-   - Robust scaling to handle outliers
-   - Preserves relative relationships while reducing impact of extreme values
+## Usage
+To load the dataset:
+```python
+import pandas as pd
 
-2. Technical Indicators:
-   - Standard scaling (z-score normalization)
-   - Centers data around mean with unit variance
+# Load datasets
+train_df = pd.read_parquet('train.parquet')
+val_df = pd.read_parquet('val.parquet')
+test_df = pd.read_parquet('test.parquet')
 
-3. Bollinger Bands:
-   - Min-max scaling to [0,1] range
-   - Preserves relative positions within bands
+# Load quality metrics
+import json
+with open('quality_metrics.json', 'r') as f:
+    quality_metrics = json.load(f)
 
-4. Returns/Momentum:
-   - Standard scaling
-   - Centers around mean with unit variance
-
-Normalization parameters are versioned and stored in the 'normalization' directory.
-To normalize new data, use the same version of normalization parameters.
-
-## Usage Notes
-1. All features are normalized using version {self.normalizer.version}
-2. Missing values are preserved as NaN
-3. Sector-specific features may be NaN for some tickers
-4. The dataset is split chronologically by ticker to prevent data leakage
+# Load feature importance
+with open('feature_importance.json', 'r') as f:
+    feature_importance = json.load(f)
+```
 """
         
-        # Write README
         readme_path = output_path / "README.md"
         with open(readme_path, 'w') as f:
             f.write(readme_content)
