@@ -229,14 +229,14 @@ def test_sector_relative_strength_calculation():
         tech_df = sector_dfs['Technology']
 
         # Check that the expected columns exist
-        assert 'relative_strength' in tech_df.columns
-        assert 'relative_strength_ratio' in tech_df.columns
+        assert 'sector_performance_relative_strength' in tech_df.columns
+        assert 'sector_performance_relative_strength_ratio' in tech_df.columns
 
         # Check that the values are finite (not all NaN or inf)
-        assert tech_df['relative_strength'].notna().any()
-        assert np.isfinite(tech_df['relative_strength'].dropna()).all()
-        assert tech_df['relative_strength_ratio'].notna().any()
-        assert np.isfinite(tech_df['relative_strength_ratio'].dropna()).all()
+        assert tech_df['sector_performance_relative_strength'].notna().any()
+        assert np.isfinite(tech_df['sector_performance_relative_strength'].dropna()).all()
+        assert tech_df['sector_performance_relative_strength_ratio'].notna().any()
+        assert np.isfinite(tech_df['sector_performance_relative_strength_ratio'].dropna()).all()
 
 
 def test_data_completeness():

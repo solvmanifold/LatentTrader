@@ -19,7 +19,7 @@ from trading_advisor import __version__
 from trading_advisor.data import load_tickers, normalize_ticker, download_stock_data, load_ticker_features, ensure_data_dir, load_positions
 from trading_advisor.output import generate_report, generate_research_prompt, generate_deep_research_prompt, generate_structured_data, generate_technical_summary, save_json_report
 from trading_advisor.market_features import MarketFeatures
-from trading_advisor.models.dataset import DatasetGenerator
+from trading_advisor.dataset import DatasetGenerator
 from trading_advisor.models import registry, ModelRunner
 from trading_advisor.analysis import analyze_stock, calculate_technical_indicators, calculate_score, get_analyst_targets
 from trading_advisor.config import SCORE_WEIGHTS
@@ -660,24 +660,23 @@ def generate_dataset(
     tickers: str = typer.Option("all", help="Comma-separated tickers, path to file, or 'all' for all tickers"),
     start_date: str = typer.Option(..., help="Start date for dataset (YYYY-MM-DD)"),
     end_date: str = typer.Option(..., help="End date for dataset (YYYY-MM-DD)"),
-    target_days: int = typer.Option(5, help="Number of days to look ahead for target"),
-    target_return: float = typer.Option(0.02, help="Target return threshold"),
-    train_months: int = typer.Option(3, help="Number of months for training"),
-    val_months: int = typer.Option(1, help="Number of months for validation"),
-    test_months: int = typer.Option(1, help="Number of months for testing"),
-    min_samples: int = typer.Option(10, help="Minimum number of samples required"),
-    output: str = typer.Option("data/ml_datasets", help="Directory to save output files"),
-    feature_config: Optional[str] = typer.Option(None, help="Path to feature configuration JSON file"),
-    force: bool = typer.Option(False, help="Overwrite existing files if they exist"),
-    log_level: str = typer.Option("WARNING", help="Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)")
+    output_dir: str = typer.Option("data/ml_datasets", help="Directory to save output files"),
+    data_dir: str = typer.Option("data", help="Directory containing feature files"),
+    target_days: int = typer.Option(5, help="Number of days to look ahead for labeling"),
+    min_samples: int = typer.Option(100, help="Minimum samples required per ticker"),
+    test_size: float = typer.Option(0.2, help="Proportion of data to use for testing"),
+    val_size: float = typer.Option(0.1, help="Proportion of data to use for validation"),
+    random_state: int = typer.Option(42, help="Random seed for reproducibility"),
+    normalization_version: str = typer.Option("1.0.0", help="Version of normalization parameters"),
+    force: bool = typer.Option(False, help="Overwrite existing files if they exist")
 ):
-    """Generate machine learning datasets for specified tickers."""
-    from trading_advisor.models.dataset import DatasetGenerator
+    """
+    Generate ML-ready datasets for specified tickers with time-series aware splits.
+    """
     from trading_advisor.data import load_tickers
-    import logging
-    
-    # Set up logging
-    logging.basicConfig(level=getattr(logging, log_level))
+    from trading_advisor.dataset import DatasetGenerator
+    import os
+    from datetime import datetime
     
     # Parse tickers
     if tickers == "all":
@@ -686,30 +685,42 @@ def generate_dataset(
         with open(tickers) as f:
             ticker_list = [line.strip() for line in f if line.strip()]
     else:
-        ticker_list = [t.strip() for t in tickers.split(",")]
+        ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
+        
+    # Create output directory
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # Parse dates
+    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
     
     # Initialize dataset generator
     generator = DatasetGenerator(
-        market_features_dir="data/market_features",
-        ticker_features_dir="data/ticker_features",
-        output_dir=output,
-        feature_config=feature_config
+        market_features_dir=os.path.join(data_dir, "market_features"),
+        ticker_features_dir=os.path.join(data_dir, "ticker_features"),
+        output_dir=output_dir,
+        start_date=start_dt,
+        end_date=end_dt,
+        target_days=target_days,
+        min_samples_per_ticker=min_samples,
+        test_size=test_size,
+        val_size=val_size,
+        random_state=random_state,
+        normalization_version=normalization_version
     )
     
     # Generate dataset
-    generator.generate_dataset(
-        tickers=ticker_list,
-        start_date=start_date,
-        end_date=end_date,
-        target_days=target_days,
-        target_return=target_return,
-        train_months=train_months,
-        val_months=val_months,
-        test_months=test_months,
-        min_samples=min_samples,
-        output=output,
-        force=force
-    )
+    try:
+        # Use the last part of the output directory as the dataset name
+        dataset_name = os.path.basename(output_dir.rstrip('/'))
+        generator.generate_dataset(
+            tickers=ticker_list,
+            output_name=dataset_name
+        )
+        logger.info(f"Dataset generation complete. Output saved to {output_dir}")
+    except Exception as e:
+        logger.error(f"Error generating dataset: {e}")
+        raise typer.Exit(1)
 
 def run():
     """Run the CLI application."""

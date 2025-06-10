@@ -103,9 +103,11 @@ class TestDataDownload(unittest.TestCase):
         breadth_df = calculate_market_breadth(df)
         self.assertFalse(breadth_df.empty)
         # Verify we have the expected breadth indicators
-        expected_columns = ['adv_dec_line', 'new_highs', 'new_lows', 'above_ma20', 
-                          'above_ma50', 'rsi_bullish', 'rsi_oversold', 'rsi_overbought', 
-                          'macd_bullish']
+        expected_columns = ['daily_breadth_adv_dec_line', 'daily_breadth_new_highs', 
+                          'daily_breadth_new_lows', 'daily_breadth_above_ma20', 
+                          'daily_breadth_above_ma50', 'daily_breadth_rsi_bullish', 
+                          'daily_breadth_rsi_oversold', 'daily_breadth_rsi_overbought', 
+                          'daily_breadth_macd_bullish']
         for col in expected_columns:
             self.assertIn(col, breadth_df.columns)
 
@@ -120,7 +122,9 @@ class TestDataDownload(unittest.TestCase):
         self.assertIn('all_sectors', sector_dfs)
         # Verify the sector performance DataFrame has the expected columns
         sector_df = sector_dfs['all_sectors']
-        expected_columns = ['Technology_returns_1d', 'Technology_momentum_5d', 'Technology_relative_strength']
+        expected_columns = ['Technology_sector_performance_returns_1d', 
+                          'Technology_sector_performance_momentum_5d', 
+                          'Technology_sector_performance_relative_strength']
         for col in expected_columns:
             self.assertIn(col, sector_df.columns)
 

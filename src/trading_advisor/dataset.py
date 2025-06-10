@@ -5,11 +5,12 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
-
+from trading_advisor.features import load_features
 from trading_advisor.sector_mapping import load_sector_mapping
+from trading_advisor.normalization import FeatureNormalizer
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,15 @@ class DatasetGenerator:
         self,
         market_features_dir: str = "data/market_features",
         ticker_features_dir: str = "data/ticker_features",
-        output_dir: str = "data/ml_datasets"
+        output_dir: str = "data/ml_datasets",
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        target_days: int = 5,
+        min_samples_per_ticker: int = 100,
+        test_size: float = 0.2,
+        val_size: float = 0.1,
+        random_state: int = 42,
+        normalization_version: str = "1.0.0"
     ):
         """Initialize the dataset generator.
         
@@ -60,6 +69,14 @@ class DatasetGenerator:
             market_features_dir: Directory containing market feature files
             ticker_features_dir: Directory containing ticker feature files
             output_dir: Directory to save generated datasets
+            start_date: Start date for data collection
+            end_date: End date for data collection
+            target_days: Number of days to look ahead for labeling
+            min_samples_per_ticker: Minimum number of samples required per ticker
+            test_size: Proportion of data to use for testing
+            val_size: Proportion of data to use for validation
+            random_state: Random seed for reproducibility
+            normalization_version: Version of normalization parameters to use
         """
         self.market_features_dir = Path(market_features_dir)
         self.ticker_features_dir = Path(ticker_features_dir)
@@ -68,8 +85,22 @@ class DatasetGenerator:
         
         # Load sector mapping
         self.sector_mapping = load_sector_mapping(str(self.market_features_dir))
+        
+        # Initialize feature normalizer
+        self.normalizer = FeatureNormalizer(
+            output_dir=self.output_dir / "normalization",
+            version=normalization_version
+        )
+        
+        self.start_date = start_date or (datetime.now() - timedelta(days=365*2))
+        self.end_date = end_date or datetime.now()
+        self.target_days = target_days
+        self.min_samples_per_ticker = min_samples_per_ticker
+        self.test_size = test_size
+        self.val_size = val_size
+        self.random_state = random_state
     
-    def _load_sector_features(self, ticker: str, date: pd.Timestamp) -> pd.DataFrame:
+    def _load_sector_features(self, ticker: str, date: datetime) -> pd.DataFrame:
         """Load sector-specific features for a ticker.
         
         Args:
@@ -93,6 +124,9 @@ class DatasetGenerator:
             
         try:
             df = pd.read_parquet(sector_file)
+            # Convert date to pandas Timestamp if it's a datetime
+            if isinstance(date, datetime):
+                date = pd.Timestamp(date)
             df = df[df.index == date]
             return df
         except Exception as e:
@@ -132,263 +166,245 @@ class DatasetGenerator:
     def generate_dataset(
         self,
         tickers: List[str],
-        start_date: str,
-        end_date: str,
-        target_days: int = 5,
-        target_return: float = 0.02,
-        min_samples: int = 10,
-        output: Optional[str] = None,
-        force: bool = False
-    ) -> Dict[str, pd.DataFrame]:
-        """Generate dataset for classification.
+        output_name: str = "dataset"
+    ) -> None:
+        """Generate a machine learning dataset.
         
         Args:
             tickers: List of tickers to include
-            start_date: Start date for dataset
-            end_date: End date for dataset
-            target_days: Number of days to look ahead for target
-            target_return: Target return threshold
-            min_samples: Minimum number of samples required per ticker
-            output: Output directory (optional)
-            force: Whether to overwrite existing files
-            
-        Returns:
-            Dictionary containing train, validation, and test datasets
+            output_name: Name for the output dataset
         """
-        logger.info(f"Starting dataset generation for tickers: {tickers}")
+        logger.info(f"Generating dataset for {len(tickers)} tickers")
         
-        # Set output directory
-        output_dir = Path(output) if output else self.output_dir
-        output_dir.mkdir(parents=True, exist_ok=True)
+        # Load sector mapping
+        sector_mapping = self.sector_mapping
         
-        # Check if files already exist
-        train_path = output_dir / 'train.parquet'
-        val_path = output_dir / 'val.parquet'
-        test_path = output_dir / 'test.parquet'
-        
-        if not force and (train_path.exists() or val_path.exists() or test_path.exists()):
-            raise ValueError(
-                f"Dataset files already exist in {output_dir}. Use --force to overwrite."
-            )
+        # Initialize storage for all data
+        all_data = []
         
         # Load and process data for each ticker
-        all_data = []
-        with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
-            task = progress.add_task("Loading ticker data...", total=len(tickers))
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            transient=True
+        ) as progress:
+            task = progress.add_task(
+                f"Processing {len(tickers)} tickers...",
+                total=len(tickers)
+            )
+            
             for ticker in tickers:
-                try:
-                    # Load ticker features
-                    ticker_file = self.ticker_features_dir / f"{ticker}_features.parquet"
-                    if not ticker_file.exists():
-                        logger.warning(f"No features found for {ticker}")
-                        progress.update(task, advance=1)
-                        continue
-                    
-                    ticker_data = pd.read_parquet(ticker_file)
-                    
-                    # Ensure date is the index
-                    if not isinstance(ticker_data.index, pd.DatetimeIndex):
-                        if 'Date' in ticker_data.columns:
-                            ticker_data = ticker_data.set_index('Date')
-                        elif 'date' in ticker_data.columns:
-                            ticker_data = ticker_data.set_index('date')
-                        else:
-                            logger.warning(f"No date column found in ticker features for {ticker}")
-                            progress.update(task, advance=1)
-                            continue
-                    
-                    # Filter date range
-                    ticker_data = ticker_data[
-                        (ticker_data.index >= pd.Timestamp(start_date)) & 
-                        (ticker_data.index <= pd.Timestamp(end_date))
-                    ]
-                    
-                    if len(ticker_data) < min_samples:
-                        logger.warning(f"Insufficient samples for {ticker}: {len(ticker_data)} < {min_samples}")
-                        progress.update(task, advance=1)
-                        continue
-                    
-                    # Normalize column names to lowercase
-                    ticker_data.columns = ticker_data.columns.str.lower()
-                    
-                    # Calculate future returns using 'close' price
-                    if 'close' not in ticker_data.columns:
-                        logger.error(f"No 'close' column found in ticker features for {ticker}. Available columns: {ticker_data.columns.tolist()}")
-                        progress.update(task, advance=1)
-                        continue
-                        
-                    future_returns = ticker_data['close'].shift(-target_days) / ticker_data['close'] - 1
-                    ticker_data['label'] = (future_returns >= target_return).astype(int)
-                    
-                    # Drop rows with NaN labels
-                    ticker_data = ticker_data.dropna(subset=['label'])
-                    
-                    if len(ticker_data) < min_samples:
-                        logger.warning(f"Insufficient samples after label generation for {ticker}: {len(ticker_data)} < {min_samples}")
-                        progress.update(task, advance=1)
-                        continue
-                    
-                    # Add ticker column
-                    ticker_data['ticker'] = ticker
-                    
-                    # Load and merge sector features
-                    for date in ticker_data.index:
-                        sector_features = self._load_sector_features(ticker, date)
-                        if not sector_features.empty:
-                            for col in sector_features.columns:
-                                ticker_data.loc[date, col] = sector_features[col].iloc[0]
-                    
-                    # Validate features
-                    missing_features = self._validate_features(ticker_data, ticker)
-                    if missing_features:
-                        logger.warning(f"Missing features for {ticker}: {missing_features}")
-                        # Fill missing features with NaN
-                        for feature in missing_features:
-                            ticker_data[feature] = np.nan
-                    
-                    all_data.append(ticker_data)
-                    progress.update(task, advance=1)
-                    
-                except Exception as e:
-                    logger.error(f"Error processing {ticker}: {str(e)}")
-                    progress.update(task, advance=1)
+                logger.info(f"Loading features for {ticker} from {self.ticker_features_dir}")
+                ticker_features = load_features(ticker, str(self.ticker_features_dir))
+                logger.info(f"Loaded features for {ticker}: {ticker_features.shape if not ticker_features.empty else 'empty'}")
+                
+                if ticker_features.empty:
+                    logger.warning(f"No features found for {ticker}")
+                    progress.advance(task)
                     continue
-        
+                
+                # Filter by date range
+                ticker_features = ticker_features[(ticker_features.index >= self.start_date) & (ticker_features.index <= self.end_date)]
+                if ticker_features.empty:
+                    logger.warning(f"No features in date range for {ticker}")
+                    progress.advance(task)
+                    continue
+                
+                for date, row in ticker_features.iterrows():
+                    # Load sector features for this date
+                    sector_features = self._load_sector_features(ticker, date)
+                    if not sector_features.empty:
+                        # Flatten sector features to a dict with prefixed keys
+                        sector_dict = {f"{self.sector_mapping.get(ticker, 'unknown').lower().replace(' ', '_')}_{col}": val for col, val in sector_features.iloc[0].items()}
+                    else:
+                        sector_dict = {}
+                    # Combine ticker and sector features
+                    features = dict(row)
+                    features.update(sector_dict)
+                    features['ticker'] = ticker
+                    features['date'] = date
+                    all_data.append(features)
+                progress.advance(task)
+                
         if not all_data:
-            raise ValueError("No valid data was generated for any ticker")
+            raise ValueError("No valid features found for any tickers")
         
-        # Combine all data
-        combined_data = pd.concat(all_data)
+        # Convert to DataFrame
+        df = pd.DataFrame(all_data)
         
-        # Split into train/val/test (60/20/20)
-        dates = sorted(combined_data.index.unique())
-        split_idx = int(len(dates) * 0.6)
-        val_idx = int(len(dates) * 0.8)
+        # Validate features
+        self._validate_features(df, ticker)
         
-        train_dates = dates[:split_idx]
-        val_dates = dates[split_idx:val_idx]
-        test_dates = dates[val_idx:]
+        # Split into train/val/test
+        train_df, val_df, test_df = self._split_dataset(df)
         
-        train_data = combined_data[combined_data.index.isin(train_dates)]
-        val_data = combined_data[combined_data.index.isin(val_dates)]
-        test_data = combined_data[combined_data.index.isin(test_dates)]
+        # Identify columns to normalize (numeric, excluding 'ticker', 'date', 'analyst_targets')
+        exclude_cols = {'ticker', 'date', 'analyst_targets'}
+        numeric_cols = [col for col in train_df.columns if col not in exclude_cols and pd.api.types.is_numeric_dtype(train_df[col])]
+        # Fit normalizer only on numeric columns
+        self.normalizer.fit(train_df[numeric_cols])
+        # Normalize numeric columns, keep others unchanged
+        def normalize_df(df):
+            df_norm = df.copy()
+            df_norm[numeric_cols] = self.normalizer.transform(df[numeric_cols])
+            return df_norm
+        train_df = normalize_df(train_df)
+        val_df = normalize_df(val_df)
+        test_df = normalize_df(test_df)
         
         # Save datasets
-        logger.info(f"Saving train dataset with shape {train_data.shape}")
-        logger.info(f"Saving val dataset with shape {val_data.shape}")
-        logger.info(f"Saving test dataset with shape {test_data.shape}")
+        output_path = self.output_dir / output_name
+        output_path.mkdir(parents=True, exist_ok=True)
         
-        train_data.to_parquet(train_path)
-        val_data.to_parquet(val_path)
-        test_data.to_parquet(test_path)
+        train_df.to_parquet(output_path / "train.parquet")
+        val_df.to_parquet(output_path / "val.parquet")
+        test_df.to_parquet(output_path / "test.parquet")
         
         # Generate README
-        self._generate_readme(output_dir, {
-            'start_date': start_date,
-            'end_date': end_date,
-            'target_days': target_days,
-            'target_return': target_return,
-            'min_samples': min_samples,
-            'tickers': tickers,
-            'train_samples': len(train_data),
-            'val_samples': len(val_data),
-            'test_samples': len(test_data),
-            'train_positive_pct': (train_data['label'].mean() * 100),
-            'val_positive_pct': (val_data['label'].mean() * 100),
-            'test_positive_pct': (test_data['label'].mean() * 100)
-        })
+        self._generate_readme(output_path, tickers)
         
-        return {
-            'train': train_data,
-            'val': val_data,
-            'test': test_data
-        }
+        logger.info(f"Dataset generated at {output_path}")
     
-    def _generate_readme(self, output_dir: Path, params: Dict) -> None:
-        """Generate README.md file with dataset information."""
+    def _split_dataset(
+        self,
+        df: pd.DataFrame
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+        """Split dataset into train/val/test sets.
+        
+        Args:
+            df: DataFrame to split
+            
+        Returns:
+            Tuple of (train_df, val_df, test_df)
+        """
+        # Group by ticker to ensure proper splitting
+        ticker_groups = df.groupby('ticker')
+        
+        train_dfs = []
+        val_dfs = []
+        test_dfs = []
+        
+        for _, group in ticker_groups:
+            if len(group) < self.min_samples_per_ticker:
+                continue
+                
+            # Calculate split indices
+            n = len(group)
+            test_size = int(n * self.test_size)
+            val_size = int(n * self.val_size)
+            
+            # Shuffle and split
+            group = group.sample(frac=1, random_state=self.random_state)
+            
+            test_df = group.iloc[:test_size]
+            val_df = group.iloc[test_size:test_size + val_size]
+            train_df = group.iloc[test_size + val_size:]
+            
+            train_dfs.append(train_df)
+            val_dfs.append(val_df)
+            test_dfs.append(test_df)
+            
+        return (
+            pd.concat(train_dfs),
+            pd.concat(val_dfs),
+            pd.concat(test_dfs)
+        )
+    
+    def _generate_readme(self, output_path: Path, tickers: List[str]) -> None:
+        """Generate README file for the dataset.
+        
+        Args:
+            output_path: Path to save README
+            tickers: List of tickers in dataset
+        """
         readme_content = f"""# Machine Learning Dataset
 
 ## Generation Parameters
-- Start Date: {params['start_date']}
-- End Date: {params['end_date']}
-- Target Days: {params['target_days']}
-- Target Return: {params['target_return']}
-- Minimum Samples per Ticker: {params['min_samples']}
-- Tickers: {', '.join(params['tickers'])}
+- Start Date: {self.start_date.strftime('%Y-%m-%d')}
+- End Date: {self.end_date.strftime('%Y-%m-%d')}
+- Target Days: {self.target_days}
+- Minimum Samples per Ticker: {self.min_samples_per_ticker}
+- Test Size: {self.test_size:.1%}
+- Validation Size: {self.val_size:.1%}
+- Random State: {self.random_state}
+- Normalization Version: {self.normalizer.version}
 
 ## Dataset Statistics
-- Training Set:
-  - Samples: {params['train_samples']}
-  - Positive Labels: {params['train_positive_pct']:.1f}%
-- Validation Set:
-  - Samples: {params['val_samples']}
-  - Positive Labels: {params['val_positive_pct']:.1f}%
-- Test Set:
-  - Samples: {params['test_samples']}
-  - Positive Labels: {params['test_positive_pct']:.1f}%
+- Number of Tickers: {len(tickers)}
+- Tickers: {', '.join(tickers)}
+- Training Set Size: {len(pd.read_parquet(output_path / 'train.parquet'))}
+- Validation Set Size: {len(pd.read_parquet(output_path / 'val.parquet'))}
+- Test Set Size: {len(pd.read_parquet(output_path / 'test.parquet'))}
 
 ## Feature Information
-The dataset includes the following features:
 
 ### Ticker Features
-#### Price/Volume Metrics
-- open, high, low, close
-- volume, volume_prev
-- dividends, stock_splits
-- adj_close
+1. Price/Volume Metrics:
+   - open, high, low, close, volume, volume_prev
+   - dividends, stock_splits, adj_close
 
-#### Technical Indicators
-- RSI (14-day)
-- MACD (macd, macd_signal, macd_hist)
-- Bollinger Bands (bb_upper, bb_lower, bb_middle, bb_pband)
+2. Technical Indicators:
+   - RSI (Relative Strength Index)
+   - MACD (Moving Average Convergence Divergence)
+   - Bollinger Bands (upper, lower, middle, %b)
 
-#### Moving Averages
-- Simple Moving Averages: sma_20, sma_50, sma_100, sma_200
-- Exponential Moving Averages: ema_100, ema_200
+3. Moving Averages:
+   - SMA (Simple Moving Average): 20, 50, 100, 200 days
+   - EMA (Exponential Moving Average): 100, 200 days
 
-#### Analyst Information
-- analyst_targets: JSON string containing current price and median target
+4. Analyst Information:
+   - analyst_targets: JSON string containing current price and median target
 
 ### Sector Features
-#### Generic Sector Performance
-- Price, Volatility, Volume
-- Returns: 1-day, 5-day, 20-day
-- Momentum: 5-day, 20-day
-- Relative Strength and Ratio
+1. Generic Sector Performance:
+   - Price, Volatility, Volume
+   - Returns: 1-day, 5-day, 20-day
+   - Momentum: 5-day, 20-day
+   - Relative Strength and Ratio
 
-#### Sector-Specific Features
+2. Sector-Specific Features
 For each sector (e.g., healthcare, technology), the following metrics are included:
 - Price, Volatility, Volume
 - Returns: 1-day, 5-day, 20-day
 - Momentum: 5-day, 20-day
 - Relative Strength and Ratio
 
-### Additional Fields
-- label: Binary classification target (1 for positive returns, 0 otherwise)
-- ticker: Ticker symbol
+Note: Sector-specific features are prefixed with the sector name (e.g., 'technology_performance_1d').
+
+## Normalization
+The dataset uses feature-specific normalization strategies:
+
+1. Price/Volume Features:
+   - Robust scaling to handle outliers
+   - Preserves relative relationships while reducing impact of extreme values
+
+2. Technical Indicators:
+   - Standard scaling (z-score normalization)
+   - Centers data around mean with unit variance
+
+3. Bollinger Bands:
+   - Min-max scaling to [0,1] range
+   - Preserves relative positions within bands
+
+4. Returns/Momentum:
+   - Standard scaling
+   - Centers around mean with unit variance
+
+Normalization parameters are versioned and stored in the 'normalization' directory.
+To normalize new data, use the same version of normalization parameters.
 
 ## Usage Notes
-1. Loading the Dataset:
-```python
-import pandas as pd
-from pathlib import Path
-
-# Load the datasets
-data_dir = Path("data/ml_datasets/your_dataset_dir")
-train_df = pd.read_parquet(data_dir / "train.parquet")
-val_df = pd.read_parquet(data_dir / "val.parquet")
-test_df = pd.read_parquet(data_dir / "test.parquet")
-```
-
-2. Model Training Considerations:
-   - Handle class imbalance (positive labels are typically less frequent)
-   - Use appropriate time-series cross-validation
-   - Consider feature importance and correlation
-   - Account for the time-series nature of the data
-   - Note that sector-specific features may contain NaN values for tickers not in that sector
+1. All features are normalized using version {self.normalizer.version}
+2. Missing values are preserved as NaN
+3. Sector-specific features may be NaN for some tickers
+4. The dataset is split chronologically by ticker to prevent data leakage
 """
         
-        readme_path = output_dir / "README.md"
+        # Write README
+        readme_path = output_path / "README.md"
         with open(readme_path, 'w') as f:
             f.write(readme_content)
-        logger.info(f"Generated README.md at {readme_path}") 
+            
+        logger.info(f"Generated README at {readme_path}") 

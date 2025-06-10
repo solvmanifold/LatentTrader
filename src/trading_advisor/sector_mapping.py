@@ -50,9 +50,20 @@ def load_sector_mapping(market_features_dir: str = "data/market_features") -> Di
         Dictionary mapping tickers to sectors
     """
     mapping_file = Path(market_features_dir) / "sector_mapping.json"
+    logger.debug(f"Loading sector mapping from {mapping_file}")
     if mapping_file.exists():
         with open(mapping_file, 'r') as f:
-            return json.load(f)
+            raw_mapping = json.load(f)
+            logger.debug(f"Raw mapping contents: {raw_mapping}")
+            logger.debug(f"Raw mapping keys: {list(raw_mapping.keys())}")
+            # Normalize all tickers in the mapping
+            mapping = {normalize_ticker(ticker): sector for ticker, sector in raw_mapping.items()}
+            logger.debug(f"Normalized mapping contents: {mapping}")
+            logger.debug(f"Normalized mapping keys: {list(mapping.keys())}")
+            logger.debug(f"Loaded sector mapping with {len(mapping)} tickers")
+            logger.debug(f"First 5 tickers in mapping: {list(mapping.items())[:5]}")
+            return mapping
+    logger.warning(f"Sector mapping file not found at {mapping_file}")
     return {}
 
 def update_sector_mapping(tickers: List[str], market_features_dir: str = "data/market_features") -> Dict[str, str]:

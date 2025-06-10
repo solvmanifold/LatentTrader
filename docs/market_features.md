@@ -68,6 +68,7 @@ Market volatility features are calculated daily and include:
 - **VIX:** The CBOE Volatility Index (`market_volatility_vix`)
   - Raw VIX value from CBOE
   - Measures market's expectation of 30-day forward-looking volatility
+  - Used as a market fear gauge
 
 - **Market-wide Volatility Measures:**
   - Daily Volatility (`market_volatility_daily_volatility`)
@@ -77,21 +78,26 @@ Market volatility features are calculated daily and include:
   - Weekly Volatility (`market_volatility_weekly_volatility`)
     - Formula: Standard deviation of weekly returns across all stocks
     - Uses 5-day rolling window
+    - Annualized by multiplying by √252
   - Monthly Volatility (`market_volatility_monthly_volatility`)
     - Formula: Standard deviation of monthly returns across all stocks
     - Uses 21-day rolling window
+    - Annualized by multiplying by √252
 
 - **Average Correlation:** (`market_volatility_avg_correlation`)
   - Formula: Average pairwise correlation between stock returns
   - Mathematical representation: ρ = Σ(ρᵢⱼ) / (n(n-1)/2)
     where ρᵢⱼ = correlation between stocks i and j
   - Uses 20-day rolling window for correlation calculation
+  - Higher values indicate more synchronized market movements
 
 - **Ticker-specific Volatility:** (`market_volatility_ticker`)
   - Individual stock volatility relative to market
   - Formula: σᵢ / σₘ
     where σᵢ = stock volatility, σₘ = market volatility
   - Uses 20-day rolling window
+  - Values > 1 indicate higher volatility than market
+  - Values < 1 indicate lower volatility than market
 
 The data is stored in `data/market_features/market_volatility.parquet`
 
@@ -103,26 +109,33 @@ Market sentiment features are calculated daily and include:
   - 5-day Moving Average (`market_sentiment_ma5`)
     - Formula: MA5(t) = (Price(t) + Price(t-1) + Price(t-2) + Price(t-3) + Price(t-4)) / 5
     - Mathematical representation: MA5(t) = Σ(P(t-i)) / 5 for i = 0 to 4
+    - Used to smooth out short-term price fluctuations
   - 20-day Moving Average (`market_sentiment_ma20`)
     - Formula: MA20(t) = Σ(Price(t-i)) / 20 for i = 0 to 19
     - Mathematical representation: MA20(t) = Σ(P(t-i)) / 20 for i = 0 to 19
+    - Used to identify longer-term trends
 
 - **Momentum:** (`market_sentiment_momentum`)
   - Price change over 5 days
   - Formula: (Price(t) - Price(t-5)) / Price(t-5)
   - Mathematical representation: M(t) = (P(t) - P(t-5)) / P(t-5)
+  - Positive values indicate upward momentum
+  - Negative values indicate downward momentum
 
 - **Volatility:** (`market_sentiment_volatility`)
   - 20-day rolling standard deviation of returns
   - Formula: σ = √(Σ(r - μ)² / (n-1))
   - Mathematical representation: σ(t) = √(Σ(r(t-i) - μ)² / 19) for i = 0 to 19
     where r = daily returns, μ = mean return over 20 days
+  - Higher values indicate more volatile sentiment
 
 - **Z-Score:** (`market_sentiment_zscore`)
   - Standardized measure of current price relative to its moving average
   - Formula: (Price(t) - MA20(t)) / σ(t)
   - Mathematical representation: Z(t) = (P(t) - MA20(t)) / σ(t)
     where σ(t) is the 20-day standard deviation
+  - Values > 2 indicate significantly above average sentiment
+  - Values < -2 indicate significantly below average sentiment
 
 The data is stored in `data/market_features/market_sentiment.parquet`
 
@@ -133,31 +146,48 @@ Sector performance features are calculated daily and stored in individual files 
 - **Price:** (`sector_performance_price`)
   - Sector index price level
   - Weighted average of constituent stock prices
+  - Market cap weighted to reflect sector composition
 
 - **Volatility:** (`sector_performance_volatility`)
   - 20-day rolling volatility of sector returns
   - Formula: Standard deviation of daily returns
+  - Annualized by multiplying by √252
+  - Used to measure sector risk
 
 - **Volume:** (`sector_performance_volume`)
   - Total trading volume across sector
   - Normalized by market cap
+  - Formula: Σ(Volume × Price) / Σ(Market Cap)
+  - Higher values indicate higher sector activity
 
 - **Returns:**
   - 1-day returns (`sector_performance_returns_1d`)
+    - Daily price change
+    - Formula: (Price(t) - Price(t-1)) / Price(t-1)
   - 5-day returns (`sector_performance_returns_5d`)
+    - Weekly price change
+    - Formula: (Price(t) - Price(t-5)) / Price(t-5)
   - 20-day returns (`sector_performance_returns_20d`)
+    - Monthly price change
+    - Formula: (Price(t) - Price(t-20)) / Price(t-20)
 
 - **Momentum:**
   - 5-day momentum (`sector_performance_momentum_5d`)
     - Price change over 5 days
+    - Formula: (Price(t) - Price(t-5)) / Price(t-5)
   - 20-day momentum (`sector_performance_momentum_20d`)
     - Price change over 20 days
+    - Formula: (Price(t) - Price(t-20)) / Price(t-20)
 
 - **Relative Strength:**
   - Raw relative strength (`sector_performance_relative_strength`)
     - Sector return vs S&P 500 return
+    - Formula: r_sector - r_sp500
+    - Positive values indicate outperformance
   - Relative strength ratio (`sector_performance_relative_strength_ratio`)
     - Sector return / S&P 500 return
+    - Formula: (1 + r_sector) / (1 + r_sp500)
+    - Values > 1 indicate outperformance
 
 Each sector's data is stored in its own file: `data/market_features/sectors/{sector_name}.parquet`
 

@@ -77,9 +77,11 @@ def handle_multiindex_columns(df: pd.DataFrame, ticker: str) -> pd.DataFrame:
 
 def normalize_ticker(ticker: str) -> str:
     """Normalize ticker format for Yahoo Finance."""
-    # Replace dots with hyphens for class B shares
-    if ticker.endswith('.B'):
-        return ticker.replace('.B', '-B')
+    # Convert to uppercase
+    ticker = ticker.upper()
+    # Replace dots with hyphens for class shares and other special cases
+    if '.' in ticker:
+        return ticker.replace('.', '-')
     return ticker
 
 def get_features_path(ticker, features_dir="data/ticker_features"):
