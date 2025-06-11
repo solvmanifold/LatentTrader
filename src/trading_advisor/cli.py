@@ -668,7 +668,8 @@ def generate_dataset(
     val_size: float = typer.Option(0.1, help="Proportion of data to use for validation"),
     random_state: int = typer.Option(42, help="Random seed for reproducibility"),
     normalization_version: str = typer.Option("1.0.0", help="Version of normalization parameters"),
-    force: bool = typer.Option(False, help="Overwrite existing files if they exist")
+    force: bool = typer.Option(False, help="Overwrite existing files if they exist"),
+    validate: bool = typer.Option(False, help="Validate generated datasets")
 ):
     """
     Generate ML-ready datasets for specified tickers with time-series aware splits.
@@ -677,6 +678,7 @@ def generate_dataset(
     from trading_advisor.dataset import DatasetGenerator
     import os
     from datetime import datetime
+    import pandas as pd
     
     # Parse tickers
     if tickers == "all":
@@ -718,6 +720,78 @@ def generate_dataset(
             output_name=dataset_name
         )
         logger.info(f"Dataset generation complete. Output saved to {output_dir}")
+        
+        # Validate datasets if requested
+        if validate:
+            logger.info("Validating generated datasets...")
+            
+            # Load datasets
+            train_path = os.path.join(output_dir, dataset_name, "train.parquet")
+            val_path = os.path.join(output_dir, dataset_name, "val.parquet")
+            test_path = os.path.join(output_dir, dataset_name, "test.parquet")
+            
+            train_df = pd.read_parquet(train_path)
+            val_df = pd.read_parquet(val_path)
+            test_df = pd.read_parquet(test_path)
+            
+            # Basic validation checks
+            validation_results = {
+                'train': {
+                    'shape': train_df.shape,
+                    'missing_values': train_df.isnull().sum().to_dict(),
+                    'dtypes': train_df.dtypes.to_dict(),
+                    'tickers': train_df['ticker'].unique().tolist()
+                },
+                'val': {
+                    'shape': val_df.shape,
+                    'missing_values': val_df.isnull().sum().to_dict(),
+                    'dtypes': val_df.dtypes.to_dict(),
+                    'tickers': val_df['ticker'].unique().tolist()
+                },
+                'test': {
+                    'shape': test_df.shape,
+                    'missing_values': test_df.isnull().sum().to_dict(),
+                    'dtypes': test_df.dtypes.to_dict(),
+                    'tickers': test_df['ticker'].unique().tolist()
+                }
+            }
+            
+            # Print validation results
+            typer.echo("\n🔍 Validation Results:")
+            for split, results in validation_results.items():
+                typer.echo(f"\n📊 {split.upper()} Dataset:")
+                typer.echo(f"Shape: {results['shape']}")
+                typer.echo(f"Tickers: {results['tickers']}")
+                typer.echo("Missing values:")
+                for col, count in results['missing_values'].items():
+                    if count > 0:
+                        typer.echo(f"  {col}: {count}")
+                typer.echo("Data types:")
+                for col, dtype in results['dtypes'].items():
+                    typer.echo(f"  {col}: {dtype}")
+            
+            # Check for overlap between splits
+            train_tickers = set(train_df['ticker'].unique())
+            val_tickers = set(val_df['ticker'].unique())
+            test_tickers = set(test_df['ticker'].unique())
+            
+            if train_tickers.intersection(val_tickers) or train_tickers.intersection(test_tickers) or val_tickers.intersection(test_tickers):
+                typer.echo("\n⚠️  Warning: Overlap detected between splits!")
+                typer.echo(f"Train-Val overlap: {train_tickers.intersection(val_tickers)}")
+                typer.echo(f"Train-Test overlap: {train_tickers.intersection(test_tickers)}")
+                typer.echo(f"Val-Test overlap: {val_tickers.intersection(test_tickers)}")
+            
+            # Check for data leakage
+            train_dates = set(train_df.index)
+            val_dates = set(val_df.index)
+            test_dates = set(test_df.index)
+            
+            if train_dates.intersection(val_dates) or train_dates.intersection(test_dates) or val_dates.intersection(test_dates):
+                typer.echo("\n⚠️  Warning: Date overlap detected between splits!")
+                typer.echo(f"Train-Val date overlap: {len(train_dates.intersection(val_dates))} dates")
+                typer.echo(f"Train-Test date overlap: {len(train_dates.intersection(test_dates))} dates")
+                typer.echo(f"Val-Test date overlap: {len(val_dates.intersection(test_dates))} dates")
+            
     except Exception as e:
         logger.error(f"Error generating dataset: {e}")
         raise typer.Exit(1)

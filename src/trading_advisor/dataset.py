@@ -164,16 +164,19 @@ class DatasetGenerator:
         Returns:
             Dictionary containing various quality metrics
         """
+        # Get numeric columns for correlation and stats
+        numeric_cols = df.select_dtypes(include=np.number).columns
+        
         metrics = {
             'missing_values_pct': (df.isnull().sum() / len(df) * 100).to_dict(),
-            'infinite_values_pct': (np.isinf(df.select_dtypes(include=np.number)).sum() / len(df) * 100).to_dict(),
+            'infinite_values_pct': (np.isinf(df[numeric_cols]).sum() / len(df) * 100).to_dict(),
             'outliers_pct': self._calculate_outliers(df),
-            'feature_correlations': df.corr().to_dict(),
-            'feature_stats': df.describe().to_dict(),
+            'feature_correlations': df[numeric_cols].corr().to_dict(),
+            'feature_stats': df[numeric_cols].describe().to_dict(),
             'dataset_info': {
                 'total_samples': len(df),
                 'feature_count': len(df.columns),
-                'numeric_features': len(df.select_dtypes(include=np.number).columns),
+                'numeric_features': len(numeric_cols),
                 'categorical_features': len(df.select_dtypes(include=['object', 'category']).columns),
                 'date_range': {
                     'start': df.index.min().isoformat() if isinstance(df.index, pd.DatetimeIndex) else None,
@@ -222,8 +225,19 @@ class DatasetGenerator:
             if isinstance(date, datetime):
                 date = pd.Timestamp(date)
                 
-            # Filter by date
-            df = df[df.index == date]
+            # Find the closest available date
+            if date not in df.index:
+                # Get the closest date that's not after the requested date
+                available_dates = df.index[df.index <= date]
+                if len(available_dates) > 0:
+                    closest_date = available_dates[-1]  # Get the most recent date
+                    logger.debug(f"Using closest available date {closest_date} for {date}")
+                    df = df[df.index == closest_date]
+                else:
+                    logger.warning(f"No sector data available before {date} for {sector}")
+                    return pd.DataFrame()
+            else:
+                df = df[df.index == date]
             
             # Validate filtered data
             if df.empty:
@@ -271,6 +285,50 @@ class DatasetGenerator:
         
         return missing_features
     
+    def _generate_missing_values_summary(self, df: pd.DataFrame) -> str:
+        """Generate a concise summary of missing values in the dataset.
+        
+        Args:
+            df: DataFrame to analyze
+            
+        Returns:
+            String containing missing values summary
+        """
+        # Calculate missing values
+        missing = df.isnull().sum()
+        missing_pct = (missing / len(df) * 100).round(2)
+        
+        # Filter for columns with missing values
+        missing_cols = missing[missing > 0]
+        if missing_cols.empty:
+            return "No missing values found in the dataset."
+            
+        # Group missing values by ticker
+        summary = ["Missing Values Summary:"]
+        
+        # First, report non-sector features
+        non_sector_cols = [col for col in missing_cols.index if not any(sector in col for sector in ['healthcare', 'technology'])]
+        if non_sector_cols:
+            summary.append("\nNon-sector features:")
+            for col in non_sector_cols:
+                summary.append(f"{col}: {missing_cols[col]} values ({missing_pct[col]}%)")
+        
+        # Then report sector-specific features by ticker
+        for ticker in df['ticker'].unique():
+            ticker_df = df[df['ticker'] == ticker]
+            sector = self.sector_mapping.get(ticker, 'Unknown').lower().replace(' ', '_')
+            
+            # Get sector-specific columns for this ticker
+            sector_cols = [col for col in missing_cols.index if sector in col]
+            if sector_cols:
+                summary.append(f"\n{ticker} ({sector}) sector features:")
+                for col in sector_cols:
+                    missing_count = ticker_df[col].isnull().sum()
+                    missing_pct = (missing_count / len(ticker_df) * 100).round(2)
+                    summary.append(f"{col}: {missing_count} values ({missing_pct}%)")
+            
+        return "\n".join(summary)
+
     def generate_dataset(
         self,
         tickers: List[str],
@@ -307,6 +365,8 @@ class DatasetGenerator:
                 logger.info(f"Loading features for {ticker} from {self.ticker_features_dir}")
                 ticker_features = load_features(ticker, str(self.ticker_features_dir))
                 logger.info(f"Loaded features for {ticker}: {ticker_features.shape if not ticker_features.empty else 'empty'}")
+                logger.info(f"Sample of loaded features:\n{ticker_features.head()}")
+                logger.info(f"Data types of loaded features:\n{ticker_features.dtypes}")
                 
                 if ticker_features.empty:
                     logger.warning(f"No features found for {ticker}")
@@ -315,6 +375,9 @@ class DatasetGenerator:
                 
                 # Filter by date range
                 ticker_features = ticker_features[(ticker_features.index >= self.start_date) & (ticker_features.index <= self.end_date)]
+                logger.info(f"Sample of filtered features:\n{ticker_features.head()}")
+                logger.info(f"Data types of filtered features:\n{ticker_features.dtypes}")
+                
                 if ticker_features.empty:
                     logger.warning(f"No features in date range for {ticker}")
                     progress.advance(task)
@@ -363,18 +426,33 @@ class DatasetGenerator:
         with open(metrics_path, 'w') as f:
             json.dump(quality_metrics, f, indent=2)
         
-        # Identify columns to normalize (numeric, excluding 'ticker', 'date', 'analyst_targets')
+        # First, identify all non-numeric columns to exclude
         exclude_cols = {'ticker', 'date', 'analyst_targets'}
-        numeric_cols = [col for col in train_df.columns if col not in exclude_cols and pd.api.types.is_numeric_dtype(train_df[col])]
+        non_numeric_cols = df.select_dtypes(exclude=['number']).columns
+        exclude_cols.update(non_numeric_cols)
+        
+        # Then identify numeric columns that should be normalized
+        numeric_cols = [col for col in train_df.columns if col not in exclude_cols]
+        
+        # Log data types and columns for debugging
+        logger.info(f"DataFrame dtypes before normalization:\n{train_df.dtypes}")
+        logger.info(f"Non-numeric columns: {list(non_numeric_cols)}")
+        logger.info(f"Numeric columns to normalize: {numeric_cols}")
+        logger.info(f"Sample of data to normalize:\n{train_df[numeric_cols].head()}")
+        logger.info(f"Data types of columns to normalize:\n{train_df[numeric_cols].dtypes}")
         
         # Fit normalizer only on numeric columns
         self.normalizer.fit(train_df[numeric_cols])
         
         # Normalize numeric columns, keep others unchanged
         def normalize_df(df):
-            df_norm = df.copy()
-            df_norm[numeric_cols] = self.normalizer.transform(df[numeric_cols])
-            return df_norm
+            logger.info(f"Normalizing DataFrame with columns: {list(df.columns)}")
+            logger.info(f"DataFrame dtypes before transform:\n{df.dtypes}")
+            # Create a copy of the DataFrame
+            normalized_df = df.copy()
+            # Only normalize numeric columns
+            normalized_df[numeric_cols] = self.normalizer.transform(df[numeric_cols])
+            return normalized_df
             
         # Apply normalization
         train_df = normalize_df(train_df)
@@ -392,6 +470,15 @@ class DatasetGenerator:
         # Generate README
         self._generate_readme(output_path, tickers)
         
+        # Log missing values summary
+        logger.info("\nMissing Values Summary:")
+        logger.info("\nTraining Set:")
+        logger.info(self._generate_missing_values_summary(train_df))
+        logger.info("\nValidation Set:")
+        logger.info(self._generate_missing_values_summary(val_df))
+        logger.info("\nTest Set:")
+        logger.info(self._generate_missing_values_summary(test_df))
+        
         logger.info(f"Dataset generation complete. Output saved to {output_path}")
     
     def _split_dataset(
@@ -407,13 +494,13 @@ class DatasetGenerator:
             Tuple of (train_df, val_df, test_df)
         """
         # Group by ticker to ensure proper splitting
-        ticker_groups = df.groupby('ticker')
+        ticker_groups = df.groupby('ticker', group_keys=False)
         
         train_dfs = []
         val_dfs = []
         test_dfs = []
         
-        for _, group in ticker_groups:
+        for ticker, group in ticker_groups:
             if len(group) < self.min_samples_per_ticker:
                 continue
                 
@@ -433,11 +520,12 @@ class DatasetGenerator:
             val_dfs.append(val_df)
             test_dfs.append(test_df)
             
-        return (
-            pd.concat(train_dfs),
-            pd.concat(val_dfs),
-            pd.concat(test_dfs)
-        )
+        # Concatenate while preserving index
+        train_df = pd.concat(train_dfs, axis=0)
+        val_df = pd.concat(val_dfs, axis=0)
+        test_df = pd.concat(test_dfs, axis=0)
+        
+        return train_df, val_df, test_df
     
     def _generate_readme(self, output_path: Path, tickers: List[str]) -> None:
         """Generate a README file for the dataset.

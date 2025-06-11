@@ -58,8 +58,12 @@ data/market_features/
 
 3. **Market Volatility** (daily updates)
    - VIX and its derivatives
-   - Market-wide volatility measures
-   - Correlation between stocks
+   - Market-wide volatility measures:
+     - Daily volatility
+     - Weekly volatility
+     - Monthly volatility
+   - Average correlation between stocks
+   - Ticker-specific volatility
 
 4. **Market Sentiment** (daily/weekly updates)
    - Put/Call ratios
@@ -111,32 +115,82 @@ data/market_features/
 ### In Progress Features 🔄
 
 #### 1. Feature Normalization
-- **Normalization Process**
-  - Move normalization to dataset generation phase
-  - Store normalization statistics (mean, std) in a pickle file
-  - Enable consistent normalization for new predictions
-  - Support incremental updates with existing normalization
+- **Normalization Architecture**
+  - Create `FeatureNormalizer` class as part of dataset generation pipeline
+  - Support multiple normalization strategies:
+    - StandardScaler (z-score)
+    - MinMaxScaler
+    - RobustScaler
+    - Custom normalization for specific features
+  - Implement normalization versioning and tracking
+  - Support for incremental updates and online learning
+  - Integration with feature store for consistent access
 
 - **Implementation Tasks**
-  - [ ] Move normalization to dataset generation
-  - [ ] Create normalization statistics storage
-  - [ ] Implement normalization for new predictions
+  - [ ] Create `FeatureNormalizer` base class
+  - [ ] Implement normalization strategies
+  - [ ] Add normalization statistics storage
+  - [ ] Create normalization versioning system
+  - [ ] Implement incremental update support
   - [ ] Add validation for normalization consistency
   - [ ] Create migration script for existing datasets
-  - [ ] Add support for different normalization strategies
-  - [ ] Implement normalization versioning
-  - [ ] Document feature normalization dependencies
-  - [ ] Add data quality checks for normalization
-  - [ ] Create normalization monitoring system
+  - [ ] Add support for feature-specific normalization
+  - [ ] Implement normalization monitoring
+  - [ ] Add comprehensive tests
+  - [ ] Create documentation and examples
+
+- **Technical Requirements**
+  - Integration with `DatasetGenerator` class
+  - Support for both batch and online normalization
+  - Efficient storage of normalization parameters
+  - Validation of normalization consistency
+  - Support for feature versioning
+  - Performance optimization for large datasets
+  - Clear error handling and reporting
+  - Comprehensive logging and monitoring
+
+- **Data Quality and Validation**
+  - Implement normalization quality checks
+  - Add validation for normalization parameters
+  - Create monitoring for normalization drift
+  - Support for normalization diagnostics
+  - Integration with data quality pipeline
+  - Clear error reporting and handling
+  - Support for normalization debugging
 
 #### 2. Dataset Generation Enhancement
+- **Dataset Generation Pipeline**
+  - Create `DatasetGenerator` class with standardized interface
+  - Implement time-series aware train/test/validation splits
+  - Focus on binary classification targets
+  - Configurable feature selection and filtering
+  - Built-in data quality checks and validation
+  - Support for feature versioning and tracking
+  - Integration with feature store for consistent access
+
+- **Label Generation Strategy**
+  - Binary classification based on multi-factor criteria:
+    - Price return vs S&P 500 (e.g., 1% absolute, 0.5% alpha)
+    - Volume requirements (e.g., 100k shares)
+    - Risk limits (e.g., 2x SPY volatility, 2% max drawdown)
+  - Configurable risk profiles:
+    - Conservative: Higher thresholds, stricter limits
+    - Moderate: Medium thresholds, balanced limits
+    - Aggressive: Lower thresholds, more lenient limits
+  - Quality control:
+    - Label distribution monitoring
+    - Market regime correlation
+    - Performance metrics tracking
+
 - **Feature Collection**
-  - Single interface for gathering features
+  - Single interface for gathering features via `FeatureCollector` class
   - Support for both batch and single-row predictions
   - Consistent feature ordering across all uses
   - Clear error handling for missing features
   - Support for feature imputation with stored statistics
   - Validation of feature completeness and quality
+  - Caching layer for frequently accessed features
+  - Support for feature subset selection and filtering
 
 - **Prediction Support**
   - Enable single-row predictions using dataset metadata
@@ -145,13 +199,39 @@ data/market_features/
   - Clear documentation of required features
   - Integration with model prediction pipeline
   - Support for feature validation and error reporting
-
-- **Feature Consistency**
-  - Ensure same features used in training and prediction
+  - Real-time feature computation for live predictions
   - Support for feature versioning and tracking
-  - Validation of feature availability and quality
-  - Clear error messages for missing or invalid features
-  - Support for feature subset selection
+
+- **Data Versioning and Reproducibility**
+  - Implement dataset versioning system
+  - Store dataset metadata and configuration
+  - Support for dataset comparison and validation
+  - Track feature versions and dependencies
+  - Enable dataset regeneration from stored configs
+  - Support for dataset lineage tracking
+  - Integration with experiment tracking
+
+- **Technical Requirements**
+  - Python 3.8+ compatibility
+  - Pandas for data manipulation
+  - NumPy for numerical operations
+  - scikit-learn for data splitting and validation
+  - PyArrow for efficient data storage
+  - Type hints and documentation
+  - Comprehensive test coverage
+  - Performance benchmarks for critical paths
+
+- **Implementation Tasks**
+  - [ ] Create `DatasetGenerator` base class
+  - [ ] Implement time-series aware splits
+  - [ ] Add feature collection interface
+  - [ ] Implement data quality checks
+  - [ ] Add feature versioning support
+  - [ ] Create dataset versioning system
+  - [ ] Implement caching layer
+  - [ ] Add performance benchmarks
+  - [ ] Create comprehensive tests
+  - [ ] Add documentation and examples
 
 ### Pending Features ⏳
 

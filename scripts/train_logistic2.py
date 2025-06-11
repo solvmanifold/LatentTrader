@@ -14,7 +14,7 @@ import hashlib
 import json
 import argparse
 import os
-from trading_advisor.models.dataset import DatasetGenerator
+from trading_advisor.dataset import DatasetGenerator
 
 # Set up logging
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')

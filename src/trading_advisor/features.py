@@ -30,6 +30,15 @@ def load_features(ticker: str, features_dir: str = "data/ticker_features") -> pd
         
     try:
         df = pd.read_parquet(features_path)
+        # Ensure date is the index
+        if not isinstance(df.index, pd.DatetimeIndex):
+            if 'date' in df.columns:
+                df.set_index('date', inplace=True)
+            elif 'Date' in df.columns:
+                df.set_index('Date', inplace=True)
+        df.index = pd.to_datetime(df.index)
+        # Add ticker column as string
+        df['ticker'] = ticker
         return df
     except Exception as e:
         logger.error(f"Error loading features for {ticker}: {e}")

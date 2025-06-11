@@ -1,0 +1,3 @@
+ZTS
+AAPL
+MSFT

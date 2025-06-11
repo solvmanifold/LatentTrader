@@ -61,7 +61,12 @@ def get_sp500_data(start_date: Optional[str] = None) -> pd.DataFrame:
         elif 'adj_close' in sp500_new.columns:
             sp500_new = sp500_new[['adj_close']].rename(columns={'adj_close': 'sp500_price'})
         
+        # Calculate returns
+        sp500_new['sp500_returns_1d'] = sp500_new['sp500_price'].pct_change()
+        sp500_new['sp500_returns_5d'] = sp500_new['sp500_price'].pct_change(periods=5)
         sp500_new['sp500_returns_20d'] = sp500_new['sp500_price'].pct_change(periods=20)
+        
+        # Ensure index is datetime
         sp500_new.index = pd.to_datetime(sp500_new.index)
         
         # Save to parquet
@@ -156,7 +161,7 @@ def calculate_sector_performance(ticker_df: pd.DataFrame, market_features_dir: s
         date_ref = pd.DataFrame(index=pd.DatetimeIndex(date_ref))
         
         # Fill in missing trading days
-        sector_df = fill_missing_trading_days(sector_df, date_ref)
+        sector_df = fill_missing_trading_days(sector_df, date_ref, data_type='volume')
         
         # Ensure index is DatetimeIndex after filling
         if not isinstance(sector_df.index, pd.DatetimeIndex):
@@ -177,7 +182,7 @@ def calculate_sector_performance(ticker_df: pd.DataFrame, market_features_dir: s
     date_ref = pd.DataFrame(index=pd.DatetimeIndex(date_ref))
     
     # Fill in missing trading days for the combined table
-    all_sectors_df = fill_missing_trading_days(all_sectors_df, date_ref)
+    all_sectors_df = fill_missing_trading_days(all_sectors_df, date_ref, data_type='volume')
     
     # Ensure index is DatetimeIndex after filling
     if not isinstance(all_sectors_df.index, pd.DatetimeIndex):

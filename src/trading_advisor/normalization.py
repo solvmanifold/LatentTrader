@@ -105,9 +105,20 @@ class FeatureNormalizer:
         # Initialize storage for feature statistics
         self.feature_stats = {}
         
-        # Fit scalers for each feature
-        for column in df.columns:
-            if column in ['ticker', 'label']:  # Skip non-feature columns
+        # Get numeric columns, excluding known non-feature columns
+        exclude_cols = {'ticker', 'date', 'label', 'analyst_targets'}
+        numeric_cols = [col for col in df.select_dtypes(include=['number']).columns 
+                       if col not in exclude_cols]
+        
+        # Log columns being processed
+        logger.info(f"Processing numeric columns: {numeric_cols}")
+        logger.info(f"Excluding non-numeric columns: {list(df.select_dtypes(exclude=['number']).columns)}")
+        
+        # Fit scalers for each numeric feature
+        for column in numeric_cols:
+            # Skip if column is not numeric
+            if not pd.api.types.is_numeric_dtype(df[column]):
+                logger.info(f"Skipping non-numeric column {column}")
                 continue
                 
             # Get strategy for this feature
@@ -151,13 +162,15 @@ class FeatureNormalizer:
         # Create copy of input DataFrame
         normalized_df = df.copy()
         
-        # Transform each feature
-        for column in df.columns:
-            if column in ['ticker', 'label']:  # Skip non-feature columns
+        # Only transform columns that have been fitted
+        for column in self.scalers.keys():
+            if column not in df.columns:
+                logger.warning(f"Column {column} not found in input DataFrame, skipping")
                 continue
                 
-            if column not in self.scalers:
-                logger.warning(f"No normalization parameters found for {column}, skipping")
+            # Skip non-numeric columns
+            if not pd.api.types.is_numeric_dtype(df[column]):
+                logger.info(f"Skipping non-numeric column {column}")
                 continue
                 
             # Get values and handle NaN
