@@ -28,6 +28,7 @@ from trading_advisor.features import update_features as update_stock_features
 from trading_advisor.market_breadth import calculate_market_breadth
 from trading_advisor.sector_performance import calculate_sector_performance
 from trading_advisor.sentiment import MarketSentiment
+from trading_advisor.dataset_v2 import DatasetGeneratorV2
 
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
@@ -662,136 +663,41 @@ def generate_dataset(
     end_date: str = typer.Option(..., help="End date for dataset (YYYY-MM-DD)"),
     output_dir: str = typer.Option("data/ml_datasets", help="Directory to save output files"),
     data_dir: str = typer.Option("data", help="Directory containing feature files"),
-    target_days: int = typer.Option(5, help="Number of days to look ahead for labeling"),
-    min_samples: int = typer.Option(100, help="Minimum samples required per ticker"),
     test_size: float = typer.Option(0.2, help="Proportion of data to use for testing"),
     val_size: float = typer.Option(0.1, help="Proportion of data to use for validation"),
     random_state: int = typer.Option(42, help="Random seed for reproducibility"),
-    normalization_version: str = typer.Option("1.0.0", help="Version of normalization parameters"),
-    force: bool = typer.Option(False, help="Overwrite existing files if they exist"),
     validate: bool = typer.Option(False, help="Validate generated datasets")
 ):
-    """
-    Generate ML-ready datasets for specified tickers with time-series aware splits.
-    """
-    from trading_advisor.data import load_tickers
-    from trading_advisor.dataset import DatasetGenerator
-    import os
-    from datetime import datetime
-    import pandas as pd
-    
-    # Parse tickers
-    if tickers == "all":
-        ticker_list = load_tickers("all")
-    elif os.path.isfile(tickers):
-        with open(tickers) as f:
-            ticker_list = [line.strip() for line in f if line.strip()]
-    else:
-        ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
-        
-    # Create output directory
-    os.makedirs(output_dir, exist_ok=True)
-    
-    # Parse dates
-    start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
-    
-    # Initialize dataset generator
-    generator = DatasetGenerator(
-        market_features_dir=os.path.join(data_dir, "market_features"),
-        ticker_features_dir=os.path.join(data_dir, "ticker_features"),
-        output_dir=output_dir,
-        start_date=start_dt,
-        end_date=end_dt,
-        target_days=target_days,
-        min_samples_per_ticker=min_samples,
-        test_size=test_size,
-        val_size=val_size,
-        random_state=random_state,
-        normalization_version=normalization_version
-    )
-    
-    # Generate dataset
+    """Generate a machine learning dataset with improved data handling."""
     try:
-        # Use the last part of the output directory as the dataset name
-        dataset_name = os.path.basename(output_dir.rstrip('/'))
+        # Parse tickers
+        if tickers == "all":
+            ticker_list = get_all_tickers()
+        elif os.path.exists(tickers):
+            with open(tickers, 'r') as f:
+                ticker_list = [line.strip() for line in f if line.strip()]
+        else:
+            ticker_list = [t.strip() for t in tickers.split(',')]
+            
+        # Initialize dataset generator
+        generator = DatasetGeneratorV2(
+            market_features_dir=os.path.join(data_dir, "market_features"),
+            ticker_features_dir=os.path.join(data_dir, "ticker_features"),
+            output_dir=output_dir,
+            test_size=test_size,
+            val_size=val_size,
+            random_state=random_state
+        )
+        
+        # Generate dataset
         generator.generate_dataset(
             tickers=ticker_list,
-            output_name=dataset_name
+            start_date=start_date,
+            end_date=end_date,
+            output_dir=Path(output_dir),
+            validate=validate
         )
-        logger.info(f"Dataset generation complete. Output saved to {output_dir}")
         
-        # Validate datasets if requested
-        if validate:
-            logger.info("Validating generated datasets...")
-            
-            # Load datasets
-            train_path = os.path.join(output_dir, dataset_name, "train.parquet")
-            val_path = os.path.join(output_dir, dataset_name, "val.parquet")
-            test_path = os.path.join(output_dir, dataset_name, "test.parquet")
-            
-            train_df = pd.read_parquet(train_path)
-            val_df = pd.read_parquet(val_path)
-            test_df = pd.read_parquet(test_path)
-            
-            # Basic validation checks
-            validation_results = {
-                'train': {
-                    'shape': train_df.shape,
-                    'missing_values': train_df.isnull().sum().to_dict(),
-                    'dtypes': train_df.dtypes.to_dict(),
-                    'tickers': train_df['ticker'].unique().tolist()
-                },
-                'val': {
-                    'shape': val_df.shape,
-                    'missing_values': val_df.isnull().sum().to_dict(),
-                    'dtypes': val_df.dtypes.to_dict(),
-                    'tickers': val_df['ticker'].unique().tolist()
-                },
-                'test': {
-                    'shape': test_df.shape,
-                    'missing_values': test_df.isnull().sum().to_dict(),
-                    'dtypes': test_df.dtypes.to_dict(),
-                    'tickers': test_df['ticker'].unique().tolist()
-                }
-            }
-            
-            # Print validation results
-            typer.echo("\n🔍 Validation Results:")
-            for split, results in validation_results.items():
-                typer.echo(f"\n📊 {split.upper()} Dataset:")
-                typer.echo(f"Shape: {results['shape']}")
-                typer.echo(f"Tickers: {results['tickers']}")
-                typer.echo("Missing values:")
-                for col, count in results['missing_values'].items():
-                    if count > 0:
-                        typer.echo(f"  {col}: {count}")
-                typer.echo("Data types:")
-                for col, dtype in results['dtypes'].items():
-                    typer.echo(f"  {col}: {dtype}")
-            
-            # Check for overlap between splits
-            train_tickers = set(train_df['ticker'].unique())
-            val_tickers = set(val_df['ticker'].unique())
-            test_tickers = set(test_df['ticker'].unique())
-            
-            if train_tickers.intersection(val_tickers) or train_tickers.intersection(test_tickers) or val_tickers.intersection(test_tickers):
-                typer.echo("\n⚠️  Warning: Overlap detected between splits!")
-                typer.echo(f"Train-Val overlap: {train_tickers.intersection(val_tickers)}")
-                typer.echo(f"Train-Test overlap: {train_tickers.intersection(test_tickers)}")
-                typer.echo(f"Val-Test overlap: {val_tickers.intersection(test_tickers)}")
-            
-            # Check for data leakage
-            train_dates = set(train_df.index)
-            val_dates = set(val_df.index)
-            test_dates = set(test_df.index)
-            
-            if train_dates.intersection(val_dates) or train_dates.intersection(test_dates) or val_dates.intersection(test_dates):
-                typer.echo("\n⚠️  Warning: Date overlap detected between splits!")
-                typer.echo(f"Train-Val date overlap: {len(train_dates.intersection(val_dates))} dates")
-                typer.echo(f"Train-Test date overlap: {len(train_dates.intersection(test_dates))} dates")
-                typer.echo(f"Val-Test date overlap: {len(val_dates.intersection(test_dates))} dates")
-            
     except Exception as e:
         logger.error(f"Error generating dataset: {e}")
         raise typer.Exit(1)
