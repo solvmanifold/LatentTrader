@@ -11,14 +11,16 @@ from market and ticker features. It focuses on:
 
 import logging
 from pathlib import Path
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Callable
 from datetime import datetime
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
+import typer
 
 from trading_advisor.features import load_features
 from trading_advisor.sector_mapping import load_sector_mapping
+from trading_advisor.data import download_stock_data
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +32,9 @@ class DatasetGeneratorV2:
         market_features_dir: str = "data/market_features",
         ticker_features_dir: str = "data/ticker_features",
         output_dir: str = "data/ml_datasets",
-        test_size: float = 0.2,
-        val_size: float = 0.1,
-        random_state: int = 42
+        train_months: int = 6,
+        val_months: int = 2,
+        min_samples_per_ticker: int = 30
     ):
         """Initialize the dataset generator.
         
@@ -40,18 +42,18 @@ class DatasetGeneratorV2:
             market_features_dir: Directory containing market feature files
             ticker_features_dir: Directory containing ticker feature files
             output_dir: Directory to save generated datasets
-            test_size: Proportion of data to use for testing
-            val_size: Proportion of data to use for validation
-            random_state: Random seed for reproducibility
+            train_months: Number of months to use for training
+            val_months: Number of months to use for validation
+            min_samples_per_ticker: Minimum number of trading days required per ticker in each split
         """
         self.market_features_dir = Path(market_features_dir)
         self.ticker_features_dir = Path(ticker_features_dir)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
-        self.test_size = test_size
-        self.val_size = val_size
-        self.random_state = random_state
+        self.train_months = train_months
+        self.val_months = val_months
+        self.min_samples_per_ticker = min_samples_per_ticker
         
         # Load sector mapping
         self.sector_mapping = load_sector_mapping(str(self.market_features_dir))
@@ -62,7 +64,8 @@ class DatasetGeneratorV2:
         start_date: str,
         end_date: str,
         output_dir: Path,
-        validate: bool = False
+        validate: bool = False,
+        progress_callback: Optional[Callable[[int], None]] = None
     ) -> None:
         """Generate a dataset for the given tickers and date range.
         
@@ -72,6 +75,7 @@ class DatasetGeneratorV2:
             end_date: End date for data collection (YYYY-MM-DD)
             output_dir: Directory to save output files
             validate: Whether to perform validation checks
+            progress_callback: Optional callback function to update progress
         """
         logger.info(f"Generating dataset for {len(tickers)} tickers from {start_date} to {end_date}")
         
@@ -84,7 +88,7 @@ class DatasetGeneratorV2:
         
         # Process each ticker
         all_data = []
-        for ticker in tickers:
+        for i, ticker in enumerate(tickers):
             # Load ticker features
             ticker_features = self._load_ticker_features(ticker, start_date, end_date)
             if ticker_features.empty:
@@ -99,6 +103,10 @@ class DatasetGeneratorV2:
                     ticker_features = self._add_sector_features(ticker_features, sector_df)
             
             all_data.append(ticker_features)
+            
+            # Update progress if callback provided
+            if progress_callback:
+                progress_callback(i + 1)
         
         if not all_data:
             raise ValueError("No data generated for any ticker")
@@ -119,6 +127,12 @@ class DatasetGeneratorV2:
         self._generate_readme(output_dir, train_df, val_df, test_df)
         
         logger.info(f"Dataset generated successfully at {output_dir}")
+        
+        # Run validation if requested
+        if validate:
+            logger.info("Running dataset validation...")
+            self._validate_datasets(train_df, val_df, test_df)
+            logger.info("Dataset validation passed")
         
     def _load_sector_data(self) -> Dict[str, pd.DataFrame]:
         """Load all sector data files.
@@ -145,31 +159,55 @@ class DatasetGeneratorV2:
         start_date: pd.Timestamp,
         end_date: pd.Timestamp
     ) -> pd.DataFrame:
-        """Load features for a single ticker.
-        
-        Args:
-            ticker: Ticker symbol
-            start_date: Start date
-            end_date: End date
+        """Load pre-computed ticker features from parquet file."""
+        # Load ticker data from parquet file
+        features_path = self.ticker_features_dir / f"{ticker}_features.parquet"
+        if not features_path.exists():
+            logger.warning(f"No feature file found for {ticker}")
+            return pd.DataFrame()
             
-        Returns:
-            DataFrame containing ticker features
-        """
         try:
-            features = load_features(ticker, str(self.ticker_features_dir))
-            if features.empty:
+            df = pd.read_parquet(features_path)
+            # Ensure date is the index
+            if not isinstance(df.index, pd.DatetimeIndex):
+                if 'date' in df.columns:
+                    df.set_index('date', inplace=True)
+                elif 'Date' in df.columns:
+                    df.set_index('Date', inplace=True)
+            df.index = pd.to_datetime(df.index)
+            
+            # Filter by date range
+            df = df[(df.index >= start_date) & (df.index <= end_date)]
+            
+            if df.empty:
+                logger.warning(f"No data available for {ticker} in date range {start_date.date()} to {end_date.date()}")
                 return pd.DataFrame()
                 
-            # Filter by date range
-            features = features[(features.index >= start_date) & (features.index <= end_date)]
-            
             # Add ticker column
-            features['ticker'] = ticker
+            df['ticker'] = ticker
             
-            return features
+            # Handle stock_splits - fill missing values with 0 (no splits)
+            if 'stock_splits' in df.columns:
+                df['stock_splits'] = df['stock_splits'].fillna(0)
+            else:
+                df['stock_splits'] = 0
+                
+            # Handle adj_close - if missing, use close price
+            if 'adj_close' in df.columns:
+                df['adj_close'] = df['adj_close'].fillna(df['close'])
+            else:
+                df['adj_close'] = df['close']
+                
+            # Handle analyst_targets - fill missing values with empty dict
+            if 'analyst_targets' in df.columns:
+                df['analyst_targets'] = df['analyst_targets'].fillna({})
+            else:
+                df['analyst_targets'] = {}
+                
+            return df
             
         except Exception as e:
-            logger.error(f"Error loading features for {ticker}: {str(e)}")
+            logger.error(f"Error loading features for {ticker}: {e}")
             return pd.DataFrame()
             
     def _add_sector_features(
@@ -200,7 +238,12 @@ class DatasetGeneratorV2:
         self,
         df: pd.DataFrame
     ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        """Split dataset into train/val/test sets.
+        """Split dataset into train/val/test sets using a sophisticated time-based approach.
+        
+        This method:
+        1. Ensures each split has sufficient data for each ticker
+        2. Uses specific time periods that make sense for market data
+        3. Maintains chronological order and prevents data leakage
         
         Args:
             df: DataFrame to split
@@ -208,20 +251,49 @@ class DatasetGeneratorV2:
         Returns:
             Tuple of (train_df, val_df, test_df)
         """
-        # First split into train+val and test
-        train_val_df, test_df = train_test_split(
-            df,
-            test_size=self.test_size,
-            random_state=self.random_state
-        )
+        # Sort by date to ensure chronological order
+        df = df.sort_index()
         
-        # Then split train+val into train and val
-        val_size_adjusted = self.val_size / (1 - self.test_size)
-        train_df, val_df = train_test_split(
-            train_val_df,
-            test_size=val_size_adjusted,
-            random_state=self.random_state
-        )
+        # Get the date range
+        start_date = df.index.min()
+        end_date = df.index.max()
+        
+        # Calculate split dates
+        # Use specified number of months for training
+        train_end = start_date + pd.DateOffset(months=self.train_months)
+        # Use specified number of months for validation
+        val_end = train_end + pd.DateOffset(months=self.val_months)
+        
+        # Split chronologically
+        train_df = df[df.index <= train_end]
+        val_df = df[(df.index > train_end) & (df.index <= val_end)]
+        test_df = df[df.index > val_end]
+        
+        # Verify each ticker has sufficient data in each split
+        for name, split_df in [("Training", train_df), ("Validation", val_df), ("Testing", test_df)]:
+            ticker_counts = split_df['ticker'].value_counts()
+            insufficient_tickers = ticker_counts[ticker_counts < self.min_samples_per_ticker]
+            if not insufficient_tickers.empty:
+                logger.warning(f"\n{name} set has tickers with insufficient data:")
+                for ticker, count in insufficient_tickers.items():
+                    logger.warning(f"{ticker}: {count} samples (minimum {self.min_samples_per_ticker} required)")
+                raise ValueError(f"{name} set has tickers with insufficient data")
+        
+        logger.info(f"\nSplit dates and statistics:")
+        logger.info(f"Training: {start_date.date()} to {train_end.date()}")
+        logger.info(f"- {len(train_df)} total samples")
+        logger.info(f"- {len(train_df['ticker'].unique())} unique tickers")
+        logger.info(f"- {train_df['ticker'].value_counts().mean():.1f} samples per ticker on average")
+        
+        logger.info(f"\nValidation: {train_end.date()} to {val_end.date()}")
+        logger.info(f"- {len(val_df)} total samples")
+        logger.info(f"- {len(val_df['ticker'].unique())} unique tickers")
+        logger.info(f"- {val_df['ticker'].value_counts().mean():.1f} samples per ticker on average")
+        
+        logger.info(f"\nTesting: {val_end.date()} to {end_date.date()}")
+        logger.info(f"- {len(test_df)} total samples")
+        logger.info(f"- {len(test_df['ticker'].unique())} unique tickers")
+        logger.info(f"- {test_df['ticker'].value_counts().mean():.1f} samples per ticker on average")
         
         return train_df, val_df, test_df
         
@@ -246,8 +318,9 @@ class DatasetGeneratorV2:
 This dataset was generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} using the following parameters:
 - Number of tickers: {len(train_df['ticker'].unique())}
 - Date range: {train_df.index.min().strftime('%Y-%m-%d')} to {train_df.index.max().strftime('%Y-%m-%d')}
-- Test size: {self.test_size}
-- Validation size: {self.val_size}
+- Training months: {self.train_months}
+- Validation months: {self.val_months}
+- Minimum samples per ticker: {self.min_samples_per_ticker}
 
 ## Included Tickers
 {', '.join(train_df['ticker'].unique())}
@@ -281,4 +354,118 @@ test_df = pd.read_parquet('test.parquet')
         with open(readme_path, 'w') as f:
             f.write(readme_content)
             
-        logger.info(f"Generated README at {readme_path}") 
+        logger.info(f"Generated README at {readme_path}")
+        
+    def _validate_datasets(
+        self,
+        train_df: pd.DataFrame,
+        val_df: pd.DataFrame,
+        test_df: pd.DataFrame
+    ) -> None:
+        """Validate the generated datasets and provide detailed statistics.
+        
+        Args:
+            train_df: Training dataset
+            val_df: Validation dataset
+            test_df: Test dataset
+        """
+        import typer
+        
+        # Columns that are expected to have missing values due to historical data requirements
+        expected_missing = {
+            'macd': 'Requires 26 days of historical data',
+            'macd_signal': 'Requires 26 days of historical data',
+            'macd_hist': 'Requires 26 days of historical data',
+            'bb_upper': 'Requires 20 days of historical data',
+            'bb_lower': 'Requires 20 days of historical data',
+            'bb_middle': 'Requires 20 days of historical data',
+            'bb_pband': 'Requires 20 days of historical data',
+            'sma_20': 'Requires 20 days of historical data',
+            'sma_50': 'Requires 50 days of historical data',
+            'sma_100': 'Requires 100 days of historical data',
+            'ema_100': 'Requires 100 days of historical data',
+            'sector_performance_returns_20d': 'Requires 20 days of historical data',
+            'sector_performance_momentum_20d': 'Requires 20 days of historical data',
+            'analyst_targets': 'Only available for most recent date'
+        }
+        
+        # Print detailed statistics for each dataset
+        for name, df in [("TRAIN", train_df), ("VAL", val_df), ("TEST", test_df)]:
+            typer.echo(f"\n{name} Dataset Statistics:")
+            typer.echo(f"Samples: {len(df)} | Date Range: {df.index.min().date()} to {df.index.max().date()} | Tickers: {len(df['ticker'].unique())} | Avg Samples/Ticker: {df['ticker'].value_counts().mean():.1f}")
+            
+            # Calculate missing values statistics
+            missing = df.isnull().sum()
+            missing_pct = (missing / len(df)) * 100
+            
+            # Group columns by missing value percentage
+            high_missing = missing_pct[missing_pct > 10]
+            medium_missing = missing_pct[(missing_pct > 0) & (missing_pct <= 10)]
+            no_missing = missing_pct[missing_pct == 0]
+            
+            typer.echo("\nMissing Values Summary:")
+            if not high_missing.empty:
+                typer.echo("High Missing (>10%):")
+                for col in high_missing.index:
+                    reason = expected_missing.get(col, "Unexpected")
+                    typer.echo(f"- {col}: {missing[col]} ({missing_pct[col]:.1f}%) - {reason}")
+            
+            if not medium_missing.empty:
+                typer.echo("Medium Missing (0-10%):")
+                for col in medium_missing.index:
+                    reason = expected_missing.get(col, "Unexpected")
+                    typer.echo(f"- {col}: {missing[col]} ({missing_pct[col]:.1f}%) - {reason}")
+            
+            if not no_missing.empty:
+                typer.echo(f"No Missing Values ({len(no_missing)} columns)")
+            
+            # Calculate basic statistics for numeric columns
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            if not numeric_cols.empty:
+                typer.echo("\nNumeric Column Statistics:")
+                stats = df[numeric_cols].describe()
+                for col in numeric_cols:
+                    typer.echo(f"{col}: Mean={stats[col]['mean']:.2f} | Std={stats[col]['std']:.2f} | Min={stats[col]['min']:.2f} | Max={stats[col]['max']:.2f}")
+        
+        # Now do error checks
+        for name, df in [("TRAIN", train_df), ("VAL", val_df), ("TEST", test_df)]:
+            # Check for infinite values
+            inf_mask = np.isinf(df.select_dtypes(include=[np.number]))
+            if inf_mask.any().any():
+                typer.echo("\nInfinite Values Found:")
+                for col in inf_mask.columns[inf_mask.any()]:
+                    inf_count = inf_mask[col].sum()
+                    typer.echo(f"- {col}: {inf_count} infinite values")
+                raise ValueError(f"{name} dataset contains infinite values")
+            
+            # Check for zero variance features (excluding stock_splits)
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            numeric_cols = numeric_cols.drop('stock_splits', errors='ignore')
+            zero_var_cols = [col for col in numeric_cols if df[col].nunique() <= 1]
+            if zero_var_cols:
+                typer.echo("\nZero Variance Features Found:")
+                for col in zero_var_cols:
+                    typer.echo(f"- {col}: {df[col].nunique()} unique values")
+                raise ValueError(f"{name} dataset contains zero variance features")
+        
+        # Check for date range consistency
+        train_dates = set(train_df.index)
+        val_dates = set(val_df.index)
+        test_dates = set(test_df.index)
+        
+        if train_dates & val_dates:
+            raise ValueError("Training and validation sets have overlapping dates")
+        if train_dates & test_dates:
+            raise ValueError("Training and test sets have overlapping dates")
+        if val_dates & test_dates:
+            raise ValueError("Validation and test sets have overlapping dates")
+            
+        # Check for ticker distribution
+        train_tickers = set(train_df['ticker'].unique())
+        val_tickers = set(val_df['ticker'].unique())
+        test_tickers = set(test_df['ticker'].unique())
+        
+        if train_tickers != val_tickers or train_tickers != test_tickers:
+            typer.echo("\nTicker Distribution:")
+            typer.echo(f"TRAIN: {len(train_tickers)} tickers | VAL: {len(val_tickers)} tickers | TEST: {len(test_tickers)} tickers")
+            raise ValueError("Ticker distribution is not consistent across datasets") 
