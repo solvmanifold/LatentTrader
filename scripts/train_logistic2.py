@@ -14,7 +14,7 @@ import hashlib
 import json
 import argparse
 import os
-from trading_advisor.dataset import DatasetGenerator
+from trading_advisor.dataset_v2 import DatasetGeneratorV2
 
 # Set up logging
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -511,10 +511,13 @@ def get_prediction_for_date_ticker(dataset_name: str, date: str, ticker: str) ->
         target_date = pd.to_datetime(date)
         
         # Use generate-dataset to prepare features for the given date and ticker
-        generator = DatasetGenerator(
-            market_features_dir="data/market_features",
-            ticker_features_dir="data/ticker_features",
-            output_dir="data/ml_datasets"
+        generator = DatasetGeneratorV2(
+            market_features_dir=os.path.join(data_dir, "market_features"),
+            ticker_features_dir=os.path.join(data_dir, "ticker_features"),
+            output_dir=output_dir,
+            test_size=test_size,
+            val_size=val_size,
+            random_state=random_state
         )
         features_df = generator.prepare_features(ticker, date, include_sector=True)
         if features_df.empty:
