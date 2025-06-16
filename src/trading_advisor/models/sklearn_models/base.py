@@ -34,6 +34,23 @@ class SklearnModel(BaseTradingModel):
         self.target_column = target_column
         self.scaler = StandardScaler()
         self.feature_means = None
+        self.feature_columns = None
+    
+    def _validate_features(self, df: pd.DataFrame) -> None:
+        """Validate that required features are present in the DataFrame.
+        
+        Args:
+            df: DataFrame to validate
+            
+        Raises:
+            ValueError: If required features are missing
+        """
+        if self.feature_columns is None:
+            raise ValueError("Model has not been trained yet. Feature columns are not set.")
+            
+        missing_features = set(self.feature_columns) - set(df.columns)
+        if missing_features:
+            raise ValueError(f"Missing required features: {missing_features}")
     
     def _prepare_features(
         self,

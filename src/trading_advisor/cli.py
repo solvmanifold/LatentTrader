@@ -558,128 +558,108 @@ def update_data(
 @app.command()
 def run_model(
     model_name: str = typer.Option("logistic", help="Model to run (e.g., 'logistic')"),
-    tickers: str = typer.Option(None, help="Comma-separated list of tickers to analyze"),
-    date: str = typer.Option(None, help="Date to analyze (YYYY-MM-DD)"),
-    output_dir: str = typer.Option("reports", help="Directory to save reports")
+    tickers: str = typer.Option("all", help="Comma-separated list of tickers or 'all' for all tickers"),
+    date: str = typer.Option(None, help="Date to analyze (YYYY-MM-DD) or date range (YYYY-MM-DD:YYYY-MM-DD)"),
+    output_dir: str = typer.Option("model_outputs", help="Directory to save model outputs")
 ):
-    """Run a model on specified tickers and date."""
+    """Run a model on specified tickers and date(s)."""
     try:
         # Create model instance
         model = registry.create_model(model_name)
         
         # Parse tickers
-        if tickers:
+        if tickers == "all":
+            ticker_list = load_tickers("all")
+        else:
             ticker_list = [t.strip() for t in tickers.split(",")]
-        else:
-            ticker_list = None
             
-        # Parse date
+        # Parse date(s)
         if date:
-            target_date = pd.to_datetime(date)
+            if ":" in date:
+                start_date, end_date = date.split(":")
+                dates = pd.date_range(start=start_date, end=end_date, freq='B')  # Business days
+            else:
+                dates = [pd.to_datetime(date)]
         else:
-            target_date = pd.to_datetime(datetime.now().date())
+            dates = [pd.to_datetime(datetime.now().date())]
             
         # Create output directory
-        output_path = Path(output_dir)
+        output_path = Path(output_dir) / model_name
         output_path.mkdir(parents=True, exist_ok=True)
         
-        # Generate report
-        report_path = output_path / f"{model_name}_{target_date.strftime('%Y-%m-%d')}.md"
-        
-        with open(report_path, "w") as f:
-            f.write(f"# {model_name} Analysis Report\n")
-            f.write(f"Date: {target_date.strftime('%Y-%m-%d')}\n\n")
+        # Process each date
+        for target_date in dates:
+            logger.info(f"Processing date: {target_date.strftime('%Y-%m-%d')}")
             
-            if ticker_list:
-                f.write("## Selected Tickers\n")
-                for ticker in ticker_list:
-                    f.write(f"- {ticker}\n")
-                f.write("\n")
-            
-            # Add model-specific analysis
-            if isinstance(model, LogisticRegressionModel):
-                f.write("## Model Analysis\n")
-                f.write("### Feature Importance\n")
-                if hasattr(model, 'metadata') and 'feature_importance' in model.metadata:
-                    importance = model.metadata['feature_importance']
-                    for feature, score in sorted(importance.items(), key=lambda x: abs(x[1]), reverse=True)[:10]:
-                        f.write(f"- {feature}: {score:.4f}\n")
-                f.write("\n")
+            # Load features for all tickers
+            features = []
+            with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
+                task = progress.add_task("Loading features...", total=len(ticker_list))
                 
-                f.write("### Model Performance\n")
-                if hasattr(model, 'metadata') and 'cv_scores' in model.metadata:
-                    cv_scores = model.metadata['cv_scores']
-                    f.write(f"- Mean CV Score: {cv_scores['mean']:.4f}\n")
-                    f.write(f"- CV Score Std: {cv_scores['std']:.4f}\n")
-                f.write("\n")
-        
-        logger.info(f"Report generated: {report_path}")
+                for ticker in ticker_list:
+                    try:
+                        # Load ticker features
+                        ticker_features = load_ticker_features(ticker, target_date)
+                        if ticker_features is not None:
+                            features.append(ticker_features)
+                    except Exception as e:
+                        logger.warning(f"Error loading features for {ticker}: {e}")
+                    progress.update(task, advance=1)
+            
+            if not features:
+                logger.warning(f"No features available for {target_date.strftime('%Y-%m-%d')}")
+                continue
+                
+            # Combine features into DataFrame
+            df = pd.concat(features, axis=0)
+            
+            # Run model predictions
+            results = model.predict(df)
+            
+            # Save results
+            results_df = pd.DataFrame({
+                'ticker': results['ticker'],
+                'date': results['date'],
+                'prediction': results['predictions'],
+                'probability': results['probabilities']
+            })
+            
+            # Add any additional model outputs
+            if hasattr(model, 'metadata'):
+                for key, value in model.metadata.items():
+                    if isinstance(value, dict) and all(k in results_df['ticker'] for k in value.keys()):
+                        results_df[key] = results_df['ticker'].map(value)
+            
+            # Save to parquet
+            output_file = output_path / f"{target_date.strftime('%Y-%m-%d')}.parquet"
+            results_df.to_parquet(output_file)
+            logger.info(f"Results saved to {output_file}")
+            
+            # Generate report
+            report_path = output_path / f"{target_date.strftime('%Y-%m-%d')}.md"
+            with open(report_path, "w") as f:
+                f.write(f"# {model_name} Analysis Report\n")
+                f.write(f"Date: {target_date.strftime('%Y-%m-%d')}\n\n")
+                
+                # Add model metadata if available
+                if hasattr(model, 'metadata'):
+                    f.write("## Model Information\n")
+                    for key, value in model.metadata.items():
+                        if key not in ['feature_importance', 'cv_scores']:
+                            f.write(f"### {key.replace('_', ' ').title()}\n")
+                            f.write(f"{value}\n\n")
+                
+                # Add predictions
+                f.write("## Predictions\n")
+                top_picks = results_df.nlargest(10, 'probability')
+                f.write("### Top 10 Picks\n")
+                for _, row in top_picks.iterrows():
+                    f.write(f"- {row['ticker']}: {row['probability']:.4f}\n")
+            
+            logger.info(f"Report generated: {report_path}")
         
     except Exception as e:
         logger.error(f"Error running model: {str(e)}")
-        raise typer.Exit(1)
-
-@app.command()
-def train_model(
-    model_name: str = typer.Option("logistic", help="Model to train (e.g., 'logistic')"),
-    data_dir: str = typer.Option("data", help="Directory containing training data"),
-    output_dir: str = typer.Option("models", help="Directory to save trained model")
-):
-    """Train a model on the provided data."""
-    try:
-        # Create model instance
-        model = registry.create_model(model_name)
-        
-        # Load data
-        data_path = Path(data_dir)
-        train_df = pd.read_parquet(data_path / "train.parquet")
-        val_df = pd.read_parquet(data_path / "val.parquet")
-        
-        # Train model
-        model.train(train_df, val_df)
-        
-        # Save model
-        output_path = Path(output_dir)
-        output_path.mkdir(parents=True, exist_ok=True)
-        model.save(output_path / f"{model_name}.pkl")
-        
-        logger.info(f"Model trained and saved to {output_path / f'{model_name}.pkl'}")
-        
-    except Exception as e:
-        logger.error(f"Error training model: {str(e)}")
-        raise typer.Exit(1)
-
-@app.command()
-def evaluate_model(
-    model_name: str = typer.Option("logistic", help="Model to evaluate (e.g., 'logistic')"),
-    data_dir: str = typer.Option("data", help="Directory containing test data"),
-    model_dir: str = typer.Option("models", help="Directory containing trained model")
-):
-    """Evaluate a trained model on test data."""
-    try:
-        # Load model
-        model_path = Path(model_dir) / f"{model_name}.pkl"
-        model = registry.load_model(model_name, model_path)
-        
-        # Load test data
-        data_path = Path(data_dir)
-        test_df = pd.read_parquet(data_path / "test.parquet")
-        
-        # Evaluate model
-        results = model.predict(test_df)
-        
-        # Calculate metrics
-        metrics = {
-            'accuracy': (results['predictions'] == test_df['label']).mean(),
-            'auc': roc_auc_score(test_df['label'], results['probabilities'])
-        }
-        
-        logger.info("Model Evaluation Results:")
-        for metric, value in metrics.items():
-            logger.info(f"{metric}: {value:.4f}")
-        
-    except Exception as e:
-        logger.error(f"Error evaluating model: {str(e)}")
         raise typer.Exit(1)
 
 @app.command()
