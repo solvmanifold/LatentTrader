@@ -21,6 +21,7 @@ import typer
 from trading_advisor.features import load_features
 from trading_advisor.sector_mapping import load_sector_mapping
 from trading_advisor.data import download_stock_data
+from trading_advisor.preprocessing import FeaturePreprocessor
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,12 @@ class DatasetGeneratorV2:
         
         # Load sector mapping
         self.sector_mapping = load_sector_mapping(str(self.market_features_dir))
+        
+        # Initialize preprocessor
+        self.preprocessor = FeaturePreprocessor(
+            market_features_dir=market_features_dir,
+            ticker_features_dir=ticker_features_dir
+        )
         
     def generate_dataset(
         self,
@@ -117,6 +124,9 @@ class DatasetGeneratorV2:
         # Split into train/val/test
         train_df, val_df, test_df = self._split_dataset(df)
         
+        # Normalize features
+        train_df, val_df, test_df = self.preprocessor.fit_transform(train_df, val_df, test_df)
+        
         # Save datasets
         output_dir.mkdir(parents=True, exist_ok=True)
         train_df.to_parquet(output_dir / 'train.parquet')
@@ -133,6 +143,24 @@ class DatasetGeneratorV2:
             logger.info("Running dataset validation...")
             self._validate_datasets(train_df, val_df, test_df)
             logger.info("Dataset validation passed")
+        
+    def prepare_inference_data(
+        self,
+        ticker: str,
+        date: pd.Timestamp,
+        features: Optional[Dict[str, float]] = None
+    ) -> pd.DataFrame:
+        """Prepare a single row of data for inference.
+        
+        Args:
+            ticker: Ticker symbol
+            date: Date for inference
+            features: Optional pre-computed features
+            
+        Returns:
+            DataFrame with a single row of normalized features
+        """
+        return self.preprocessor.prepare_single_row(ticker, date, features)
         
     def _load_sector_data(self) -> Dict[str, pd.DataFrame]:
         """Load all sector data files.
@@ -360,6 +388,18 @@ The dataset has been validated for:
 - No zero variance features (except stock_splits)
 - Missing value analysis for all features
 
+## Feature Normalization
+All numeric features (except binary features like stock_splits) are normalized using StandardScaler:
+1. Mean and standard deviation are calculated from the training set only
+2. These parameters are saved to disk in the 'data/scalers' directory
+3. The same normalization is applied to validation and test sets
+4. For inference, the saved parameters are used to normalize new data
+
+Normalization parameters are saved as:
+- One scaler per feature (e.g., 'open_scaler.joblib', 'volume_scaler.joblib')
+- Each scaler contains the mean and standard deviation from the training set
+- These parameters ensure consistent normalization across training and inference
+
 ## Usage
 To load the dataset:
 ```python
@@ -369,6 +409,19 @@ import pandas as pd
 train_df = pd.read_parquet('train.parquet')
 val_df = pd.read_parquet('val.parquet')
 test_df = pd.read_parquet('test.parquet')
+```
+
+To prepare a single row for inference:
+```python
+from trading_advisor.dataset_v2 import DatasetGeneratorV2
+from datetime import datetime
+
+# Initialize generator
+generator = DatasetGeneratorV2()
+
+# Prepare single row
+date = datetime(2024, 1, 2)
+inference_data = generator.prepare_inference_data('AAPL', date)
 ```
 
 ## Validation Results
