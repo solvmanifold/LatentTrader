@@ -26,6 +26,7 @@ from trading_advisor.market_breadth import calculate_market_breadth
 from trading_advisor.sector_performance import calculate_sector_performance
 from trading_advisor.sentiment import MarketSentiment
 from trading_advisor.utils import setup_logging
+from trading_advisor.ml_data import prepare_ml_datasets, generate_swing_trade_labels
 from .models.sklearn_models.logistic import LogisticRegressionModel
 
 # Set up logging
@@ -759,6 +760,127 @@ def generate_dataset(
             progress.stop()
             typer.echo(f"\nUnexpected error: {str(e)}", err=True)
             raise typer.Exit(1)
+
+@app.command()
+def generate_labels(
+    input_dir: str = typer.Option("data/ml_datasets", help="Directory containing train/val/test parquet files from generate-dataset"),
+    output_dir: str = typer.Option("data/ml_datasets", help="Directory to save labeled datasets"),
+    lookback_days: int = typer.Option(3, help="Number of days to look back for trend confirmation"),
+    forward_days: int = typer.Option(5, help="Number of days to look forward for profit target"),
+    min_return: float = typer.Option(0.02, help="Minimum return required for a trade (e.g., 0.02 for 2%)"),
+    max_drawdown: float = typer.Option(0.01, help="Maximum allowed drawdown (e.g., 0.01 for 1%)")
+):
+    """Generate swing trade labels for ML datasets.
+    
+    This command:
+    1. Loads train/val/test datasets from the input directory (output of generate-dataset)
+    2. Generates swing trade labels based on:
+       - {lookback_days}-day lookback for trend confirmation
+       - {forward_days}-day forward for profit target
+       - {max_drawdown} maximum drawdown for risk management
+    3. Saves the labeled datasets to the output directory
+    
+    Labels:
+    - 1: Long signal (uptrend + {min_return} profit target + controlled drawdown)
+    - -1: Short signal (downtrend + {min_return} profit target + controlled drawdown)
+    - 0: No trade (default)
+    """
+    # Load datasets
+    typer.echo("Loading datasets...")
+    train_df = pd.read_parquet(Path(input_dir) / "train.parquet")
+    val_df = pd.read_parquet(Path(input_dir) / "val.parquet")
+    test_df = pd.read_parquet(Path(input_dir) / "test.parquet")
+    
+    # Generate labels for each dataset
+    typer.echo("\nGenerating swing trade labels...")
+    
+    # Generate labels for each dataset with parameters
+    train_labels = generate_swing_trade_labels(train_df, 
+                                             lookback_days=lookback_days,
+                                             forward_days=forward_days,
+                                             min_return=min_return,
+                                             max_drawdown=max_drawdown)
+    val_labels = generate_swing_trade_labels(val_df,
+                                           lookback_days=lookback_days,
+                                           forward_days=forward_days,
+                                           min_return=min_return,
+                                           max_drawdown=max_drawdown)
+    test_labels = generate_swing_trade_labels(test_df,
+                                            lookback_days=lookback_days,
+                                            forward_days=forward_days,
+                                            min_return=min_return,
+                                            max_drawdown=max_drawdown)
+    
+    # Save labels
+    label_dir = Path(output_dir) / 'swing_trade'
+    label_dir.mkdir(exist_ok=True)
+    
+    train_labels.to_parquet(label_dir / "train_labels.parquet")
+    val_labels.to_parquet(label_dir / "val_labels.parquet")
+    test_labels.to_parquet(label_dir / "test_labels.parquet")
+    
+    # Generate README
+    readme_content = f"""# Swing Trade Labels
+
+This directory contains swing trade labels generated using the following command:
+
+```bash
+trading-advisor generate-labels \\
+    --input-dir {input_dir} \\
+    --output-dir {output_dir} \\
+    --lookback-days {lookback_days} \\
+    --forward-days {forward_days} \\
+    --min-return {min_return} \\
+    --max-drawdown {max_drawdown}
+```
+
+## Label Generation Strategy
+
+The labels are generated using a swing trading strategy with the following parameters:
+
+- Lookback Period: {lookback_days} days (for trend confirmation)
+- Forward Period: {forward_days} days (for profit target)
+- Minimum Return: {min_return*100:.1f}% (required for a trade)
+- Maximum Drawdown: {max_drawdown*100:.1f}% (risk management)
+
+## Label Values
+
+- 1: Long signal (uptrend + {min_return*100:.1f}% profit target + controlled drawdown)
+- -1: Short signal (downtrend + {min_return*100:.1f}% profit target + controlled drawdown)
+- 0: No trade (default)
+
+## Files
+
+- `train_labels.parquet`: Labels for training set
+- `val_labels.parquet`: Labels for validation set
+- `test_labels.parquet`: Labels for test set
+
+## Label Distribution
+
+"""
+    
+    # Add label distribution to README
+    for name, labels in [("Train", train_labels), ("Validation", val_labels), ("Test", test_labels)]:
+        dist = labels["label"].value_counts(normalize=True)
+        readme_content += f"\n### {name} Set\n"
+        for label, pct in dist.items():
+            label_name = 'Long' if label == 1 else ('Short' if label == -1 else 'No Trade')
+            readme_content += f"- {label_name}: {pct:.2%}\n"
+    
+    # Write README
+    with open(label_dir / "README.md", "w") as f:
+        f.write(readme_content)
+    
+    # Print label distribution to stdout
+    typer.echo("\nLabel Distribution:")
+    for name, labels in [("Train", train_labels), ("Validation", val_labels), ("Test", test_labels)]:
+        dist = labels["label"].value_counts(normalize=True)
+        typer.echo(f"\n{name} set:")
+        for label, pct in dist.items():
+            label_name = 'Long' if label == 1 else ('Short' if label == -1 else 'No Trade')
+            typer.echo(f"  {label_name}: {pct:.2%}")
+    
+    typer.echo(f"\nLabels generated successfully in {output_dir}")
 
 def run():
     """Run the CLI application."""

@@ -39,59 +39,81 @@ A machine learning-based trading advisor that uses logistic regression for marke
 pip install -e .
 ```
 
-## Usage
+## CLI Commands
 
-### Training a Model
+### Data Management
 
 ```bash
-python -m trading_advisor train-model \
-    --model-name logistic \
-    --data-dir data/ml_datasets/your_dataset \
-    --output-dir models
+# Update market and ticker data
+trading-advisor update-data \
+    --tickers AAPL,MSFT,GOOGL \
+    --days 60 \
+    --update-tickers \
+    --update-market
+
+# Generate ML dataset
+trading-advisor generate-dataset \
+    --tickers AAPL,MSFT,GOOGL \
+    --start-date 2023-01-01 \
+    --end-date 2023-12-31 \
+    --train-months 6 \
+    --val-months 2
+
+# Generate labels for ML dataset
+trading-advisor generate-labels \
+    --input-dir data/ml_datasets \
+    --label-types short_term_profit,risk_adjusted
 ```
 
-### Running Predictions
+### Model Operations
 
 ```bash
-python -m trading_advisor run-model \
+# Run model predictions
+trading-advisor run-model \
     --model-name logistic \
     --tickers AAPL,MSFT,GOOGL \
     --date 2024-03-20
+
+# List available models
+trading-advisor list-models
 ```
 
-### Evaluating a Model
+### Reporting
 
 ```bash
-python -m trading_advisor evaluate-model \
-    --model-name logistic \
-    --data-dir data/ml_datasets/your_dataset \
-    --model-dir models
+# Generate daily report
+trading-advisor report-daily \
+    --model-name TechnicalScorer \
+    --date 2024-03-20 \
+    --top-n 6
+
+# Generate LLM prompt
+trading-advisor prompt-daily \
+    --model-name TechnicalScorer \
+    --date 2024-03-20 \
+    --deep-research
 ```
 
-## Model Features
+## Inference
 
-The logistic regression model includes:
+The system supports generating normalized feature data for inference using the same preprocessing as training:
 
-- L1/L2/Elastic Net regularization
-- Feature selection based on importance
-- Cross-validation for robust evaluation
-- Hyperparameter tuning
-- Early stopping support
-- Comprehensive metrics tracking
+```python
+from trading_advisor.dataset_v2 import DatasetGeneratorV2
+from datetime import datetime
 
-## Data Format
+# Initialize generator with same directories used for training
+generator = DatasetGeneratorV2(
+    market_features_dir="data/market_features",
+    ticker_features_dir="data/ticker_features"
+)
 
-The model expects data in the following format:
+# Prepare single row for inference
+date = datetime(2024, 1, 2)
+inference_data = generator.prepare_inference_data('AAPL', date)
+```
 
-- Training data: `train.parquet`
-- Validation data: `val.parquet`
-- Test data: `test.parquet`
-
-Each file should contain:
-- Feature columns (numeric)
-- `label` column (binary)
-- `ticker` column (string)
-- `date` column (datetime)
+The inference data will be normalized using the same statistics (mean, std) that were calculated from the training set, ensuring consistency between training and inference.
 
 ## Project Structure
 
