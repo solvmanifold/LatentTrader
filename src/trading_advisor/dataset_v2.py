@@ -17,6 +17,7 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 import typer
+import os
 
 from trading_advisor.features import load_features
 from trading_advisor.sector_mapping import load_sector_mapping
@@ -428,6 +429,18 @@ inference_data = generator.prepare_inference_data('AAPL', date)
 ```
 {validation_output}
 ```
+
+## Generation Command
+The dataset was generated using:
+```bash
+python -m trading_advisor.cli generate-dataset-v2 --start-date 2020-01-01 --end-date 2024-12-31 --output-dir data/ml_datasets
+```
+
+This command:
+1. Uses data from 2020-01-01 to 2024-12-31
+2. Saves the dataset to `data/ml_datasets/`
+3. Creates train/val/test splits
+4. Saves normalization parameters to `data/ml_datasets/scalers/`
 """
         
         readme_path = output_dir / "README.md"
