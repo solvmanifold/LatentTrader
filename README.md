@@ -57,13 +57,29 @@ trading-advisor generate-dataset \
     --start-date 2023-01-01 \
     --end-date 2023-12-31 \
     --train-months 6 \
-    --val-months 2
+    --val-months 2 \
+    --min-samples-per-ticker 30
 
-# Generate labels for ML dataset
+# Generate swing trade labels for ML dataset
 trading-advisor generate-labels \
     --input-dir data/ml_datasets \
-    --label-types short_term_profit,risk_adjusted
+    --output-dir data/ml_datasets \
+    --lookback-days 3 \
+    --forward-days 5 \
+    --min-return 0.02 \
+    --max-drawdown 0.01
 ```
+
+The label generation command creates swing trade labels based on:
+- Lookback period for trend confirmation (default: 3 days)
+- Forward period for profit target (default: 5 days)
+- Minimum return required (default: 2%)
+- Maximum allowed drawdown (default: 1%)
+
+Labels are:
+- 1: Long signal (uptrend + profit target + controlled drawdown)
+- -1: Short signal (downtrend + profit target + controlled drawdown)
+- 0: No trade (default)
 
 ### Model Operations
 
@@ -85,13 +101,14 @@ trading-advisor list-models
 trading-advisor report-daily \
     --model-name TechnicalScorer \
     --date 2024-03-20 \
-    --top-n 6
+    --top-n 6 \
+    --positions-csv positions.csv  # Optional: include current positions
 
 # Generate LLM prompt
 trading-advisor prompt-daily \
     --model-name TechnicalScorer \
     --date 2024-03-20 \
-    --deep-research
+    --deep-research  # Optional: generate detailed research prompt
 ```
 
 ## Inference
