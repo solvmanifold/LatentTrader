@@ -9,11 +9,11 @@ import logging
 from sklearn.base import BaseEstimator
 from sklearn.preprocessing import StandardScaler
 
-from ..base import BaseModel
+from ..base import BaseTradingModel
 
 logger = logging.getLogger(__name__)
 
-class SklearnModel(BaseModel):
+class SklearnModel(BaseTradingModel):
     """Base class for scikit-learn models."""
     
     def __init__(

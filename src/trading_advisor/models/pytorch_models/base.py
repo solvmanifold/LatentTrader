@@ -10,12 +10,13 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 import logging
 from abc import abstractmethod
+from sklearn.preprocessing import StandardScaler
 
-from ..base import BaseModel
+from ..base import BaseTradingModel
 
 logger = logging.getLogger(__name__)
 
-class PyTorchModel(BaseModel, nn.Module):
+class PyTorchModel(BaseTradingModel, nn.Module):
     """Base class for PyTorch models."""
     
     def __init__(
@@ -31,7 +32,7 @@ class PyTorchModel(BaseModel, nn.Module):
             target_column: Name of the target column
             device: Device to use for training/inference
         """
-        BaseModel.__init__(self, model_name)
+        BaseTradingModel.__init__(self, model_name)
         nn.Module.__init__(self)
         self.target_column = target_column
         self.device = device

@@ -8,9 +8,6 @@ import json
 from datetime import datetime, timedelta
 import pandas as pd
 import os
-from logging.handlers import RotatingFileHandler
-from rich.logging import RichHandler
-import numpy as np
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 import typer
 from rich.console import Console
@@ -29,31 +26,10 @@ from trading_advisor.market_breadth import calculate_market_breadth
 from trading_advisor.sector_performance import calculate_sector_performance
 from trading_advisor.sentiment import MarketSentiment
 from trading_advisor.utils import setup_logging
-from trading_advisor.data import DataManager
 from .models.sklearn_models.logistic import LogisticRegressionModel
 
-# Ensure logs directory exists
-os.makedirs("logs", exist_ok=True)
-
-# File handler with rotation
-file_handler = RotatingFileHandler(
-    "logs/trading_advisor.log",
-    maxBytes=10 * 1024 * 1024,  # 10MB
-    backupCount=5
-)
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
-
-# Terminal handler (RichHandler for pretty output)
-console_handler = RichHandler(rich_tracebacks=True)
-console_handler.setLevel(logging.ERROR)
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    handlers=[console_handler, file_handler]
-)
-
+# Set up logging
+setup_logging()
 logger = logging.getLogger("trading_advisor")
 console = Console()
 

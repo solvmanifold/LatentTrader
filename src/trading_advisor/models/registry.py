@@ -6,7 +6,7 @@ from pathlib import Path
 import importlib
 import json
 
-from .base import BaseModel
+from .base import BaseTradingModel
 from .sklearn_models.logistic import LogisticRegressionModel
 
 logger = logging.getLogger(__name__)
@@ -16,13 +16,13 @@ class ModelRegistry:
     
     def __init__(self):
         """Initialize the registry."""
-        self._models: Dict[str, Type[BaseModel]] = {}
+        self._models: Dict[str, Type[BaseTradingModel]] = {}
         self._model_paths: Dict[str, Path] = {}
         
         # Register default models
         self.register('logistic', LogisticRegressionModel)
     
-    def register(self, name: str, model_class: Type[BaseModel], path: Optional[Path] = None) -> None:
+    def register(self, name: str, model_class: Type[BaseTradingModel], path: Optional[Path] = None) -> None:
         """Register a model class.
         
         Args:
@@ -36,7 +36,7 @@ class ModelRegistry:
         if path is not None:
             self._model_paths[name] = path
     
-    def get_model_class(self, name: str) -> Type[BaseModel]:
+    def get_model_class(self, name: str) -> Type[BaseTradingModel]:
         """Get a registered model class.
         
         Args:
@@ -74,7 +74,7 @@ class ModelRegistry:
             for name in self._models
         }
     
-    def create_model(self, name: str, **kwargs) -> BaseModel:
+    def create_model(self, name: str, **kwargs) -> BaseTradingModel:
         """Create a new model instance.
         
         Args:
@@ -90,7 +90,7 @@ class ModelRegistry:
         model_class = self.get_model_class(name)
         return model_class(**kwargs)
     
-    def load_model(self, name: str, path: Optional[Path] = None) -> BaseModel:
+    def load_model(self, name: str, path: Optional[Path] = None) -> BaseTradingModel:
         """Load a saved model.
         
         Args:
