@@ -314,6 +314,17 @@ class DatasetGeneratorV2:
             test_df: Test dataset
             validate: Whether validation was performed
         """
+        # Capture validation output
+        import io
+        from contextlib import redirect_stdout
+        
+        validation_output = ""
+        if validate:
+            f = io.StringIO()
+            with redirect_stdout(f):
+                self._validate_datasets(train_df, val_df, test_df)
+            validation_output = f.getvalue()
+        
         readme_content = f"""# Machine Learning Dataset
 
 ## Overview
@@ -358,6 +369,11 @@ import pandas as pd
 train_df = pd.read_parquet('train.parquet')
 val_df = pd.read_parquet('val.parquet')
 test_df = pd.read_parquet('test.parquet')
+```
+
+## Validation Results
+```
+{validation_output}
 ```
 """
         
