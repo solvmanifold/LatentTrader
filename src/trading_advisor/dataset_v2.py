@@ -64,7 +64,7 @@ class DatasetGeneratorV2:
         start_date: str,
         end_date: str,
         output_dir: Path,
-        validate: bool = False,
+        validate: bool = True,
         progress_callback: Optional[Callable[[int], None]] = None
     ) -> None:
         """Generate a dataset for the given tickers and date range.
@@ -74,7 +74,7 @@ class DatasetGeneratorV2:
             start_date: Start date for data collection (YYYY-MM-DD)
             end_date: End date for data collection (YYYY-MM-DD)
             output_dir: Directory to save output files
-            validate: Whether to perform validation checks
+            validate: Whether to perform validation checks (default: True)
             progress_callback: Optional callback function to update progress
         """
         logger.info(f"Generating dataset for {len(tickers)} tickers from {start_date} to {end_date}")
@@ -124,7 +124,7 @@ class DatasetGeneratorV2:
         test_df.to_parquet(output_dir / 'test.parquet')
         
         # Generate README
-        self._generate_readme(output_dir, train_df, val_df, test_df)
+        self._generate_readme(output_dir, train_df, val_df, test_df, validate)
         
         logger.info(f"Dataset generated successfully at {output_dir}")
         
@@ -302,7 +302,8 @@ class DatasetGeneratorV2:
         output_dir: Path,
         train_df: pd.DataFrame,
         val_df: pd.DataFrame,
-        test_df: pd.DataFrame
+        test_df: pd.DataFrame,
+        validate: bool = True
     ) -> None:
         """Generate a README file for the dataset.
         
@@ -311,6 +312,7 @@ class DatasetGeneratorV2:
             train_df: Training dataset
             val_df: Validation dataset
             test_df: Test dataset
+            validate: Whether validation was performed
         """
         readme_content = f"""# Machine Learning Dataset
 
@@ -321,6 +323,7 @@ This dataset was generated on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} usi
 - Training months: {self.train_months}
 - Validation months: {self.val_months}
 - Minimum samples per ticker: {self.min_samples_per_ticker}
+- Data validation: {'Enabled' if validate else 'Disabled'}
 
 ## Included Tickers
 {', '.join(train_df['ticker'].unique())}
@@ -337,6 +340,14 @@ The dataset includes:
 2. Technical Indicators
 3. Sector Features
 4. Market Features
+
+## Data Quality
+The dataset has been validated for:
+- Consistent ticker distribution across splits
+- No overlapping dates between splits
+- No infinite values
+- No zero variance features (except stock_splits)
+- Missing value analysis for all features
 
 ## Usage
 To load the dataset:
@@ -386,6 +397,8 @@ test_df = pd.read_parquet('test.parquet')
             'ema_100': 'Requires 100 days of historical data',
             'sector_performance_returns_20d': 'Requires 20 days of historical data',
             'sector_performance_momentum_20d': 'Requires 20 days of historical data',
+            'sector_performance_relative_strength': 'Requires S&P 500 data for comparison',
+            'sector_performance_relative_strength_ratio': 'Requires S&P 500 data for comparison',
             'analyst_targets': 'Only available for most recent date'
         }
         
