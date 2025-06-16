@@ -69,9 +69,18 @@ def get_sp500_data(start_date: Optional[str] = None) -> pd.DataFrame:
         # Ensure index is datetime
         sp500_new.index = pd.to_datetime(sp500_new.index)
         
+        # Merge with existing data
+        if not sp500.empty:
+            # Combine old and new data, keeping the most recent values for overlapping dates
+            sp500 = pd.concat([sp500, sp500_new])
+            sp500 = sp500[~sp500.index.duplicated(keep='last')]
+            sp500 = sp500.sort_index()
+        else:
+            sp500 = sp500_new
+        
         # Save to parquet
-        sp500_new.to_parquet(sp500_path)
-        return sp500_new
+        sp500.to_parquet(sp500_path)
+        return sp500
     
     return sp500
 

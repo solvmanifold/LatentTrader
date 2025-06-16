@@ -19,7 +19,7 @@ from trading_advisor import __version__
 from trading_advisor.data import load_tickers, normalize_ticker, download_stock_data, load_ticker_features, ensure_data_dir, load_positions
 from trading_advisor.output import generate_report, generate_research_prompt, generate_deep_research_prompt, generate_structured_data, generate_technical_summary, save_json_report
 from trading_advisor.market_features import MarketFeatures
-from trading_advisor.dataset import DatasetGenerator
+from trading_advisor.dataset_v2 import DatasetGeneratorV2
 from trading_advisor.models import registry, ModelRunner
 from trading_advisor.analysis import analyze_stock, calculate_technical_indicators, calculate_score, get_analyst_targets
 from trading_advisor.config import SCORE_WEIGHTS
@@ -28,7 +28,6 @@ from trading_advisor.features import update_features as update_stock_features
 from trading_advisor.market_breadth import calculate_market_breadth
 from trading_advisor.sector_performance import calculate_sector_performance
 from trading_advisor.sentiment import MarketSentiment
-from trading_advisor.dataset_v2 import DatasetGeneratorV2
 
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
@@ -663,44 +662,68 @@ def generate_dataset(
     end_date: str = typer.Option(..., help="End date for dataset (YYYY-MM-DD)"),
     output_dir: str = typer.Option("data/ml_datasets", help="Directory to save output files"),
     data_dir: str = typer.Option("data", help="Directory containing feature files"),
-    test_size: float = typer.Option(0.2, help="Proportion of data to use for testing"),
-    val_size: float = typer.Option(0.1, help="Proportion of data to use for validation"),
-    random_state: int = typer.Option(42, help="Random seed for reproducibility"),
-    validate: bool = typer.Option(False, help="Validate generated datasets")
+    train_months: int = typer.Option(6, help="Number of months to use for training"),
+    val_months: int = typer.Option(2, help="Number of months to use for validation"),
+    min_samples_per_ticker: int = typer.Option(30, help="Minimum number of trading days required per ticker in each split"),
+    validate: bool = typer.Option(
+        True,
+        "--validate/--no-validate",
+        help="Run data validation after generation (default: True). Validates ticker distribution, date ranges, missing values, and feature statistics."
+    )
 ):
-    """Generate a machine learning dataset with improved data handling."""
-    try:
-        # Parse tickers
-        if tickers == "all":
-            ticker_list = get_all_tickers()
-        elif os.path.exists(tickers):
-            with open(tickers, 'r') as f:
-                ticker_list = [line.strip() for line in f if line.strip()]
-        else:
-            ticker_list = [t.strip() for t in tickers.split(',')]
+    """Generate ML datasets from ticker features."""
+    # Parse tickers
+    if tickers == "all":
+        ticker_list = load_tickers("all")
+    elif os.path.isfile(tickers):
+        with open(tickers) as f:
+            ticker_list = [line.strip() for line in f if line.strip()]
+    else:
+        ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
+
+    # Create output directory
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Initialize dataset generator
+    generator = DatasetGeneratorV2(
+        market_features_dir=os.path.join(data_dir, "market_features"),
+        ticker_features_dir=os.path.join(data_dir, "ticker_features"),
+        output_dir=output_dir,
+        train_months=train_months,
+        val_months=val_months,
+        min_samples_per_ticker=min_samples_per_ticker
+    )
+
+    # Generate datasets with progress bar
+    with Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"), BarColumn(), TaskProgressColumn()) as progress:
+        task = progress.add_task("Generating dataset...", total=len(ticker_list))
+        
+        try:
+            # Generate datasets
+            generator.generate_dataset(
+                tickers=ticker_list,
+                start_date=start_date,
+                end_date=end_date,
+                output_dir=Path(output_dir),
+                validate=validate,
+                progress_callback=lambda x: progress.update(task, completed=x)
+            )
+            typer.echo(f"\nDataset generated successfully at {output_dir}")
             
-        # Initialize dataset generator
-        generator = DatasetGeneratorV2(
-            market_features_dir=os.path.join(data_dir, "market_features"),
-            ticker_features_dir=os.path.join(data_dir, "ticker_features"),
-            output_dir=output_dir,
-            test_size=test_size,
-            val_size=val_size,
-            random_state=random_state
-        )
-        
-        # Generate dataset
-        generator.generate_dataset(
-            tickers=ticker_list,
-            start_date=start_date,
-            end_date=end_date,
-            output_dir=Path(output_dir),
-            validate=validate
-        )
-        
-    except Exception as e:
-        logger.error(f"Error generating dataset: {e}")
-        raise typer.Exit(1)
+        except ValueError as e:
+            progress.stop()
+            typer.echo(f"\nError: {str(e)}", err=True)
+            if "Ticker distribution is not consistent" in str(e):
+                typer.echo("\nThis error occurs when some tickers don't have enough data in all splits.")
+                typer.echo("Try adjusting the split periods or minimum samples requirement:")
+                typer.echo(f"- Current training period: {train_months} months")
+                typer.echo(f"- Current validation period: {val_months} months")
+                typer.echo(f"- Current minimum samples per ticker: {min_samples_per_ticker}")
+            raise typer.Exit(1)
+        except Exception as e:
+            progress.stop()
+            typer.echo(f"\nUnexpected error: {str(e)}", err=True)
+            raise typer.Exit(1)
 
 def run():
     """Run the CLI application."""

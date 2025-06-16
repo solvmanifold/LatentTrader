@@ -111,14 +111,14 @@ def load_ticker_data(ticker_list: List[str], features_dir: str, start_date: Opti
 class MarketFeatures:
     """Market feature generation and management."""
     
-    def __init__(self, data_dir: Path):
+    def __init__(self, data_dir: str):
         """Initialize the market features generator.
         
         Args:
             data_dir: Base directory for data storage
         """
-        self.data_dir = data_dir
-        self.market_features_dir = data_dir / "market_features"
+        self.data_dir = Path(data_dir)
+        self.market_features_dir = self.data_dir / "market_features"
         self.market_features_dir.mkdir(parents=True, exist_ok=True)
         
     def generate_market_features(self, days: int = 60, force_update_sector_mapping: bool = False):

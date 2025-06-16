@@ -235,15 +235,11 @@ data/market_features/
 
 ### Pending Features ⏳
 
-#### 1. VIX Integration (Remaining)
-- [ ] `market_volatility_vix_ma20`
-- [ ] `market_volatility_vix_std20`
-
-#### 2. Market-Wide Volatility (Remaining)
+#### 1. Market-Wide Volatility (Remaining)
 - [ ] `market_volatility_vol_of_vol`
 - [ ] `market_volatility_cross_sectional_vol`
 
-#### 3. Model Training Enhancement
+#### 2. Model Training Enhancement
 - [ ] Enhance `train_logistic2.py`:
   - [ ] Add hyperparameter tuning
   - [ ] Implement cross-validation
@@ -262,7 +258,7 @@ data/market_features/
   - [ ] Model comparison
   - [ ] Model deployment
 
-#### 4. Testing and Validation
+#### 3. Testing and Validation
 - [ ] Expand test coverage:
   - [ ] Add unit tests for new functionality
   - [ ] Implement integration tests
@@ -272,7 +268,7 @@ data/market_features/
   - [ ] Add data quality checks
   - [ ] Create validation reports
 
-#### 5. Documentation and Examples
+#### 4. Documentation and Examples
 - [ ] Update documentation:
   - [ ] Code comments
   - [ ] Function docstrings
