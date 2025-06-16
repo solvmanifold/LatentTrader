@@ -1,6 +1,6 @@
 # LatentTrader
 
-A machine learning-powered trading assistant that generates actionable, short-term trading playbooks designed to beat the market.
+A machine learning-based trading advisor that uses logistic regression for market predictions.
 
 ## Features
 
@@ -41,39 +41,57 @@ pip install -e .
 
 ## Usage
 
-### Core CLI Commands
+### Training a Model
 
 ```bash
-# Update data for all tickers
-python -m trading_advisor update-data
-
-# Generate a dataset for machine learning
-python -m trading_advisor generate-dataset --start-date 2023-01-01 --end-date 2024-01-01
-
-# Run a model on specific tickers
-python -m trading_advisor run-model --model-name TechnicalScorer --tickers AAPL,MSFT,GOOGL
-
-# Generate a report for a specific date
-python -m trading_advisor report-daily --date 2024-03-20
-
-# Generate a prompt for a specific date
-python -m trading_advisor prompt-daily --date 2024-03-20
+python -m trading_advisor train-model \
+    --model-name logistic \
+    --data-dir data/ml_datasets/your_dataset \
+    --output-dir models
 ```
 
-### Model Training
-
-Model training and evaluation are handled through dedicated scripts:
+### Running Predictions
 
 ```bash
-# Train a logistic regression model
-python scripts/train_logistic2.py --dataset test_run
-
-# Evaluate a trained model
-python scripts/train_logistic2.py --dataset test_run --evaluate
-
-# Analyze dataset labels
-python scripts/analyze_labels.py --dataset-dir data/ml_datasets/test_run
+python -m trading_advisor run-model \
+    --model-name logistic \
+    --tickers AAPL,MSFT,GOOGL \
+    --date 2024-03-20
 ```
+
+### Evaluating a Model
+
+```bash
+python -m trading_advisor evaluate-model \
+    --model-name logistic \
+    --data-dir data/ml_datasets/your_dataset \
+    --model-dir models
+```
+
+## Model Features
+
+The logistic regression model includes:
+
+- L1/L2/Elastic Net regularization
+- Feature selection based on importance
+- Cross-validation for robust evaluation
+- Hyperparameter tuning
+- Early stopping support
+- Comprehensive metrics tracking
+
+## Data Format
+
+The model expects data in the following format:
+
+- Training data: `train.parquet`
+- Validation data: `val.parquet`
+- Test data: `test.parquet`
+
+Each file should contain:
+- Feature columns (numeric)
+- `label` column (binary)
+- `ticker` column (string)
+- `date` column (datetime)
 
 ## Project Structure
 

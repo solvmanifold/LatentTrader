@@ -1,13 +1,15 @@
 """Trading models package."""
 
-from trading_advisor.models.base import BaseTradingModel
-from trading_advisor.models.technical_scorer import TechnicalScorer
-from trading_advisor.models.registry import ModelRegistry, registry
-from trading_advisor.models.runner import ModelRunner
+from .base import BaseModel
+from .sklearn_models.base import SklearnModel
+from .pytorch_models.base import PyTorchModel
+from .registry import ModelRegistry, registry
+from .runner import ModelRunner
 
 __all__ = [
-    'BaseTradingModel',
-    'TechnicalScorer',
+    'BaseModel',
+    'SklearnModel',
+    'PyTorchModel',
     'ModelRegistry',
     'registry',
     'ModelRunner'

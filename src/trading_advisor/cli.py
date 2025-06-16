@@ -3,9 +3,9 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import os
 from logging.handlers import RotatingFileHandler
@@ -28,6 +28,9 @@ from trading_advisor.features import update_features as update_stock_features
 from trading_advisor.market_breadth import calculate_market_breadth
 from trading_advisor.sector_performance import calculate_sector_performance
 from trading_advisor.sentiment import MarketSentiment
+from trading_advisor.utils import setup_logging
+from trading_advisor.data import DataManager
+from .models.sklearn_models.logistic import LogisticRegressionModel
 
 # Ensure logs directory exists
 os.makedirs("logs", exist_ok=True)
@@ -83,6 +86,10 @@ def main(
         # Show help menu if no arguments provided
         typer.echo(ctx.get_help())
         raise typer.Exit()
+
+def get_available_models() -> List[str]:
+    """Get list of available model names."""
+    return list(registry.list_models().keys())
 
 @app.command()
 def report_daily(
@@ -574,70 +581,142 @@ def update_data(
 
 @app.command()
 def run_model(
-    model_name: str = typer.Option(..., help="Name of the model to run (e.g., 'TechnicalScorer')"),
-    tickers: str = typer.Option("all", help="Comma-separated tickers, path to file, or 'all' for all tickers"),
-    date: str = typer.Option(None, help="Run model for this date (YYYY-MM-DD, defaults to latest)"),
-    features_dir: str = typer.Option("data/ticker_features", help="Directory with feature Parquet files"),
-    model_outputs_dir: str = typer.Option("model_outputs", help="Directory to save model outputs"),
-    force: bool = typer.Option(False, help="Overwrite existing outputs if they exist")
+    model_name: str = typer.Option("logistic", help="Model to run (e.g., 'logistic')"),
+    tickers: str = typer.Option(None, help="Comma-separated list of tickers to analyze"),
+    date: str = typer.Option(None, help="Date to analyze (YYYY-MM-DD)"),
+    output_dir: str = typer.Option("reports", help="Directory to save reports")
 ):
-    """Run a trading model on specified tickers and save outputs."""
-    from trading_advisor.models import registry, ModelRunner
-    from trading_advisor.data import load_ticker_features
-    
-    # Check if model exists
-    if model_name not in registry.list_models():
-        typer.echo(f"Error: Model '{model_name}' not found")
-        typer.echo(f"Available models: {', '.join(registry.list_models().keys())}")
+    """Run a model on specified tickers and date."""
+    try:
+        # Create model instance
+        model = registry.create_model(model_name)
+        
+        # Parse tickers
+        if tickers:
+            ticker_list = [t.strip() for t in tickers.split(",")]
+        else:
+            ticker_list = None
+            
+        # Parse date
+        if date:
+            target_date = pd.to_datetime(date)
+        else:
+            target_date = pd.to_datetime(datetime.now().date())
+            
+        # Create output directory
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        # Generate report
+        report_path = output_path / f"{model_name}_{target_date.strftime('%Y-%m-%d')}.md"
+        
+        with open(report_path, "w") as f:
+            f.write(f"# {model_name} Analysis Report\n")
+            f.write(f"Date: {target_date.strftime('%Y-%m-%d')}\n\n")
+            
+            if ticker_list:
+                f.write("## Selected Tickers\n")
+                for ticker in ticker_list:
+                    f.write(f"- {ticker}\n")
+                f.write("\n")
+            
+            # Add model-specific analysis
+            if isinstance(model, LogisticRegressionModel):
+                f.write("## Model Analysis\n")
+                f.write("### Feature Importance\n")
+                if hasattr(model, 'metadata') and 'feature_importance' in model.metadata:
+                    importance = model.metadata['feature_importance']
+                    for feature, score in sorted(importance.items(), key=lambda x: abs(x[1]), reverse=True)[:10]:
+                        f.write(f"- {feature}: {score:.4f}\n")
+                f.write("\n")
+                
+                f.write("### Model Performance\n")
+                if hasattr(model, 'metadata') and 'cv_scores' in model.metadata:
+                    cv_scores = model.metadata['cv_scores']
+                    f.write(f"- Mean CV Score: {cv_scores['mean']:.4f}\n")
+                    f.write(f"- CV Score Std: {cv_scores['std']:.4f}\n")
+                f.write("\n")
+        
+        logger.info(f"Report generated: {report_path}")
+        
+    except Exception as e:
+        logger.error(f"Error running model: {str(e)}")
         raise typer.Exit(1)
-    
-    # Get tickers
-    if tickers == "all":
-        # Get all tickers from features directory
-        tickers = [f.stem.replace("_features", "") for f in Path(features_dir).glob("*_features.parquet")]
-    elif os.path.isfile(tickers):
-        # Read tickers from file
-        with open(tickers) as f:
-            tickers = [line.strip() for line in f if line.strip()]
-    else:
-        # Parse comma-separated list
-        tickers = [t.strip() for t in tickers.split(",")]
-    
-    # Load features
-    features_df = load_ticker_features(tickers, features_dir)
-    if features_df.empty:
-        typer.echo("Error: No features found for any tickers")
+
+@app.command()
+def train_model(
+    model_name: str = typer.Option("logistic", help="Model to train (e.g., 'logistic')"),
+    data_dir: str = typer.Option("data", help="Directory containing training data"),
+    output_dir: str = typer.Option("models", help="Directory to save trained model")
+):
+    """Train a model on the provided data."""
+    try:
+        # Create model instance
+        model = registry.create_model(model_name)
+        
+        # Load data
+        data_path = Path(data_dir)
+        train_df = pd.read_parquet(data_path / "train.parquet")
+        val_df = pd.read_parquet(data_path / "val.parquet")
+        
+        # Train model
+        model.train(train_df, val_df)
+        
+        # Save model
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        model.save(output_path / f"{model_name}.pkl")
+        
+        logger.info(f"Model trained and saved to {output_path / f'{model_name}.pkl'}")
+        
+    except Exception as e:
+        logger.error(f"Error training model: {str(e)}")
         raise typer.Exit(1)
+
+@app.command()
+def evaluate_model(
+    model_name: str = typer.Option("logistic", help="Model to evaluate (e.g., 'logistic')"),
+    data_dir: str = typer.Option("data", help="Directory containing test data"),
+    model_dir: str = typer.Option("models", help="Directory containing trained model")
+):
+    """Evaluate a trained model on test data."""
+    try:
+        # Load model
+        model_path = Path(model_dir) / f"{model_name}.pkl"
+        model = registry.load_model(model_name, model_path)
+        
+        # Load test data
+        data_path = Path(data_dir)
+        test_df = pd.read_parquet(data_path / "test.parquet")
+        
+        # Evaluate model
+        results = model.predict(test_df)
+        
+        # Calculate metrics
+        metrics = {
+            'accuracy': (results['predictions'] == test_df['label']).mean(),
+            'auc': roc_auc_score(test_df['label'], results['probabilities'])
+        }
+        
+        logger.info("Model Evaluation Results:")
+        for metric, value in metrics.items():
+            logger.info(f"{metric}: {value:.4f}")
+        
+    except Exception as e:
+        logger.error(f"Error evaluating model: {str(e)}")
+        raise typer.Exit(1)
+
+@app.command()
+def list_models():
+    """List available models."""
+    setup_logging()
     
-    # Create model runner
-    runner = ModelRunner(output_dir=model_outputs_dir)
-    
-    # Run model
-    typer.echo(f"Running {model_name} on {len(tickers)} tickers...")
-    results = runner.run_model(model_name, tickers, features_df, date)
-    
-    # Print summary
-    typer.echo(f"\nModel run complete:")
-    typer.echo(f"- Processed {len(results)} tickers")
-    typer.echo(f"- Outputs saved to {model_outputs_dir}/{model_name}/")
-    
-    # Print top 5 scores if available
-    if results:
-        scores = []
-        for ticker, pred in results.items():
-            if 'score' in pred:
-                score_val = pred['score']
-                # If score is a numpy array or list, use the last value as the most recent score
-                if isinstance(score_val, (np.ndarray, list)):
-                    score_val = float(score_val[-1])
-                else:
-                    score_val = float(score_val)
-                scores.append((ticker, score_val))
-        if scores:
-            scores.sort(key=lambda x: x[1], reverse=True)
-            typer.echo("\nTop 5 scores:")
-            for ticker, score in scores[:5]:
-                typer.echo(f"- {ticker}: {score:.2f}")
+    models = registry.list_models()
+    for name, path in models.items():
+        if path is not None:
+            print(f"{name}: {path}")
+        else:
+            print(f"{name}: No saved model")
 
 def to_serializable(val):
     if isinstance(val, (np.integer, np.int64, np.int32)):
