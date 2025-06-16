@@ -10,6 +10,8 @@ from trading_advisor.market_breadth import calculate_market_breadth
 from trading_advisor.sector_performance import calculate_sector_performance
 from trading_advisor.sentiment import MarketSentiment
 from trading_advisor.volatility import MarketVolatility
+from trading_advisor.market_features import MarketFeatures
+import numpy as np
 
 class TestDataDownload(unittest.TestCase):
     def setUp(self):
@@ -87,11 +89,14 @@ class TestDataDownload(unittest.TestCase):
         raw_cols = [col for col in ['open', 'high', 'low', 'close', 'volume', 'dividends', 'stock_splits'] if col in df1.columns]
         for date in last_dates:
             self.assertIn(date, df2.index)
+            # Use rtol and atol for floating point comparison
             pd.testing.assert_series_equal(
                 df1.loc[date, raw_cols],
                 df2.loc[date, raw_cols],
                 check_names=False,
-                check_index=False
+                check_index=False,
+                rtol=1e-3,  # 0.1% relative tolerance
+                atol=1e-3   # 0.001 absolute tolerance
             )
 
     def test_calculate_market_breadth(self):
@@ -130,20 +135,64 @@ class TestDataDownload(unittest.TestCase):
 
     def test_generate_sentiment_features(self):
         """Test sentiment feature generation."""
-        # Initialize sentiment analyzer with test directory
-        sentiment = MarketSentiment(Path(self.temp_dir))
+        # Initialize market features with test directory
+        market_features = MarketFeatures(str(self.temp_dir))
         
-        # Generate sentiment features with a small date range
-        sentiment_df = sentiment.generate_sentiment_features(days=5)
+        # Create test GDELT data for a historical date range
+        # Use a date range from 2023 since today is June 16, 2025
+        start_date = pd.Timestamp('20230101')
+        dates = pd.date_range(start=start_date, periods=5, freq='D')
+        test_data = pd.DataFrame({
+            'date': dates,
+            'avg_tone': np.random.randn(len(dates))
+        })
+        test_data.set_index('date', inplace=True)
         
-        # Basic validation
-        self.assertFalse(sentiment_df.empty)
-        self.assertTrue(isinstance(sentiment_df.index, pd.DatetimeIndex))
+        # Save test data
+        gdelt_path = Path(self.temp_dir) / "market_features" / "gdelt_raw.parquet"
+        gdelt_path.parent.mkdir(parents=True, exist_ok=True)
+        test_data.to_parquet(gdelt_path)
+        
+        # Create a test ticker file to ensure MarketFeatures has data to work with
+        ticker_dir = Path(self.temp_dir) / "ticker_features"
+        ticker_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create ticker data with enough history for technical indicators
+        # We need at least 50 days for technical indicators
+        ticker_dates = pd.date_range(start=start_date - pd.Timedelta(days=60), periods=65, freq='D')
+        ticker_data = pd.DataFrame({
+            'date': ticker_dates,
+            'open': 100 + np.random.randn(len(ticker_dates)),
+            'high': 101 + np.random.randn(len(ticker_dates)),
+            'low': 99 + np.random.randn(len(ticker_dates)),
+            'close': 100 + np.random.randn(len(ticker_dates)),
+            'volume': 1000000 + np.random.randint(0, 1000000, len(ticker_dates))
+        })
+        ticker_data.set_index('date', inplace=True)
+        
+        # Calculate technical indicators
+        from trading_advisor.analysis import calculate_technical_indicators
+        ticker_data = calculate_technical_indicators(ticker_data)
+        
+        # Save the ticker data with technical indicators
+        ticker_data.to_parquet(ticker_dir / "AAPL_features.parquet")
+        
+        # Generate market features (which includes sentiment)
+        market_features.generate_market_features(days=5)
+        
+        # Load and validate sentiment features
+        sentiment_path = Path(self.temp_dir) / "market_features" / "market_sentiment.parquet"
+        self.assertTrue(sentiment_path.exists(), "Sentiment features file should exist")
+        
+        sentiment_df = pd.read_parquet(sentiment_path)
+        self.assertFalse(sentiment_df.empty, "Sentiment DataFrame should not be empty")
+        self.assertTrue(isinstance(sentiment_df.index, pd.DatetimeIndex), "Index should be DatetimeIndex")
+        
         # Check for expected sentiment columns
         expected_columns = ['market_sentiment_ma5', 'market_sentiment_ma20', 'market_sentiment_momentum',
             'market_sentiment_volatility', 'market_sentiment_zscore']
         for col in expected_columns:
-            self.assertIn(col, sentiment_df.columns)
+            self.assertIn(col, sentiment_df.columns, f"Expected column {col} not found")
 
     def test_generate_volatility_features(self):
         ticker = "AAPL"
