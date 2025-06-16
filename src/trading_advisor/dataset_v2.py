@@ -433,14 +433,21 @@ inference_data = generator.prepare_inference_data('AAPL', date)
 ## Generation Command
 The dataset was generated using:
 ```bash
-python -m trading_advisor.cli generate-dataset-v2 --start-date 2020-01-01 --end-date 2024-12-31 --output-dir data/ml_datasets
+trading-advisor generate-dataset \
+    --tickers AAPL,MSFT,GOOGL \
+    --start-date 2024-01-01 \
+    --end-date 2024-12-31 \
+    --train-months 8 \
+    --val-months 2 \
+    --min-samples-per-ticker 40
 ```
 
 This command:
-1. Uses data from 2020-01-01 to 2024-12-31
-2. Saves the dataset to `data/ml_datasets/`
-3. Creates train/val/test splits
-4. Saves normalization parameters to `data/ml_datasets/scalers/`
+1. Uses data from 2024-01-01 to 2024-12-31
+2. Includes AAPL, MSFT, and GOOGL tickers
+3. Uses 8 months for training and 2 months for validation
+4. Requires at least 40 samples per ticker in each split
+5. Saves the dataset to the default output directory
 """
         
         readme_path = output_dir / "README.md"
