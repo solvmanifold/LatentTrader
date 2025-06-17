@@ -19,7 +19,7 @@ from trading_advisor.output import generate_report, generate_research_prompt, ge
 from trading_advisor.market_features import MarketFeatures
 from trading_advisor.dataset_v2 import DatasetGeneratorV2
 from trading_advisor.models import registry, ModelRunner
-from trading_advisor.analysis import analyze_stock, calculate_technical_indicators, calculate_score, get_analyst_targets
+from trading_advisor.analysis import analyze_stock, calculate_technical_indicators, calculate_score
 from trading_advisor.config import SCORE_WEIGHTS
 from trading_advisor.backtest import run_backtest
 from trading_advisor.features import update_features as update_stock_features
