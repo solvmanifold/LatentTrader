@@ -16,7 +16,7 @@ import re
 import numpy as np
 
 from trading_advisor.config import DATA_DIR, LOOKBACK_DAYS, REQUIRED_COLUMNS
-from trading_advisor.analysis import calculate_technical_indicators, get_analyst_targets
+from trading_advisor.analysis import calculate_technical_indicators
 
 logger = logging.getLogger(__name__)
 
