@@ -43,31 +43,13 @@ def calculate_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     
     return df
 
-def get_analyst_targets(ticker: str) -> Optional[Dict]:
-    """Get analyst price targets for a ticker."""
-    try:
-        ticker_obj = yf.Ticker(ticker)
-        info = ticker_obj.info
-        
-        if 'targetMeanPrice' in info and info['targetMeanPrice'] is not None:
-            return {
-                'current_price': info.get('currentPrice', info.get('regularMarketPrice')),
-                'median_target': info['targetMeanPrice'],
-                'low_target': info.get('targetLowPrice'),
-                'high_target': info.get('targetHighPrice')
-            }
-    except Exception as e:
-        logger.error(f"Error getting analyst targets for {ticker}: {e}")
-    
-    return None
-
-def calculate_score(df_or_row, analyst_targets=None, window=3):
+def calculate_score(df_or_row, window=3):
     """
     Calculate a technical score for a DataFrame (using last `window` rows for smoothing)
     or for a single row (Series).
     Returns (score, score_details).
     """
-    def score_row(row, analyst_targets=None):
+    def score_row(row):
         score = 0.0
         score_details = {}
         
@@ -161,32 +143,18 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
         else:
             score_details['volume'] = 0.0
             
-        # Analyst Targets Score (optional, only for latest row in backtest)
-        if analyst_targets and hasattr(analyst_targets, 'get'):
-            current_price = analyst_targets.get('current_price', None)
-            median_target = analyst_targets.get('median_target', None)
-            if median_target and current_price:
-                upside = ((median_target - current_price) / current_price) * 100
-                weight = min(max(upside / 10, 0), 2.0)
-                score += weight
-                score_details['analyst_targets'] = weight
-            else:
-                score_details['analyst_targets'] = 0.0
-        else:
-            score_details['analyst_targets'] = 0.0
-            
         # Normalize score to 0-10 range
         normalized_score = float(min(max((score / MAX_RAW_SCORE) * 10, 0), 10))
         
         # Ensure all tracked keys are present in score_details
-        for key in ['macd', 'rsi', 'bollinger', 'moving_averages', 'volume', 'analyst_targets']:
+        for key in ['macd', 'rsi', 'bollinger', 'moving_averages', 'volume']:
             if key not in score_details:
                 score_details[key] = 0.0
                 
         return normalized_score, score_details
 
     if isinstance(df_or_row, pd.Series):
-        return score_row(df_or_row, analyst_targets)
+        return score_row(df_or_row)
     elif isinstance(df_or_row, pd.DataFrame):
         if df_or_row.empty:
             return 0.0, {}
@@ -196,15 +164,12 @@ def calculate_score(df_or_row, analyst_targets=None, window=3):
         for col in ['close', 'Volume', 'sma_20', 'sma_50', 'bb_lower', 'bb_upper', 'bb_pband']:
             if col in window_df.columns:
                 row[col] = window_df[col].iloc[-1]
-        return score_row(row, analyst_targets)
+        return score_row(row)
     else:
         raise ValueError("Input must be a pandas DataFrame or Series")
 
-def analyze_stock(ticker: str, df: pd.DataFrame) -> Tuple[float, Dict, Optional[Dict]]:
+def analyze_stock(ticker: str, df: pd.DataFrame) -> Tuple[float, Dict]:
     """Analyze a stock and return its score and details."""
-    # No need to calculate technical indicators here; already done in download_stock_data
-    # Get analyst targets
-    analyst_targets = get_analyst_targets(ticker)
     # Calculate score
-    score, score_details = calculate_score(df, analyst_targets)
-    return score, score_details, analyst_targets 
+    score, score_details = calculate_score(df)
+    return score, score_details 
