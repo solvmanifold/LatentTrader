@@ -12,6 +12,7 @@ from sklearn.preprocessing import StandardScaler
 
 from .registry import registry
 from .base import BaseTradingModel
+from ..preprocessing import FeaturePreprocessor
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,8 @@ class ModelRunner:
         output_dir: str = "model_outputs",
         market_features_dir: str = "data/market_features",
         sector_mapping_file: str = "data/market_features/sector_mapping.json",
-        model_dir: str = "models"
+        model_dir: str = "models",
+        dataset_dir: Optional[str] = None
     ):
         """Initialize the model runner.
         
@@ -38,11 +40,13 @@ class ModelRunner:
             market_features_dir: Directory containing market feature files
             sector_mapping_file: Path to sector mapping file
             model_dir: Directory to save trained models
+            dataset_dir: Directory containing the dataset (for loading normalization parameters)
         """
         self.output_dir = Path(output_dir)
         self.market_features_dir = Path(market_features_dir)
         self.sector_mapping_file = Path(sector_mapping_file)
         self.model_dir = Path(model_dir)
+        self.dataset_dir = Path(dataset_dir) if dataset_dir else None
         
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.model_dir.mkdir(parents=True, exist_ok=True)
@@ -56,12 +60,18 @@ class ModelRunner:
                 for ticker in tickers
             ])
         
-        # Initialize feature scaler
-        self.scaler = StandardScaler()
+        # Initialize feature preprocessor for normalization
+        self.preprocessor = FeaturePreprocessor(
+            market_features_dir=str(self.market_features_dir),
+            output_dir=str(self.dataset_dir) if self.dataset_dir else None
+        )
+        if self.dataset_dir:
+            self.preprocessor.load_scalers()
         self.feature_columns = None
     
     def _normalize_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Normalize features using StandardScaler.
+        """Normalize features using the saved normalization parameters.
+        This is only used during inference, as training data is already normalized.
         
         Args:
             df: DataFrame containing features
@@ -69,19 +79,20 @@ class ModelRunner:
         Returns:
             DataFrame with normalized features
         """
+        if self.dataset_dir is None:
+            raise ValueError("dataset_dir must be set to load normalization parameters")
+            
         if self.feature_columns is None:
-            # First time normalization, fit the scaler
-            # Get numeric columns only, excluding date, ticker, and label
+            # First time normalization, get feature columns
             numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
             self.feature_columns = [col for col in numeric_cols 
                                   if col not in ['date', 'ticker', 'label']]
-            self.scaler.fit(df[self.feature_columns])
         
         # Create a copy to avoid modifying the original
         df_normalized = df.copy()
         
         # Only normalize the feature columns
-        df_normalized[self.feature_columns] = self.scaler.transform(df[self.feature_columns])
+        df_normalized = self.preprocessor.transform(df_normalized)
         
         return df_normalized
     
@@ -96,19 +107,14 @@ class ModelRunner:
         
         Args:
             model_name: Name of the model to train
-            train_data: DataFrame containing training data
-            val_data: Optional DataFrame containing validation data
+            train_data: DataFrame containing training data (already normalized)
+            val_data: Optional DataFrame containing validation data (already normalized)
             **model_kwargs: Additional arguments to pass to the model
         """
         # Create model instance
         model = registry.create_model(model_name, **model_kwargs)
         
-        # Normalize features
-        train_data = self._normalize_features(train_data)
-        if val_data is not None:
-            val_data = self._normalize_features(val_data)
-        
-        # Train model
+        # Train model (data is already normalized by dataset generator)
         model.train(train_data, val_data)
         
         # Save model

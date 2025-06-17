@@ -28,19 +28,18 @@ class FeaturePreprocessor:
         self,
         market_features_dir: str = "data/market_features",
         ticker_features_dir: str = "data/ticker_features",
-        scalers_dir: str = "data/scalers"
+        output_dir: Optional[str] = None
     ):
         """Initialize the preprocessor.
         
         Args:
             market_features_dir: Directory containing market feature files
             ticker_features_dir: Directory containing ticker feature files
-            scalers_dir: Directory to save/load normalization parameters
+            output_dir: Directory to save/load normalization parameters (should be dataset output directory)
         """
         self.market_features_dir = Path(market_features_dir)
         self.ticker_features_dir = Path(ticker_features_dir)
-        self.scalers_dir = Path(scalers_dir)
-        self.scalers_dir.mkdir(parents=True, exist_ok=True)
+        self.output_dir = Path(output_dir) if output_dir else None
         
         # Load sector mapping
         self.sector_mapping = load_sector_mapping(str(self.market_features_dir))
@@ -64,6 +63,13 @@ class FeaturePreprocessor:
         Returns:
             Tuple of (transformed_train_df, transformed_val_df, transformed_test_df)
         """
+        if self.output_dir is None:
+            raise ValueError("output_dir must be set to save normalization parameters")
+            
+        # Create scalers directory in output directory
+        scalers_dir = self.output_dir / "scalers"
+        scalers_dir.mkdir(parents=True, exist_ok=True)
+        
         # Get numeric columns to normalize
         numeric_cols = train_df.select_dtypes(include=[np.number]).columns
         numeric_cols = numeric_cols.drop(['stock_splits'], errors='ignore')  # Don't normalize binary columns
@@ -75,7 +81,7 @@ class FeaturePreprocessor:
             self.scalers[col] = scaler
             
             # Save scaler parameters
-            scaler_path = self.scalers_dir / f"{col}_scaler.joblib"
+            scaler_path = scalers_dir / f"{col}_scaler.joblib"
             joblib.dump(scaler, scaler_path)
             
         # Transform all datasets
@@ -108,7 +114,14 @@ class FeaturePreprocessor:
     
     def load_scalers(self) -> None:
         """Load saved scalers from disk."""
-        for scaler_path in self.scalers_dir.glob("*_scaler.joblib"):
+        if self.output_dir is None:
+            raise ValueError("output_dir must be set to load normalization parameters")
+            
+        scalers_dir = self.output_dir / "scalers"
+        if not scalers_dir.exists():
+            raise ValueError(f"No scalers found in {scalers_dir}")
+            
+        for scaler_path in scalers_dir.glob("*_scaler.joblib"):
             col = scaler_path.stem.replace("_scaler", "")
             self.scalers[col] = joblib.load(scaler_path)
             

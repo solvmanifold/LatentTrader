@@ -5,12 +5,13 @@ import pandas as pd
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import roc_auc_score, precision_score, recall_score
+from sklearn.metrics import roc_auc_score, precision_score, recall_score, accuracy_score
 from sklearn.model_selection import cross_val_score, GridSearchCV
 from sklearn.feature_selection import SelectFromModel
 import logging
 from pathlib import Path
 import joblib
+import json
 
 from .base import SklearnModel
 
@@ -29,7 +30,7 @@ class LogisticRegressionModel(SklearnModel):
         model_name: str = "LogisticRegression",
         target_column: str = "label",
         C: float = 1.0,
-        max_iter: int = 1000,
+        max_iter: int = 50000,
         random_state: int = 42,
         penalty: str = 'l2',
         solver: str = 'lbfgs',
@@ -102,15 +103,16 @@ class LogisticRegressionModel(SklearnModel):
         """
         param_grid = {
             'C': [0.001, 0.01, 0.1, 1.0, 10.0, 100.0],
-            'penalty': ['l1', 'l2', 'elasticnet'],
-            'solver': ['saga']  # Only solver that supports all penalties
+            'penalty': ['l2'],  # Using only l2 penalty for better convergence
+            'solver': ['lbfgs'],  # Using lbfgs solver for better stability
+            'max_iter': [100000]  # Increased max iterations
         }
         
         grid_search = GridSearchCV(
             self.model,
             param_grid,
             cv=self.metadata['cv_folds'],
-            scoring='roc_auc',
+            scoring='accuracy',
             n_jobs=self.metadata.get('n_jobs', -1)
         )
         
@@ -170,10 +172,10 @@ class LogisticRegressionModel(SklearnModel):
         # Train model
         self.model.fit(X_train, y_train)
         
-        # Calculate feature importance
+        # Calculate feature importance (average across all classes)
         self.metadata['feature_importance'] = dict(zip(
             self.feature_columns,
-            np.abs(self.model.coef_[0])
+            np.mean(np.abs(self.model.coef_), axis=0)
         ))
         
         # Perform cross-validation if enabled
@@ -183,7 +185,7 @@ class LogisticRegressionModel(SklearnModel):
                 X_train,
                 y_train,
                 cv=self.metadata['cv_folds'],
-                scoring='roc_auc',
+                scoring='accuracy',  # Changed from roc_auc to accuracy
                 n_jobs=self.metadata.get('n_jobs', -1)
             )
             self.metadata['cv_scores'] = {
@@ -217,15 +219,26 @@ class LogisticRegressionModel(SklearnModel):
         y_val = val_data[self.target_column].values
         
         # Get predictions
-        probabilities = self.model.predict_proba(X_val)[:, 1]
-        predictions = (probabilities > 0.5).astype(int)
+        predictions = self.model.predict(X_val)
+        probabilities = self.model.predict_proba(X_val)
         
-        # Calculate metrics
+        # Calculate metrics for each class
         metrics = {
-            'auc': roc_auc_score(y_val, probabilities),
-            'precision': precision_score(y_val, predictions),
-            'recall': recall_score(y_val, predictions)
+            'accuracy': accuracy_score(y_val, predictions),
+            'precision_macro': precision_score(y_val, predictions, average='macro'),
+            'precision_weighted': precision_score(y_val, predictions, average='weighted'),
+            'recall_macro': recall_score(y_val, predictions, average='macro'),
+            'recall_weighted': recall_score(y_val, predictions, average='weighted')
         }
+        
+        # Add per-class metrics
+        for label in [-1, 0, 1]:
+            metrics[f'precision_class_{label}'] = precision_score(
+                y_val, predictions, labels=[label], average='micro'
+            )
+            metrics[f'recall_class_{label}'] = recall_score(
+                y_val, predictions, labels=[label], average='micro'
+            )
         
         return metrics
     
@@ -244,8 +257,8 @@ class LogisticRegressionModel(SklearnModel):
             features = self.feature_selector.transform(features)
         
         # Get predictions
-        probabilities = self.model.predict_proba(features)[:, 1]
-        predictions = (probabilities > 0.5).astype(int)
+        predictions = self.model.predict(features)
+        probabilities = self.model.predict_proba(features)
         
         # Create results dictionary
         results = {
@@ -272,8 +285,44 @@ class LogisticRegressionModel(SklearnModel):
         if self.feature_selector is not None:
             joblib.dump(self.feature_selector, path.with_suffix('.selector'))
         
-        # Save metadata
-        self._save_metadata(path)
+        # Convert NumPy arrays to lists in metadata
+        metadata = {
+            'model_name': self.model_name,
+            'target_column': self.target_column,
+            'feature_columns': self.feature_columns,
+            'metadata': self.metadata
+        }
+        
+        # Convert any NumPy arrays in metadata to lists
+        def convert_numpy(obj):
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, dict):
+                return {k: convert_numpy(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_numpy(item) for item in obj]
+            return obj
+        
+        metadata = convert_numpy(metadata)
+        
+        with open(path.with_suffix('.metadata'), 'w') as f:
+            json.dump(metadata, f, indent=2)
+    
+    def _load_metadata(self, path: Union[str, Path]) -> None:
+        """Load model metadata.
+        
+        Args:
+            path: Path to load metadata from
+        """
+        path = Path(path)
+        metadata_path = path.with_suffix('.metadata')
+        if metadata_path.exists():
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+                self.model_name = metadata['model_name']
+                self.target_column = metadata['target_column']
+                self.feature_columns = metadata['feature_columns']
+                self.metadata = metadata['metadata']
     
     @classmethod
     def load(cls, path: Union[str, Path]) -> 'LogisticRegressionModel':

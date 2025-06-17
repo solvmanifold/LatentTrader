@@ -11,6 +11,7 @@ import os
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 import typer
 from rich.console import Console
+import joblib
 
 from trading_advisor import __version__
 from trading_advisor.data import load_tickers, normalize_ticker, download_stock_data, load_ticker_features, ensure_data_dir, load_positions
@@ -27,6 +28,7 @@ from trading_advisor.sector_performance import calculate_sector_performance
 from trading_advisor.sentiment import MarketSentiment
 from trading_advisor.utils import setup_logging
 from trading_advisor.ml_data import prepare_ml_datasets, generate_swing_trade_labels
+from trading_advisor.normalization import FeatureNormalizer
 from .models.sklearn_models.logistic import LogisticRegressionModel
 
 # Set up logging
@@ -561,13 +563,11 @@ def run_model(
     model_name: str = typer.Option("logistic", help="Model to run (e.g., 'logistic')"),
     tickers: str = typer.Option("all", help="Comma-separated list of tickers or 'all' for all tickers"),
     date: str = typer.Option(None, help="Date to analyze (YYYY-MM-DD) or date range (YYYY-MM-DD:YYYY-MM-DD)"),
-    output_dir: str = typer.Option("model_outputs", help="Directory to save model outputs")
+    output_dir: str = typer.Option("model_outputs", help="Directory to save model outputs"),
+    model_dir: str = typer.Option("models", help="Directory containing trained models")
 ):
     """Run a model on specified tickers and date(s)."""
     try:
-        # Create model instance
-        model = registry.create_model(model_name)
-        
         # Parse tickers
         if tickers == "all":
             ticker_list = load_tickers("all")
@@ -588,6 +588,29 @@ def run_model(
         output_path = Path(output_dir) / model_name
         output_path.mkdir(parents=True, exist_ok=True)
         
+        # Initialize dataset generator
+        generator = DatasetGeneratorV2(
+            market_features_dir="data/market_features",
+            ticker_features_dir="data/ticker_features"
+        )
+        
+        # Load model and metadata
+        model_path = Path(model_dir) / model_name / "model"
+        metadata_path = Path(model_dir) / model_name / "model.metadata"
+        
+        if not model_path.exists():
+            raise ValueError(f"Model not found at {model_path}")
+        if not metadata_path.exists():
+            raise ValueError(f"Model metadata not found at {metadata_path}")
+            
+        # Load model and metadata
+        model = joblib.load(model_path)
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
+            
+        # Load fitted normalizer
+        normalizer = FeatureNormalizer.load(version="1.0.0")
+        
         # Process each date
         for target_date in dates:
             logger.info(f"Processing date: {target_date.strftime('%Y-%m-%d')}")
@@ -599,10 +622,10 @@ def run_model(
                 
                 for ticker in ticker_list:
                     try:
-                        # Load ticker features
-                        ticker_features = load_ticker_features(ticker, target_date)
-                        if ticker_features is not None:
-                            features.append(ticker_features)
+                        # Prepare inference data
+                        inference_data = generator.prepare_inference_data(ticker, target_date)
+                        if inference_data is not None:
+                            features.append(inference_data)
                     except Exception as e:
                         logger.warning(f"Error loading features for {ticker}: {e}")
                     progress.update(task, advance=1)
@@ -614,22 +637,35 @@ def run_model(
             # Combine features into DataFrame
             df = pd.concat(features, axis=0)
             
-            # Run model predictions
-            results = model.predict(df)
+            # Ensure all required features are present
+            required_features = metadata['feature_columns']
+            missing_features = set(required_features) - set(df.columns)
+            if missing_features:
+                raise ValueError(f"Missing required features: {missing_features}")
             
-            # Save results
+            # Select only the required features in the correct order
+            X = df[required_features]
+            
+            # Normalize features
+            X_normalized = normalizer.transform(X)
+            
+            # Make predictions
+            predictions = model.predict(X_normalized)
+            probabilities = model.predict_proba(X_normalized)
+            
+            # Create results DataFrame
             results_df = pd.DataFrame({
-                'ticker': results['ticker'],
-                'date': results['date'],
-                'prediction': results['predictions'],
-                'probability': results['probabilities']
+                'ticker': df['ticker'],
+                'date': target_date.strftime('%Y-%m-%d'),
+                'prediction': predictions,
+                'probability_long': probabilities[:, 1],
+                'probability_short': probabilities[:, 2],
+                'probability_neutral': probabilities[:, 0]
             })
             
-            # Add any additional model outputs
-            if hasattr(model, 'metadata'):
-                for key, value in model.metadata.items():
-                    if isinstance(value, dict) and all(k in results_df['ticker'] for k in value.keys()):
-                        results_df[key] = results_df['ticker'].map(value)
+            # Map predictions to labels
+            label_map = {1: "LONG", -1: "SHORT", 0: "NEUTRAL"}
+            results_df['signal'] = results_df['prediction'].map(label_map)
             
             # Save to parquet
             output_file = output_path / f"{target_date.strftime('%Y-%m-%d')}.parquet"
@@ -642,20 +678,31 @@ def run_model(
                 f.write(f"# {model_name} Analysis Report\n")
                 f.write(f"Date: {target_date.strftime('%Y-%m-%d')}\n\n")
                 
-                # Add model metadata if available
-                if hasattr(model, 'metadata'):
-                    f.write("## Model Information\n")
-                    for key, value in model.metadata.items():
-                        if key not in ['feature_importance', 'cv_scores']:
-                            f.write(f"### {key.replace('_', ' ').title()}\n")
-                            f.write(f"{value}\n\n")
+                # Add model metadata
+                f.write("## Model Information\n")
+                f.write(f"Model Type: {metadata.get('model_name', 'Unknown')}\n")
+                f.write(f"Target Column: {metadata.get('target_column', 'Unknown')}\n\n")
                 
                 # Add predictions
                 f.write("## Predictions\n")
-                top_picks = results_df.nlargest(10, 'probability')
-                f.write("### Top 10 Picks\n")
-                for _, row in top_picks.iterrows():
-                    f.write(f"- {row['ticker']}: {row['probability']:.4f}\n")
+                
+                # Long signals
+                f.write("### Long Signals\n")
+                long_signals = results_df[results_df['signal'] == 'LONG'].sort_values('probability_long', ascending=False)
+                for _, row in long_signals.iterrows():
+                    f.write(f"- {row['ticker']}: {row['probability_long']:.2%}\n")
+                
+                # Short signals
+                f.write("\n### Short Signals\n")
+                short_signals = results_df[results_df['signal'] == 'SHORT'].sort_values('probability_short', ascending=False)
+                for _, row in short_signals.iterrows():
+                    f.write(f"- {row['ticker']}: {row['probability_short']:.2%}\n")
+                
+                # Neutral signals
+                f.write("\n### Neutral Signals\n")
+                neutral_signals = results_df[results_df['signal'] == 'NEUTRAL'].sort_values('probability_neutral', ascending=False)
+                for _, row in neutral_signals.iterrows():
+                    f.write(f"- {row['ticker']}: {row['probability_neutral']:.2%}\n")
             
             logger.info(f"Report generated: {report_path}")
         

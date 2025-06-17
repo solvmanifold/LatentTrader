@@ -21,7 +21,7 @@ import os
 
 from trading_advisor.features import load_features
 from trading_advisor.sector_mapping import load_sector_mapping
-from trading_advisor.data import download_stock_data
+from trading_advisor.data import download_stock_data, normalize_ticker
 from trading_advisor.preprocessing import FeaturePreprocessor
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,8 @@ class DatasetGeneratorV2:
         # Initialize preprocessor
         self.preprocessor = FeaturePreprocessor(
             market_features_dir=market_features_dir,
-            ticker_features_dir=ticker_features_dir
+            ticker_features_dir=ticker_features_dir,
+            output_dir=output_dir
         )
         
     def generate_dataset(
@@ -189,8 +190,9 @@ class DatasetGeneratorV2:
         end_date: pd.Timestamp
     ) -> pd.DataFrame:
         """Load pre-computed ticker features from parquet file."""
-        # Load ticker data from parquet file
-        features_path = self.ticker_features_dir / f"{ticker}_features.parquet"
+        # Load ticker data from parquet file using normalized ticker name
+        norm_ticker = normalize_ticker(ticker)
+        features_path = self.ticker_features_dir / f"{norm_ticker}_features.parquet"
         if not features_path.exists():
             logger.warning(f"No feature file found for {ticker}")
             return pd.DataFrame()
@@ -212,7 +214,7 @@ class DatasetGeneratorV2:
                 logger.warning(f"No data available for {ticker} in date range {start_date.date()} to {end_date.date()}")
                 return pd.DataFrame()
                 
-            # Add ticker column
+            # Add ticker column using original ticker name
             df['ticker'] = ticker
             
             # Handle stock_splits - fill missing values with 0 (no splits)
@@ -234,7 +236,6 @@ class DatasetGeneratorV2:
                 df['analyst_targets'] = {}
                 
             return df
-            
         except Exception as e:
             logger.error(f"Error loading features for {ticker}: {e}")
             return pd.DataFrame()

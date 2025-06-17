@@ -22,7 +22,9 @@ def load_features(ticker: str, features_dir: str = "data/ticker_features") -> pd
     Returns:
         DataFrame with features, or empty DataFrame if file not found
     """
-    features_path = Path(features_dir) / f"{ticker}_features.parquet"
+    # Normalize ticker name for file path
+    norm_ticker = normalize_ticker(ticker)
+    features_path = Path(features_dir) / f"{norm_ticker}_features.parquet"
     
     if not features_path.exists():
         logger.warning(f"Features file not found: {features_path}")
@@ -38,7 +40,7 @@ def load_features(ticker: str, features_dir: str = "data/ticker_features") -> pd
                 df.set_index('Date', inplace=True)
         df.index = pd.to_datetime(df.index)
         # Add ticker column as string
-        df['ticker'] = ticker
+        df['ticker'] = ticker  # Use original ticker name in the data
         return df
     except Exception as e:
         logger.error(f"Error loading features for {ticker}: {e}")
@@ -70,13 +72,13 @@ def update_features(ticker: str, features_dir: str = "data/ticker_features") -> 
     # Standardize columns and date before saving
     df = standardize_columns_and_date(df)
     
-    # Save to parquet
-    features_path = Path(features_dir) / f"{ticker}_features.parquet"
+    # Save to parquet using normalized ticker name
+    features_path = Path(features_dir) / f"{norm_ticker}_features.parquet"
     features_path.parent.mkdir(exist_ok=True)
     df.to_parquet(features_path)
     
     logger.info(f"Updated features for {ticker} and saved to {features_path}")
-    return df 
+    return df
 
 class MarketFeatureCollector:
     """Collects and manages market-wide features."""

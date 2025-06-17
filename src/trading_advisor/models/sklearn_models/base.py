@@ -71,6 +71,9 @@ class SklearnModel(BaseTradingModel):
         # Get features in correct order
         X = df[self.feature_columns]
         
+        # Drop object dtype columns
+        X = X.select_dtypes(exclude=['object'])
+        
         # Handle missing values
         if fit:
             self.feature_means = X.mean()
